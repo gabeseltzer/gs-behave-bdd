@@ -9,6 +9,7 @@ import {
 import { StepFileStep } from './parsers/stepsParser';
 import { gotoStepHandler } from './handlers/gotoStepHandler';
 import { findStepReferencesHandler, nextStepReferenceHandler as nextStepReferenceHandler, prevStepReferenceHandler, treeView } from './handlers/findStepReferencesHandler';
+import { selectDebugLaunchConfigHandler } from './handlers/selectDebugLaunchConfigHandler';
 import { FileParser } from './parsers/fileParser';
 import { testRunHandler } from './runners/testRunHandler';
 import { TestWorkspaceConfigWithWkspUri } from './_integrationTests/suite-shared/testWorkspaceConfig';
@@ -84,6 +85,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       junitWatcher,
       vscode.commands.registerTextEditorCommand(`behave-vsc.gotoStep`, gotoStepHandler),
       vscode.commands.registerTextEditorCommand(`behave-vsc.findStepReferences`, findStepReferencesHandler),
+      vscode.commands.registerCommand(`behave-vsc.selectDebugLaunchConfig`, selectDebugLaunchConfigHandler),
       vscode.commands.registerCommand(`behave-vsc.stepReferences.prev`, prevStepReferenceHandler),
       vscode.commands.registerCommand(`behave-vsc.stepReferences.next`, nextStepReferenceHandler),
       vscode.languages.registerCompletionItemProvider('gherkin', autoCompleteProvider, ...[" "]),
