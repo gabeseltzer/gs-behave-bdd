@@ -79,6 +79,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       ctrl,
       treeView,
       config,
+      config.diagnostics,
       cleanExtensionTempDirectoryCancelSource,
       junitWatcher,
       vscode.commands.registerTextEditorCommand(`behave-vsc.gotoStep`, gotoStepHandler),
