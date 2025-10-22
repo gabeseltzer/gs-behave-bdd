@@ -23,6 +23,12 @@
 					"markdownDescription": "If set to false (disabled), the debugger will step into external code when debugging a behave test.",
 					"default": true
 				},
+				"behave-vsc.debugLaunchConfig": {
+					"scope": "resource",
+					"type": "string",
+					"markdownDescription": "The name of the launch configuration in `launch.json` to use when debugging behave tests. If not specified, a default debug configuration will be used.",
+					"default": ""
+				},
 				"behave-vsc.multiRootRunWorkspacesInParallel": {
 					"scope": "window",
 					"type": "boolean",

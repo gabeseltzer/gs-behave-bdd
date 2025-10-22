@@ -39,6 +39,7 @@ export class WorkspaceSettings {
   public readonly justMyCode: boolean;
   public readonly runParallel: boolean;
   public readonly workspaceRelativeFeaturesPath: string;
+  public readonly debugLaunchConfig: string;
   // convenience properties
   public readonly id: string;
   public readonly uri: vscode.Uri;
@@ -70,10 +71,14 @@ export class WorkspaceSettings {
     const runParallelCfg: boolean | undefined = wkspConfig.get("runParallel");
     if (runParallelCfg === undefined)
       throw "runParallel is undefined";
+    const debugLaunchConfigCfg: string | undefined = wkspConfig.get("debugLaunchConfig");
+    if (debugLaunchConfigCfg === undefined)
+      throw "debugLaunchConfig is undefined";
 
 
     this.justMyCode = justMyCodeCfg;
     this.runParallel = runParallelCfg;
+    this.debugLaunchConfig = debugLaunchConfigCfg;
 
 
     this.workspaceRelativeFeaturesPath = featuresPathCfg.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim();
