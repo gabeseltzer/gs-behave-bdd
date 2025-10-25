@@ -11,6 +11,21 @@ import {
 // to debug this code, add a breakpoint here, then open package.json and click the "Debug >" link 
 // and choose "test" or "testinsiders" from the dropdown
 // (to debug the tests themselves, just launch from the usual debug link in vscode and select the suite to run)
+
+// Helper function to convert Windows long paths with spaces to short (8.3) format
+// This works around a bug in @vscode/test-electron v2.5.2 where paths with spaces
+// are not properly quoted when passed to VS Code with shell:true on Windows
+function getShortPathOnWindows(longPath: string): string {
+  if (process.platform === 'win32' && longPath.includes(' ')) {
+    const result = cp.execSync(`for %I in ("${longPath}") do @echo %~sI`, {
+      encoding: 'utf-8',
+      shell: 'cmd.exe'
+    });
+    return result.trim();
+  }
+  return longPath;
+}
+
 async function runTestSuites() {
   try {
     const version = process.argv[2].slice(2);
@@ -30,11 +45,18 @@ async function runTestSuites() {
 
     console.log(`installing ms-python.python extension into ${version} version...`);
     const [cliPath, ...args] = resolveCliArgsFromVSCodeExecutablePath(vscodeExecutablePath);
-    const result = cp.spawnSync(cliPath, [...args, "--install-extension", "ms-python.python"], {
-      encoding: 'utf-8',
-      stdio: 'inherit',
-      shell: true,
-    });
+    // On Windows, if cliPath ends with .cmd, we need to use cmd.exe to run it
+    const isWindows = process.platform === 'win32';
+    const isCmdFile = cliPath.endsWith('.cmd');
+    const result = isWindows && isCmdFile
+      ? cp.spawnSync('cmd.exe', ['/c', cliPath, ...args, "--install-extension", "ms-python.python"], {
+        encoding: 'utf-8',
+        stdio: 'inherit',
+      })
+      : cp.spawnSync(cliPath, [...args, "--install-extension", "ms-python.python"], {
+        encoding: 'utf-8',
+        stdio: 'inherit',
+      });
     if (result.error)
       throw result.error;
 
@@ -46,7 +68,7 @@ async function runTestSuites() {
 
 
     launchArgs = ["example-projects/simple"]
-    extensionTestsPath = path.resolve(__dirname, './simple suite/index');
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './simple suite'));
     await runTests({
       vscodeExecutablePath,
       extensionDevelopmentPath,
@@ -55,7 +77,7 @@ async function runTestSuites() {
     });
 
     launchArgs = ["example-projects/sibling steps folder 1"];
-    extensionTestsPath = path.resolve(__dirname, './sibling steps folder 1 suite/index');
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './sibling steps folder 1 suite'));
     await runTests({
       vscodeExecutablePath,
       extensionDevelopmentPath,
@@ -64,7 +86,7 @@ async function runTestSuites() {
     });
 
     launchArgs = ["example-projects/sibling steps folder 2"];
-    extensionTestsPath = path.resolve(__dirname, './sibling steps folder 2 suite/index');
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './sibling steps folder 2 suite'));
     await runTests({
       vscodeExecutablePath,
       extensionDevelopmentPath,
@@ -73,7 +95,7 @@ async function runTestSuites() {
     });
 
     launchArgs = ["example-projects/sibling steps folder 3"];
-    extensionTestsPath = path.resolve(__dirname, './sibling steps folder 3 suite/index');
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './sibling steps folder 3 suite'));
     await runTests({
       vscodeExecutablePath,
       extensionDevelopmentPath,
@@ -82,7 +104,7 @@ async function runTestSuites() {
     });
 
     launchArgs = ["example-projects/project A"]
-    extensionTestsPath = path.resolve(__dirname, './project A suite/index');
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './project A suite'));
     await runTests({
       vscodeExecutablePath,
       extensionDevelopmentPath,
@@ -91,7 +113,7 @@ async function runTestSuites() {
     });
 
     launchArgs = ["example-projects/project B"]
-    extensionTestsPath = path.resolve(__dirname, './project B suite/index');
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './project B suite'));
     await runTests({
       vscodeExecutablePath,
       extensionDevelopmentPath,
@@ -100,7 +122,7 @@ async function runTestSuites() {
     });
 
     launchArgs = ["example-projects/multiroot.code-workspace"];
-    extensionTestsPath = path.resolve(__dirname, './multiroot suite/index');
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './multiroot suite'));
     await runTests({
       vscodeExecutablePath,
       extensionDevelopmentPath,
