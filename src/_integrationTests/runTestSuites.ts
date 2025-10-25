@@ -33,6 +33,7 @@ async function runTestSuites() {
     const result = cp.spawnSync(cliPath, [...args, "--install-extension", "ms-python.python"], {
       encoding: 'utf-8',
       stdio: 'inherit',
+      shell: true,
     });
     if (result.error)
       throw result.error;
