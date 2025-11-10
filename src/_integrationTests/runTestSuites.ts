@@ -67,7 +67,7 @@ async function runTestSuites() {
     let extensionTestsPath = "";
 
 
-    launchArgs = ["example-projects/simple"]
+    launchArgs = ["example-projects/simple"];
     extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './simple suite'));
     await runTests({
       vscodeExecutablePath,
@@ -76,7 +76,7 @@ async function runTestSuites() {
       launchArgs
     });
 
-    launchArgs = ["example-projects/sibling steps folder 1"];
+    launchArgs = [`"example-projects/sibling steps folder 1"`];
     extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './sibling steps folder 1 suite'));
     await runTests({
       vscodeExecutablePath,
@@ -85,7 +85,7 @@ async function runTestSuites() {
       launchArgs
     });
 
-    launchArgs = ["example-projects/sibling steps folder 2"];
+    launchArgs = [`"example-projects/sibling steps folder 2"`];
     extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './sibling steps folder 2 suite'));
     await runTests({
       vscodeExecutablePath,
@@ -94,7 +94,7 @@ async function runTestSuites() {
       launchArgs
     });
 
-    launchArgs = ["example-projects/sibling steps folder 3"];
+    launchArgs = [`"example-projects/sibling steps folder 3"`];
     extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './sibling steps folder 3 suite'));
     await runTests({
       vscodeExecutablePath,
@@ -103,7 +103,7 @@ async function runTestSuites() {
       launchArgs
     });
 
-    launchArgs = ["example-projects/project A"]
+    launchArgs = [`"example-projects/project A"`];
     extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './project A suite'));
     await runTests({
       vscodeExecutablePath,
@@ -112,7 +112,7 @@ async function runTestSuites() {
       launchArgs
     });
 
-    launchArgs = ["example-projects/project B"]
+    launchArgs = [`"example-projects/project B"`];
     extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './project B suite'));
     await runTests({
       vscodeExecutablePath,
