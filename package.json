@@ -164,23 +164,23 @@
 	},
 	"name": "behave-vsc",
 	"displayName": "Behave VSC",
-	"description": "Debug, Run and Navigate Python behave tests",
-	"version": "0.6.4",
+	"description": "Debug, Run and Navigate Python behave tests. Forked from jimasp",
+	"version": "0.6.5",
 	"icon": "images/behave-vsc.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",
 		"theme": "dark"
 	},
-	"publisher": "jimasp",
+	"publisher": "gabeseltzer",
 	"private": true,
 	"license": "SEE LICENSE IN LICENSE.txt",
-	"homepage": "https://github.com/jimasp/behave-vsc/blob/main/README.md",
+	"homepage": "https://github.com/gabeseltzer/behave-vsc/blob/main/README.md",
 	"bugs": {
-		"url": "https://github.com/jimasp/behave-vsc/issues"
+		"url": "https://github.com/gabeseltzer/behave-vsc/issues"
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/jimasp/behave-vsc.git"
+		"url": "https://github.com/gabeseltzer/behave-vsc.git"
 	},
 	"engines": {
 		"vscode": "^1.82.0"
