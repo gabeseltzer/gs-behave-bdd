@@ -361,7 +361,7 @@ async function getTestSupportFromExtension(): Promise<TestSupport> {
 	if (extInstances)
 		return extInstances;
 
-	const extension = vscode.extensions.getExtension("jimasp.behave-vsc");
+	const extension = vscode.extensions.getExtension("gabeseltzer.behave-vsc");
 	assert(extension);
 	assert(extension.isActive);
 
