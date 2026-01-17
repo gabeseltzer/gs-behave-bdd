@@ -20,6 +20,7 @@ import { formatFeatureProvider } from './handlers/formatFeatureProvider';
 import { SemHighlightProvider, semLegend } from './handlers/semHighlightProvider';
 import { DocumentSymbolProvider } from './handlers/documentSymbolProvider';
 import { DefinitionProvider } from './handlers/definitionProvider';
+import { HoverProvider } from './handlers/hoverProvider';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
 import { JunitWatcher } from './watchers/junitWatcher';
 
@@ -91,7 +92,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.languages.registerDocumentRangeFormattingEditProvider("gherkin", formatFeatureProvider),
       vscode.languages.registerDocumentSemanticTokensProvider({ language: "gherkin" }, new SemHighlightProvider(), semLegend),
       vscode.languages.registerDocumentSymbolProvider("gherkin", new DocumentSymbolProvider()),
-      vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new DefinitionProvider())
+      vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new DefinitionProvider()),
+      vscode.languages.registerHoverProvider({ language: "gherkin" }, new HoverProvider())
     );
 
 
