@@ -84,13 +84,25 @@ export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseRes
       message.location = new vscode.Location(item.test.uri, item.test.range);
       run.failed(item.test, message, result.duration);
       break;
+    case "error":
+    case "hook_error":
+      if (!item.test.uri || !item.test.range)
+        throw "invalid test item";
+      message = new vscode.TestMessage(result.failedText ?? "error");
+      message.location = new vscode.Location(item.test.uri, item.test.range);
+      run.errored(item.test, message, result.duration);
+      break;
     default:
       throw `Unhandled test result status: ${result.status}`;
   }
 
   item.scenario.result = result.status;
-  run.appendOutput(`Test item ${vscode.Uri.parse(item.test.id).fsPath}: ${result.status === "passed" || result.status === "skipped"
-    ? result.status.toUpperCase() : "FAILED"}\r\n`);
+  const statusOutput = result.status === "passed" || result.status === "skipped"
+    ? result.status.toUpperCase()
+    : result.status === "error" || result.status === "hook_error"
+      ? "ERROR"
+      : "FAILED";
+  run.appendOutput(`Test item ${vscode.Uri.parse(item.test.id).fsPath}: ${statusOutput}\r\n`);
 
 }
 
@@ -114,12 +126,12 @@ function CreateParseResult(wkspSettings: WorkspaceSettings, debug: boolean, test
     return { status: "untested", duration: xmlDuration };
   }
 
-  if (xmlStatus !== "failed") {
+  if (xmlStatus !== "failed" && xmlStatus !== "error" && xmlStatus !== "hook_error") {
     throw new Error(`Unrecognised behave scenario status result "${xmlStatus}" found while parsing junit file ` +
       `for testCase "${testCase.$.name}"`);
   }
 
-  // status === "failed"
+  // status === "failed", "error", or "hook_error"
 
   const reasonBlocks: string[] = [];
   const concatErrText = (testCase: TestCase) => {
