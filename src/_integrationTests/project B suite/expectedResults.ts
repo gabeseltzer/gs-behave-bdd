@@ -9,7 +9,7 @@ export function getExpectedCounts(wkspUri: vscode.Uri, config: Configuration): W
     tests: { nodeCount: 80, testCount: testCount },
     featureFilesExceptEmptyOrCommentedOut: 17, stepFilesExceptEmptyOrCommentedOut: 7,
     stepFileStepsExceptCommentedOut: 47,
-    featureFileStepsExceptCommentedOut: 128, stepMappings: 127  // (1 diff = "When we have a missing step")
+    featureFileStepsExceptCommentedOut: 128, stepMappings: 126  // (1 diff = "When we have a missing step")
   };
 }
 
@@ -101,7 +101,7 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
       scenario_featureName: 'Basic',
       scenario_getLabel: 'run a test with a missing steps',
       scenario_isOutline: false,
-      scenario_result: "failed",
+      scenario_result: "error",
       scenario_scenarioName: 'run a test with a missing steps',
       test_children: undefined,
       test_description: undefined,
@@ -531,15 +531,15 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
     new TestResult({
       scenario_featureFileRelativePath: '{{featurePath}}/goto_step.feature',
       scenario_featureName: 'Go to Step def tests',
-      scenario_getLabel: 'a cased step',
+      scenario_getLabel: 'an incorrectly cased step',
       scenario_isOutline: false,
-      scenario_result: 'passed',
-      scenario_scenarioName: 'a cased step',
+      scenario_result: 'error',
+      scenario_scenarioName: 'an incorrectly cased step',
       test_children: undefined,
       test_description: undefined,
       test_error: undefined,
-      test_id: '.../project B/{{featurePath}}/goto_step.feature/a cased step',
-      test_label: 'a cased step',
+      test_id: '.../project B/{{featurePath}}/goto_step.feature/an incorrectly cased step',
+      test_label: 'an incorrectly cased step',
       test_parent: '.../project B/{{featurePath}}/goto_step.feature',
       test_uri: '.../project B/{{featurePath}}/goto_step.feature',
     }),

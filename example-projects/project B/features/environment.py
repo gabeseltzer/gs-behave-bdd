@@ -3,7 +3,7 @@ import parse
 from behave import model, register_type
 
 
-@parse.with_pattern(r"(| flag here)")
+@parse.with_pattern(r"(| flag here| FLAG HERE)")
 def parse_flag(text:str):
     return text.strip().lower() == "flag here"
 

@@ -101,7 +101,7 @@ function _getStepFileStepMatch(featureFileStep: FeatureFileStep,
   const findExactMatch = (textWithoutType: string, stepType: string) => {
     const matchText = stepType + sepr + textWithoutType;
     for (const [key, value] of exactSteps) {
-      const rx = new RegExp(key, "i");
+      const rx = new RegExp(key);
       const match = rx.exec(matchText);
       if (match && match.length !== 0) {
         return value;
@@ -113,7 +113,7 @@ function _getStepFileStepMatch(featureFileStep: FeatureFileStep,
     const matchText = stepType + sepr + textWithoutType;
     const matches = new Map<string, StepFileStep>();
     for (const [key, value] of paramsSteps) {
-      const rx = new RegExp(key, "i");
+      const rx = new RegExp(key);
       const match = rx.exec(matchText);
       if (match && match.length !== 0) {
         matches.set(key, value);
