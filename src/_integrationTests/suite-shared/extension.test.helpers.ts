@@ -281,6 +281,11 @@ function assertExpectedCounts(wkspUri: vscode.Uri, wkspName: string, config: Con
 	}
 	catch (e: unknown) {
 		// UHOH - did we add a test or comment something out? do a git diff?
+		const expectedCounts = getExpectedCounts(wkspUri, config);
+		console.error(`Assertion failed for ${wkspName}:`);
+		console.error('Expected counts:', expectedCounts);
+		console.error('Actual counts:', actualCounts);
+		console.error('Error:', e);
 		debugger; // eslint-disable-line no-debugger
 	}
 }
