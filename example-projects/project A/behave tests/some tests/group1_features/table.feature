@@ -1,7 +1,7 @@
 Feature: Table feature
 
    Scenario: Use a table (success)
-    Given we add a set of users:
+    Given we add a set of users
         | user    | dept    |
         | Bob     | Testers |
         | Dave    | Devs    |
@@ -11,7 +11,7 @@ Feature: Table feature
      But we will find 1 person in "Testers"
 
    Scenario: Use a table (fail)
-    Given we add a set of users:
+    Given we add a set of users
         | user   | dept     |
         | Vic    | Testers  |
         | Helen  | Devs     |

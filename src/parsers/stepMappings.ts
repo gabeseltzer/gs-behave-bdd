@@ -137,9 +137,7 @@ function _getStepFileStepMatch(featureFileStep: FeatureFileStep,
     return stepMatch!; // eslint-disable-line @typescript-eslint/no-non-null-assertion    
   }
 
-  let textWithoutType = featureFileStep.textWithoutType;
-  if (textWithoutType.endsWith(":")) // behave will match e.g. "Given some table:" to "Given some table"
-    textWithoutType = textWithoutType.slice(0, -1);
+  const textWithoutType = featureFileStep.textWithoutType;
 
   let exactMatch = findExactMatch(textWithoutType, featureFileStep.stepType);
   if (!exactMatch && featureFileStep.stepType !== "step")
@@ -155,8 +153,10 @@ function _getStepFileStepMatch(featureFileStep: FeatureFileStep,
     paramsMatches = findParamsMatch(textWithoutType, "step");
 
   // got single parameters match - return it
-  if (paramsMatches.size === 1)
-    return paramsMatches.values().next().value;
+  if (paramsMatches.size === 1) {
+    const match = paramsMatches.values().next().value;
+    if (match) return match;
+  }
 
   // more than one parameters match - get longest matched key      
   if (paramsMatches.size > 1) {
