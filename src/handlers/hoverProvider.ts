@@ -19,16 +19,18 @@ export class HoverProvider implements vscode.HoverProvider {
       // Read the Python file content
       const pythonContent = await getContentFromFilesystem(stepFileStep.uri);
 
-      // Extract function signature and docstring
-      const functionInfo = extractFunctionInfo(pythonContent, stepFileStep.functionDefinitionRange.start.line);
+      // Extract step decorator and docstring
+      const functionInfo = extractStepDecoratorAndDocstring(pythonContent, stepFileStep.functionDefinitionRange.start.line);
 
       if (!functionInfo) {
         return undefined;
       }
 
-      // Build hover content
+      // Build hover content - show the step pattern decorator, not the function signature
       const hoverContent = new vscode.MarkdownString();
-      hoverContent.appendCodeblock(functionInfo.signature, 'python');
+
+      // Show the decorator pattern
+      hoverContent.appendCodeblock(functionInfo.decorator, 'python');
 
       if (functionInfo.docstring) {
         hoverContent.appendMarkdown('\n\n---\n\n');
@@ -46,62 +48,62 @@ export class HoverProvider implements vscode.HoverProvider {
 
 
 interface FunctionInfo {
-  signature: string;
+  decorator: string;
   docstring?: string;
 }
 
 
-function extractFunctionInfo(content: string, functionLine: number): FunctionInfo | undefined {
+function extractStepDecoratorAndDocstring(content: string, functionLine: number): FunctionInfo | undefined {
   const lines = content.split('\n');
 
   if (functionLine >= lines.length) {
     return undefined;
   }
 
-  // Find the function definition line
-  const defLine = lines[functionLine];
-  let currentLine = functionLine;
+  // Find the step decorator (the line(s) before the function definition)
+  // Step decorators look like: @given('step pattern'), @when(u'pattern'), etc.
+  let decorator = '';
+  let decoratorStartLine = functionLine - 1;
 
-  // Handle multi-line function definitions
-  // We need to find the colon that ends the function definition, not just any colon
-  // (type annotations can have colons like "arg: int")
-  let signature = defLine;
-  let foundEnd = false;
+  // Search backwards to find the decorator(s)
+  while (decoratorStartLine >= 0) {
+    const line = lines[decoratorStartLine].trim();
 
-  while (!foundEnd && currentLine < lines.length) {
-    const currentLineText = lines[currentLine].trim();
+    // Check if this is a step decorator
+    if (line.match(/^@(behave\.)?(step|given|when|then|and|but)\s*\(/i)) {
+      // Found a step decorator, now read it (may be multi-line)
+      let decoratorLine = line;
+      let scanLine = decoratorStartLine;
 
-    // Check if this line ends with a colon (possibly followed by a comment)
-    // Remove comments first to check properly
-    const lineWithoutComment = currentLineText.split('#')[0].trim();
-    if (lineWithoutComment.endsWith(':')) {
-      foundEnd = true;
-      if (currentLine !== functionLine) {
-        signature += ' ' + currentLineText;
+      // Handle multi-line decorators
+      while (scanLine < functionLine && !decoratorLine.includes(')')) {
+        scanLine++;
+        if (scanLine < functionLine) {
+          decoratorLine += ' ' + lines[scanLine].trim();
+        }
       }
-    } else if (currentLine !== functionLine) {
-      // Continue building the signature
-      signature += ' ' + currentLineText;
-      currentLine++;
+
+      decorator = decoratorLine;
+      break;
+    } else if (line.startsWith('@')) {
+      // Another decorator, keep searching backwards
+      decoratorStartLine--;
+    } else if (line === '' || line.startsWith('#')) {
+      // Empty line or comment, keep searching
+      decoratorStartLine--;
     } else {
-      // First line doesn't end with colon, continue to next line
-      currentLine++;
+      // Not a decorator line, stop searching
+      break;
     }
   }
 
-  // Clean up the signature
-  signature = signature.trim();
-
-  // Remove trailing colon and anything after it (including comments)
-  const signatureWithoutComment = signature.split('#')[0];
-  const colonIndex = signatureWithoutComment.lastIndexOf(':');
-  if (colonIndex !== -1) {
-    signature = signatureWithoutComment.substring(0, colonIndex).trim();
+  if (!decorator) {
+    return undefined;
   }
 
   // Extract docstring if present
   let docstring: string | undefined = undefined;
-  currentLine++;
+  let currentLine = functionLine + 1;
 
   // Skip empty lines
   while (currentLine < lines.length && lines[currentLine].trim() === '') {
@@ -147,7 +149,7 @@ function extractFunctionInfo(content: string, functionLine: number): FunctionInf
   }
 
   return {
-    signature,
+    decorator,
     docstring
   };
 }

@@ -79,7 +79,19 @@ export async function parseStepsFileContent(featuresUri: vscode.Uri, content: st
         const step = stepFileSteps.get(key);
         if (!step)
           throw `could not find step for key ${key}`;
-        step.functionDefinitionRange = new vscode.Range(lineNo, 0, lineNo, line.length);
+
+        let definitionLine = lines[lineNo];
+        // Remove comments
+        const commentIndex = definitionLine.indexOf('#');
+        if (commentIndex !== -1) {
+          definitionLine = definitionLine.substring(0, commentIndex);
+        }
+
+        definitionLine = definitionLine.trimEnd();
+        if (definitionLine.endsWith(':')) {
+          definitionLine = definitionLine.substring(0, definitionLine.length - 1);
+        }
+        step.functionDefinitionRange = new vscode.Range(lineNo, 0, lineNo, definitionLine.length);
       });
       setFuncLineKeys = [];
     }
