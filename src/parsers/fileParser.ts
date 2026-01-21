@@ -34,6 +34,15 @@ export class FileParser {
   private _cancelTokenSources: { [wkspUriPath: string]: vscode.CancellationTokenSource } = {};
   private _errored = false;
   private _reparsingFile = false;
+  private _statusChangeHandlers: ((busy: boolean) => void)[] = [];
+
+  public onStatusChange(handler: (busy: boolean) => void) {
+    this._statusChangeHandlers.push(handler);
+  }
+
+  private _notifyStatusChange(busy: boolean) {
+    this._statusChangeHandlers.forEach(h => h(busy));
+  }
 
   async featureParseComplete(timeout: number, caller: string) {
     const interval = 100;
@@ -355,6 +364,8 @@ export class FileParser {
     this._finishedFeaturesParseForWorkspace[wkspPath] = false;
     this._finishedStepsParseForWorkspace[wkspPath] = false;
 
+    this._notifyStatusChange(true);
+
     // if caller cancels, pass it on to the internal token
     const cancellationHandler = callerCancelToken?.onCancellationRequested(() => {
       if (this._cancelTokenSources[wkspPath])
@@ -426,6 +437,7 @@ export class FileParser {
       const wkspsStillParsingSteps = (getUrisOfWkspFoldersWithFeatures()).filter(uri => !this._finishedStepsParseForWorkspace[uri.path])
       if (wkspsStillParsingSteps.length === 0) {
         this._finishedStepsParseForAllWorkspaces = true;
+        this._notifyStatusChange(false);
         diagLog(`${callName}: steps loaded for all workspaces`);
       }
       else {
