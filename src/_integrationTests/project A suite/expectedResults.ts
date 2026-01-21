@@ -7,10 +7,10 @@ import { TestResult, applyTestConfiguration } from "../suite-shared/expectedResu
 export function getExpectedCounts(wkspUri: vscode.Uri, config: Configuration): WkspParseCounts {
   const testCount = getExpectedResults(wkspUri, config).length;
   return {
-    tests: { nodeCount: 70, testCount: testCount },
-    featureFilesExceptEmptyOrCommentedOut: 24, stepFilesExceptEmptyOrCommentedOut: 5,
+    tests: { nodeCount: 74, testCount: testCount },
+    featureFilesExceptEmptyOrCommentedOut: 25, stepFilesExceptEmptyOrCommentedOut: 5,
     stepFileStepsExceptCommentedOut: 16,
-    featureFileStepsExceptCommentedOut: 116, stepMappings: 115 // (1 diff = "When we have a missing step")
+    featureFileStepsExceptCommentedOut: 123, stepMappings: 122 // (1 diff = "When we have a missing step")
   };
 }
 
@@ -398,6 +398,54 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       test_label: 'Blend Success 2',
       test_parent: '.../project A/{{featurePath}}/group1_features/outline_success.feature',
       test_uri: '.../project A/{{featurePath}}/group1_features/outline_success.feature'
+    }),
+
+    new TestResult({
+      scenario_featureName: 'Fixture Tests',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/fixtures.feature',
+      scenario_getLabel: 'test with disabled sensors',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'test with disabled sensors',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/fixtures.feature/test with disabled sensors',
+      test_label: 'test with disabled sensors',
+      test_parent: '.../project A/{{featurePath}}/group1_features/fixtures.feature',
+      test_uri: '.../project A/{{featurePath}}/group1_features/fixtures.feature'
+    }),
+
+    new TestResult({
+      scenario_featureName: 'Fixture Tests',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/fixtures.feature',
+      scenario_getLabel: 'test with mock database',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'test with mock database',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/fixtures.feature/test with mock database',
+      test_label: 'test with mock database',
+      test_parent: '.../project A/{{featurePath}}/group1_features/fixtures.feature',
+      test_uri: '.../project A/{{featurePath}}/group1_features/fixtures.feature'
+    }),
+
+    new TestResult({
+      scenario_featureName: 'Fixture Tests',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/fixtures.feature',
+      scenario_getLabel: 'test with missing fixture',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'test with missing fixture',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/fixtures.feature/test with missing fixture',
+      test_label: 'test with missing fixture',
+      test_parent: '.../project A/{{featurePath}}/group1_features/fixtures.feature',
+      test_uri: '.../project A/{{featurePath}}/group1_features/fixtures.feature'
     }),
 
     new TestResult({

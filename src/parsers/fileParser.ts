@@ -8,6 +8,7 @@ import {
   getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem
 } from '../common';
 import { parseStepsFileContent, getStepFileSteps, deleteStepFileSteps } from './stepsParser';
+import { parseEnvironmentFileContent, deleteFixtures } from './fixtureParser';
 import { TestData, TestFile } from './testFile';
 import { diagLog } from '../logger';
 import { deleteStepMappings, rebuildStepMappings, getStepMappings } from './stepMappings';
@@ -136,6 +137,7 @@ export class FileParser {
 
     diagLog("removing existing steps for workspace: " + wkspSettings.name);
     deleteStepFileSteps(wkspSettings.featuresUri);
+    deleteFixtures(wkspSettings.featuresUri);
 
     let stepFiles: vscode.Uri[] = [];
     if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
@@ -145,18 +147,33 @@ export class FileParser {
 
     stepFiles = stepFiles.filter(uri => isStepsFile(uri));
 
+    // Also find environment.py files for fixtures
+    let potentialEnvFiles: vscode.Uri[] = [];
+    if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
+      potentialEnvFiles = await findFiles(wkspSettings.featuresUri, undefined, ".py", cancelToken);
+    else
+      potentialEnvFiles = await findFiles(wkspSettings.stepsSearchUri, undefined, ".py", cancelToken);
+
+    const environmentFiles = potentialEnvFiles.filter(uri => uri.path.endsWith("/environment.py"));
+
     if (stepFiles.length < 1 && !cancelToken.isCancellationRequested) {
       config.logger.showWarn("No step files found", wkspSettings.uri);
-      return 0;
     }
 
-    let processed = 0;
+    let processedStepFiles = 0;
     for (const uri of stepFiles) {
       if (cancelToken.isCancellationRequested)
         break;
       const content = await getContentFromFilesystem(uri);
       await this._updateStepsFromStepsFileContent(wkspSettings.featuresUri, content, uri, caller);
-      processed++;
+      processedStepFiles++;
+    }
+
+    for (const uri of environmentFiles) {
+      if (cancelToken.isCancellationRequested)
+        break;
+      const content = await getContentFromFilesystem(uri);
+      await parseEnvironmentFileContent(wkspSettings.featuresUri, content, uri, caller);
     }
 
     if (cancelToken.isCancellationRequested) {
@@ -164,7 +181,7 @@ export class FileParser {
       diagLog(`${caller}: cancelling, _parseStepFiles stopped`);
     }
 
-    return processed;
+    return processedStepFiles;
   }
 
 
@@ -473,7 +490,10 @@ export class FileParser {
     try {
       this._reparsingFile = true;
 
-      if (!isStepsFile(fileUri) && !isFeatureFile(fileUri))
+      // Check for environment.py specifically
+      const isEnvFile = fileUri.path.endsWith("/environment.py");
+
+      if (!isStepsFile(fileUri) && !isFeatureFile(fileUri) && !isEnvFile)
         return;
 
       if (!content)
@@ -481,6 +501,9 @@ export class FileParser {
 
       if (isStepsFile(fileUri))
         await this._updateStepsFromStepsFileContent(wkspSettings.featuresUri, content, fileUri, "reparseFile");
+
+      if (isEnvFile)
+        await parseEnvironmentFileContent(wkspSettings.featuresUri, content, fileUri, "reparseFile");
 
       if (isFeatureFile(fileUri))
         await this._updateTestItemFromFeatureFileContent(wkspSettings, content, testData, ctrl, fileUri, "reparseFile", false);

@@ -21,6 +21,8 @@ import { SemHighlightProvider, semLegend } from './handlers/semHighlightProvider
 import { DocumentSymbolProvider } from './handlers/documentSymbolProvider';
 import { DefinitionProvider } from './handlers/definitionProvider';
 import { HoverProvider } from './handlers/hoverProvider';
+import { FixtureDefinitionProvider, FixtureHoverProvider } from './handlers/fixtureProviders';
+import { validateFixtureTags } from './handlers/fixtureDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
 import { JunitWatcher } from './watchers/junitWatcher';
 
@@ -93,7 +95,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.languages.registerDocumentSemanticTokensProvider({ language: "gherkin" }, new SemHighlightProvider(), semLegend),
       vscode.languages.registerDocumentSymbolProvider("gherkin", new DocumentSymbolProvider()),
       vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new DefinitionProvider()),
-      vscode.languages.registerHoverProvider({ language: "gherkin" }, new HoverProvider())
+      vscode.languages.registerHoverProvider({ language: "gherkin" }, new HoverProvider()),
+      vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new FixtureDefinitionProvider()),
+      vscode.languages.registerHoverProvider({ language: "gherkin" }, new FixtureHoverProvider())
     );
 
 
@@ -162,6 +166,31 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     }));
 
 
+    // Validate fixture tags when document is opened
+    context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(async (document) => {
+      try {
+        if (isFeatureFile(document.uri)) {
+          // Wait a bit for parsing to complete
+          setTimeout(() => {
+            validateFixtureTags(document);
+          }, 100);
+        }
+      }
+      catch (e: unknown) {
+        // entry point function (handler) - show error
+        config.logger.showError(e, undefined);
+      }
+    }));
+
+    // Validate all currently open feature files
+    for (const document of vscode.workspace.textDocuments) {
+      if (isFeatureFile(document.uri)) {
+        setTimeout(() => {
+          validateFixtureTags(document);
+        }, 200);
+      }
+    }
+
     // called when a user edits a file.
     // we want to reparse on edit (not just on disk changes) because:
     // a. the user may run a file they just edited without saving,
@@ -171,10 +200,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(async (event) => {
       try {
         const uri = event.document.uri;
-        if (!isFeatureFile(uri) && !isStepsFile(uri))
+        const isEnvFile = uri.path.endsWith("/environment.py");
+
+        if (!isFeatureFile(uri) && !isStepsFile(uri) && !isEnvFile)
           return;
+
         const wkspSettings = getWorkspaceSettingsForFile(uri);
-        parser.reparseFile(uri, event.document.getText(), wkspSettings, testData, ctrl);
+        // We actully need to await this to ensure parsing is done before validation
+        await parser.reparseFile(uri, event.document.getText(), wkspSettings, testData, ctrl);
+
+        // Validate fixture tags when feature file changes
+        if (isFeatureFile(uri)) {
+          validateFixtureTags(event.document);
+        }
+
+        // If enviroment file changes, re-validate fixtures in all open feature files
+        if (isEnvFile) {
+          for (const document of vscode.workspace.textDocuments) {
+            if (isFeatureFile(document.uri)) {
+              validateFixtureTags(document);
+            }
+          }
+        }
       }
       catch (e: unknown) {
         // entry point function (handler) - show error        
