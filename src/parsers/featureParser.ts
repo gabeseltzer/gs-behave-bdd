@@ -3,15 +3,9 @@ import { WorkspaceSettings } from "../settings";
 import { uriId, sepr, basename, getLines, getWorkspaceUriForFile } from '../common';
 import { diagLog } from '../logger';
 import { config } from '../configuration';
+import { featureRe, featureMultiLineRe, scenarioRe, scenarioOutlineRe, featureFileStepRe, tagRe } from './gherkinPatterns';
 
-
-const featureRe = /^\s*Feature:(.*)$/i;
-const featureMultiLineRe = /^\s*Feature:(.*)$/im;
 const commentedFeatureMultilineReStr = /^\s*#.*Feature:(.*)$/im;
-const scenarioRe = /^\s*(Scenario|Scenario Outline):(.*)$/i;
-const scenarioOutlineRe = /^\s*Scenario Outline:(.*)$/i;
-export const featureFileStepRe = /^\s*(Given |When |Then |And |But )(.*)/i;
-const tagRe = /^\s*@(\S+)/;
 
 const featureFileSteps = new Map<string, FeatureFileStep>();
 const featureTags = new Map<string, FeatureTag>();

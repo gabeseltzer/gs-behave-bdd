@@ -9,7 +9,7 @@ import { TestResult } from "./expectedResults.helpers";
 import { TestWorkspaceConfig, TestWorkspaceConfigWithWkspUri } from './testWorkspaceConfig';
 import { WkspParseCounts } from '../../parsers/fileParser';
 import { getUrisOfWkspFoldersWithFeatures, getAllTestItems, getScenarioTests, uriId, isFeatureFile, isStepsFile, getLines, urisMatch } from '../../common';
-import { featureFileStepRe } from '../../parsers/featureParser';
+import { featureFileStepRe } from '../../parsers/gherkinPatterns';
 import { funcRe } from '../../parsers/stepsParser';
 
 

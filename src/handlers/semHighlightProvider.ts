@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { getWorkspaceUriForFile, getLines } from '../common';
 import { config } from '../configuration';
 import { parser } from '../extension';
-import { featureFileStepRe } from '../parsers/featureParser';
+import { featureFileStepRe } from '../parsers/gherkinPatterns';
 import { getStepFileStepForFeatureFileStep } from '../parsers/stepMappings';
 import { parseRepWildcard } from '../parsers/stepsParser';
 
