@@ -20,6 +20,7 @@ import { formatFeatureProvider } from './handlers/formatFeatureProvider';
 import { SemHighlightProvider, semLegend } from './handlers/semHighlightProvider';
 import { DocumentSymbolProvider } from './handlers/documentSymbolProvider';
 import { DefinitionProvider } from './handlers/definitionProvider';
+import { SelectionRangeProvider } from './handlers/selectionRangeProvider';
 import { HoverProvider } from './handlers/hoverProvider';
 import { FixtureDefinitionProvider, FixtureHoverProvider, FixtureReferenceProvider } from './handlers/fixtureProviders';
 import { StepReferenceProvider } from './handlers/stepReferenceProvider';
@@ -106,6 +107,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.languages.registerDocumentRangeFormattingEditProvider("gherkin", formatFeatureProvider),
       vscode.languages.registerDocumentSemanticTokensProvider({ language: "gherkin" }, new SemHighlightProvider(), semLegend),
       vscode.languages.registerDocumentSymbolProvider("gherkin", new DocumentSymbolProvider()),
+      vscode.languages.registerSelectionRangeProvider("gherkin", new SelectionRangeProvider()),
       vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new DefinitionProvider()),
       vscode.languages.registerHoverProvider({ language: "gherkin" }, new HoverProvider()),
       vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new FixtureDefinitionProvider()),

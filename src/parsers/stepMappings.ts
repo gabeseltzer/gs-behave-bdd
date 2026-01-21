@@ -7,7 +7,6 @@ import { FeatureFileStep, getFeatureFileSteps } from './featureParser';
 import { refreshStepReferencesView } from '../handlers/findStepReferencesHandler';
 import { performance } from 'perf_hooks';
 import { retriggerSemanticHighlighting } from '../handlers/semHighlightProvider';
-import { config } from '../configuration';
 
 
 let stepMappings: StepMapping[] = [];
