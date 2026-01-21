@@ -29,16 +29,21 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       const line = lines[lineNo].trim();
 
       // Skip empty lines and comments
-      if (line === "" || line.startsWith("#")) {
+      // Note: we skip them here for the main loop, but we look back for them 
+      // when starting a new symbol to include tags/comments in the range
+      if (line === "" || line.startsWith("#") || line.startsWith("@")) {
         continue;
       }
 
       // Check for Feature
       const featureMatch = featureRe.exec(line);
       if (featureMatch) {
+
+        const startLine = this.getSymbolStartLine(lines, lineNo);
+
         // Close previous feature range
         if (currentFeature) {
-          this.updateSymbolRange(currentFeature, lineNo - 1, lines);
+          this.updateSymbolRange(currentFeature, startLine - 1, lines);
         }
 
         const featureName = featureMatch[1].trim() || "Feature";
@@ -46,12 +51,18 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
           new vscode.Position(lineNo, 0),
           new vscode.Position(lineNo, lines[lineNo].length)
         );
+
+        const range = new vscode.Range(
+          new vscode.Position(startLine, 0),
+          new vscode.Position(lineNo, lines[lineNo].length)
+        );
+
         // Start with a temporary range, will be updated later
         currentFeature = new vscode.DocumentSymbol(
           featureName,
           "",
           vscode.SymbolKind.Module,
-          selectionRange,
+          range, // Include tags/comments
           selectionRange
         );
         symbols.push(currentFeature);
@@ -66,9 +77,12 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       // Check for Rule
       const ruleMatch = ruleRe.exec(line);
       if (ruleMatch && currentFeature) {
+
+        const startLine = this.getSymbolStartLine(lines, lineNo);
+
         // Close previous rule range
         if (currentRule) {
-          this.updateSymbolRange(currentRule, lineNo - 1, lines);
+          this.updateSymbolRange(currentRule, startLine - 1, lines);
         }
 
         const ruleName = ruleMatch[1].trim() || "Rule";
@@ -76,11 +90,15 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
           new vscode.Position(lineNo, 0),
           new vscode.Position(lineNo, lines[lineNo].length)
         );
+        const range = new vscode.Range(
+          new vscode.Position(startLine, 0),
+          new vscode.Position(lineNo, lines[lineNo].length)
+        );
         currentRule = new vscode.DocumentSymbol(
           ruleName,
           "",
           vscode.SymbolKind.Namespace,
-          selectionRange,
+          range,
           selectionRange
         );
         currentFeature.children.push(currentRule);
@@ -94,9 +112,12 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       // Check for Background
       const backgroundMatch = backgroundRe.exec(line);
       if (backgroundMatch && currentFeature) {
+
+        const startLine = this.getSymbolStartLine(lines, lineNo);
+
         // Close previous background range
         if (currentBackground) {
-          this.updateSymbolRange(currentBackground, lineNo - 1, lines);
+          this.updateSymbolRange(currentBackground, startLine - 1, lines);
         }
 
         const backgroundName = backgroundMatch[1].trim() || "Background";
@@ -104,11 +125,15 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
           new vscode.Position(lineNo, 0),
           new vscode.Position(lineNo, lines[lineNo].length)
         );
+        const range = new vscode.Range(
+          new vscode.Position(startLine, 0),
+          new vscode.Position(lineNo, lines[lineNo].length)
+        );
         currentBackground = new vscode.DocumentSymbol(
           backgroundName,
           "",
           vscode.SymbolKind.Method,
-          selectionRange,
+          range,
           selectionRange
         );
 
@@ -126,17 +151,20 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       // Check for Scenario or Scenario Outline
       const scenarioMatch = scenarioRe.exec(line);
       if (scenarioMatch && currentFeature) {
+
+        const startLine = this.getSymbolStartLine(lines, lineNo);
+
         // Close any open examples range first
         if (currentExamples) {
-          this.updateSymbolRange(currentExamples, lineNo - 1, lines);
+          this.updateSymbolRange(currentExamples, startLine - 1, lines);
         }
         // Close previous scenario range
         if (currentScenario) {
-          this.updateSymbolRange(currentScenario, lineNo - 1, lines);
+          this.updateSymbolRange(currentScenario, startLine - 1, lines);
         }
         // Close previous background range if scenario follows it
         if (currentBackground) {
-          this.updateSymbolRange(currentBackground, lineNo - 1, lines);
+          this.updateSymbolRange(currentBackground, startLine - 1, lines);
         }
 
         const scenarioName = scenarioMatch[2].trim() || "Scenario";
@@ -145,11 +173,15 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
           new vscode.Position(lineNo, 0),
           new vscode.Position(lineNo, lines[lineNo].length)
         );
+        const range = new vscode.Range(
+          new vscode.Position(startLine, 0),
+          new vscode.Position(lineNo, lines[lineNo].length)
+        );
         currentScenario = new vscode.DocumentSymbol(
           scenarioName,
           isOutline ? "Scenario Outline" : "Scenario",
           vscode.SymbolKind.Function,
-          selectionRange,
+          range,
           selectionRange
         );
 
@@ -167,9 +199,12 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       // Check for Examples (as a child of Scenario Outline)
       const examplesMatch = examplesRe.exec(line);
       if (examplesMatch && currentScenario) {
+
+        const startLine = this.getSymbolStartLine(lines, lineNo);
+
         // Close previous examples range
         if (currentExamples) {
-          this.updateSymbolRange(currentExamples, lineNo - 1, lines);
+          this.updateSymbolRange(currentExamples, startLine - 1, lines);
         }
 
         const examplesName = examplesMatch[1].trim() || "Examples";
@@ -177,11 +212,15 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
           new vscode.Position(lineNo, 0),
           new vscode.Position(lineNo, lines[lineNo].length)
         );
+        const range = new vscode.Range(
+          new vscode.Position(startLine, 0),
+          new vscode.Position(lineNo, lines[lineNo].length)
+        );
         currentExamples = new vscode.DocumentSymbol(
           examplesName,
           "",
           vscode.SymbolKind.Property,
-          selectionRange,
+          range,
           selectionRange
         );
         currentScenario.children.push(currentExamples);
@@ -192,9 +231,12 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       // Check for Steps (Given/When/Then/And/But/*)
       const stepMatch = stepRe.exec(line);
       if (stepMatch && (currentScenario || currentBackground)) {
+
+        const startLine = this.getSymbolStartLine(lines, lineNo);
+
         // Close previous step range
         if (currentStep) {
-          this.updateSymbolRange(currentStep, lineNo - 1, lines);
+          this.updateSymbolRange(currentStep, startLine - 1, lines);
         }
 
         const stepKeyword = stepMatch[1];
@@ -204,11 +246,15 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
           new vscode.Position(lineNo, 0),
           new vscode.Position(lineNo, lines[lineNo].length)
         );
+        const range = new vscode.Range(
+          new vscode.Position(startLine, 0),
+          new vscode.Position(lineNo, lines[lineNo].length)
+        );
         currentStep = new vscode.DocumentSymbol(
           `${stepKeyword} ${stepName}`,
           "",
           vscode.SymbolKind.Field,
-          selectionRange,
+          range,
           selectionRange
         );
 
@@ -242,6 +288,26 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
     }
 
     return symbols;
+  }
+
+  private getSymbolStartLine(lines: string[], lineNo: number): number {
+    let startLine = lineNo;
+    for (let i = lineNo - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+      if (line.startsWith("@")) {
+        startLine = i;
+      } else if (line.startsWith("#")) {
+        // Comments directly above tags or keywords usually belong to them
+        startLine = i;
+      } else if (line === "") {
+        // Empty line breaks the attachment
+        break;
+      } else {
+        // Something else (e.g. previous step)
+        break;
+      }
+    }
+    return startLine;
   }
 
   private updateSymbolRange(symbol: vscode.DocumentSymbol, endLineNo: number, lines: string[]): void {
