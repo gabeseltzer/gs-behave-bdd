@@ -1,13 +1,6 @@
 import * as vscode from "vscode";
 import { getLines } from "../common";
-
-const featureRe = /^\s*Feature:(.*)$/i;
-const backgroundRe = /^\s*Background:(.*)$/i;
-const scenarioRe = /^\s*(Scenario|Scenario Outline|Scenario Template):(.*)$/i;
-const scenarioOutlineRe = /^\s*(Scenario Outline|Scenario Template):(.*)$/i;
-const examplesRe = /^\s*Examples:(.*)$/i;
-const ruleRe = /^\s*Rule:(.*)$/i;
-const stepRe = /^\s*(Given|When|Then|And|But|\*)(.*)$/i;
+import { featureRe, backgroundRe, scenarioRe, scenarioOutlineRe, examplesRe, ruleRe, stepRe, getSymbolStartLine } from "../parsers/gherkinPatterns";
 
 export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
   provideDocumentSymbols(
@@ -39,7 +32,7 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       const featureMatch = featureRe.exec(line);
       if (featureMatch) {
 
-        const startLine = this.getSymbolStartLine(lines, lineNo);
+        const startLine = getSymbolStartLine(lines, lineNo);
 
         // Close previous feature range
         if (currentFeature) {
@@ -78,7 +71,7 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       const ruleMatch = ruleRe.exec(line);
       if (ruleMatch && currentFeature) {
 
-        const startLine = this.getSymbolStartLine(lines, lineNo);
+        const startLine = getSymbolStartLine(lines, lineNo);
 
         // Close previous rule range
         if (currentRule) {
@@ -113,7 +106,7 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       const backgroundMatch = backgroundRe.exec(line);
       if (backgroundMatch && currentFeature) {
 
-        const startLine = this.getSymbolStartLine(lines, lineNo);
+        const startLine = getSymbolStartLine(lines, lineNo);
 
         // Close previous background range
         if (currentBackground) {
@@ -152,7 +145,7 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       const scenarioMatch = scenarioRe.exec(line);
       if (scenarioMatch && currentFeature) {
 
-        const startLine = this.getSymbolStartLine(lines, lineNo);
+        const startLine = getSymbolStartLine(lines, lineNo);
 
         // Close any open examples range first
         if (currentExamples) {
@@ -200,7 +193,7 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       const examplesMatch = examplesRe.exec(line);
       if (examplesMatch && currentScenario) {
 
-        const startLine = this.getSymbolStartLine(lines, lineNo);
+        const startLine = getSymbolStartLine(lines, lineNo);
 
         // Close previous examples range
         if (currentExamples) {
@@ -232,7 +225,7 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
       const stepMatch = stepRe.exec(line);
       if (stepMatch && (currentScenario || currentBackground)) {
 
-        const startLine = this.getSymbolStartLine(lines, lineNo);
+        const startLine = getSymbolStartLine(lines, lineNo);
 
         // Close previous step range
         if (currentStep) {
@@ -288,26 +281,6 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
     }
 
     return symbols;
-  }
-
-  private getSymbolStartLine(lines: string[], lineNo: number): number {
-    let startLine = lineNo;
-    for (let i = lineNo - 1; i >= 0; i--) {
-      const line = lines[i].trim();
-      if (line.startsWith("@")) {
-        startLine = i;
-      } else if (line.startsWith("#")) {
-        // Comments directly above tags or keywords usually belong to them
-        startLine = i;
-      } else if (line === "") {
-        // Empty line breaks the attachment
-        break;
-      } else {
-        // Something else (e.g. previous step)
-        break;
-      }
-    }
-    return startLine;
   }
 
   private updateSymbolRange(symbol: vscode.DocumentSymbol, endLineNo: number, lines: string[]): void {

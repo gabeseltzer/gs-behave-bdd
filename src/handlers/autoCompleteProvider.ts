@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { getWorkspaceSettingsForFile, getWorkspaceUriForFile, sepr } from '../common';
 import { config } from '../configuration';
-import { featureFileStepRe } from "../parsers/featureParser";
+import { featureFileStepRe } from "../parsers/gherkinPatterns";
 import { getStepFileSteps } from '../parsers/stepsParser';
 
 
