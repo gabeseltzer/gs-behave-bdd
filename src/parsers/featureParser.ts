@@ -11,8 +11,20 @@ const commentedFeatureMultilineReStr = /^\s*#.*Feature:(.*)$/im;
 const scenarioRe = /^\s*(Scenario|Scenario Outline):(.*)$/i;
 const scenarioOutlineRe = /^\s*Scenario Outline:(.*)$/i;
 export const featureFileStepRe = /^\s*(Given |When |Then |And |But )(.*)/i;
+const tagRe = /^\s*@(\S+)/;
 
 const featureFileSteps = new Map<string, FeatureFileStep>();
+const featureTags = new Map<string, FeatureTag>();
+
+export class FeatureTag {
+  constructor(
+    public readonly key: string,
+    public readonly uri: vscode.Uri,
+    public readonly fileName: string,
+    public readonly range: vscode.Range,
+    public readonly tag: string,
+  ) { }
+}
 
 export class FeatureFileStep {
   constructor(
@@ -31,10 +43,34 @@ export const getFeatureFileSteps = (featuresUri: vscode.Uri) => {
   return [...featureFileSteps].filter(([k,]) => k.startsWith(featuresUriMatchString));
 }
 
+export const getFeatureTags = (featuresUri: vscode.Uri) => {
+  const featuresUriMatchString = uriId(featuresUri);
+  return [...featureTags.values()].filter(t => t.key.startsWith(featuresUriMatchString));
+}
+
+export const getFeatureTagByPosition = (uri: vscode.Uri, position: vscode.Position): FeatureTag | undefined => {
+  const key = `${uriId(uri)}${sepr}${position.line}`;
+  const tag = featureTags.get(key);
+  
+  // Check if the position is within the tag's range
+  if (tag && tag.range.contains(position)) {
+    return tag;
+  }
+  
+  return undefined;
+}
+
 export const deleteFeatureFileSteps = (featuresUri: vscode.Uri) => {
   const wkspFeatureFileSteps = getFeatureFileSteps(featuresUri);
   for (const [key,] of wkspFeatureFileSteps) {
     featureFileSteps.delete(key);
+  }
+  
+  const featuresUriMatchString = uriId(featuresUri);
+  for (const [key,] of featureTags) {
+    if (key.startsWith(featuresUriMatchString)) {
+      featureTags.delete(key);
+    }
   }
 }
 
@@ -78,6 +114,12 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
     if (uriId(featureFileStep.uri) === fileUriMatchString)
       featureFileSteps.delete(key);
   }
+  
+  // clear all existing tags for this feature file
+  for (const [key, featureTag] of featureTags) {
+    if (uriId(featureTag.uri) === fileUriMatchString)
+      featureTags.delete(key);
+  }
 
 
   for (let lineNo = 0; lineNo < lines.length; lineNo++) {
@@ -88,6 +130,21 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
 
     const line = lines[lineNo].trim();
     if (line === '' || line.startsWith("#")) {
+      continue;
+    }
+
+    // Check for tags (e.g., @fixture.disable_sensors)
+    const tagMatch = tagRe.exec(line);
+    if (tagMatch) {
+      const tag = tagMatch[1];
+      const tagStartCol = indentSize + line.indexOf('@');
+      const tagEndCol = tagStartCol + 1 + tag.length; // +1 for the @ symbol
+      const range = new vscode.Range(
+        new vscode.Position(lineNo, tagStartCol),
+        new vscode.Position(lineNo, tagEndCol)
+      );
+      const key = `${uriId(uri)}${sepr}${lineNo}`;
+      featureTags.set(key, new FeatureTag(key, uri, fileName, range, tag));
       continue;
     }
 
