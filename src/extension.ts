@@ -75,6 +75,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     const junitWatcher = new JunitWatcher();
     junitWatcher.startWatchingJunitFolder();
 
+    const statusItem = vscode.languages.createLanguageStatusItem('behave.status', { language: 'gherkin' });
+    statusItem.name = "Behave VSC Status";
+    statusItem.text = "Behave: Parsing...";
+    statusItem.busy = true;
+
+    parser.onStatusChange((busy: boolean) => {
+      statusItem.busy = busy;
+      statusItem.text = busy ? "Behave: Parsing..." : "Behave: Ready";
+    });
+
     // any function contained in a context.subscriptions.push() will execute immediately, 
     // as well as registering the returned disposable object for a dispose() call on extension deactivation
     // i.e. startWatchingWorkspace will execute immediately, as will registerCommand, but gotoStepHandler will not (as it is a parameter 
@@ -87,6 +97,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       config.diagnostics,
       cleanExtensionTempDirectoryCancelSource,
       junitWatcher,
+      statusItem,
       vscode.commands.registerTextEditorCommand(`behave-vsc.gotoStep`, gotoStepHandler),
       vscode.commands.registerTextEditorCommand(`behave-vsc.findStepReferences`, findStepReferencesHandler),
       vscode.commands.registerCommand(`behave-vsc.stepReferences.prev`, prevStepReferenceHandler),
