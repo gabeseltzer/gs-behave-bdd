@@ -21,7 +21,8 @@ import { SemHighlightProvider, semLegend } from './handlers/semHighlightProvider
 import { DocumentSymbolProvider } from './handlers/documentSymbolProvider';
 import { DefinitionProvider } from './handlers/definitionProvider';
 import { HoverProvider } from './handlers/hoverProvider';
-import { FixtureDefinitionProvider, FixtureHoverProvider } from './handlers/fixtureProviders';
+import { FixtureDefinitionProvider, FixtureHoverProvider, FixtureReferenceProvider } from './handlers/fixtureProviders';
+import { StepReferenceProvider } from './handlers/stepReferenceProvider';
 import { validateFixtureTags } from './handlers/fixtureDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
 import { JunitWatcher } from './watchers/junitWatcher';
@@ -97,7 +98,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new DefinitionProvider()),
       vscode.languages.registerHoverProvider({ language: "gherkin" }, new HoverProvider()),
       vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new FixtureDefinitionProvider()),
-      vscode.languages.registerHoverProvider({ language: "gherkin" }, new FixtureHoverProvider())
+      vscode.languages.registerHoverProvider({ language: "gherkin" }, new FixtureHoverProvider()),
+      vscode.languages.registerReferenceProvider(["gherkin", "python"], new StepReferenceProvider()),
+      vscode.languages.registerReferenceProvider(["gherkin", "python"], new FixtureReferenceProvider())
     );
 
 
