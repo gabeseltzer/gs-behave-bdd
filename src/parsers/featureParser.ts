@@ -45,12 +45,12 @@ export const getFeatureTags = (featuresUri: vscode.Uri) => {
 export const getFeatureTagByPosition = (uri: vscode.Uri, position: vscode.Position): FeatureTag | undefined => {
   const key = `${uriId(uri)}${sepr}${position.line}`;
   const tag = featureTags.get(key);
-  
+
   // Check if the position is within the tag's range
   if (tag && tag.range.contains(position)) {
     return tag;
   }
-  
+
   return undefined;
 }
 
@@ -59,7 +59,7 @@ export const deleteFeatureFileSteps = (featuresUri: vscode.Uri) => {
   for (const [key,] of wkspFeatureFileSteps) {
     featureFileSteps.delete(key);
   }
-  
+
   const featuresUriMatchString = uriId(featuresUri);
   for (const [key,] of featureTags) {
     if (key.startsWith(featuresUriMatchString)) {
@@ -80,8 +80,11 @@ export const getFeatureNameFromContent = async (content: string, uri: vscode.Uri
   const featureName = featureText[1].trim();
   if (featureName === '') {
     if (firstRun) {
-      config.logger.showWarn(`No feature name found in file: ${uri.fsPath}. This feature will be ignored until it has a name.`,
-        getWorkspaceUriForFile(uri));
+      const wkspUri = getWorkspaceUriForFile(uri);
+      if (wkspUri) {
+        config.logger.showWarn(`No feature name found in file: ${uri.fsPath}. This feature will be ignored until it has a name.`,
+          wkspUri);
+      }
     }
     return null;
   }
@@ -108,7 +111,7 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
     if (uriId(featureFileStep.uri) === fileUriMatchString)
       featureFileSteps.delete(key);
   }
-  
+
   // clear all existing tags for this feature file
   for (const [key, featureTag] of featureTags) {
     if (uriId(featureTag.uri) === fileUriMatchString)

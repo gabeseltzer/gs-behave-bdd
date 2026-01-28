@@ -61,7 +61,8 @@ export class SemHighlightProvider implements vscode.DocumentSemanticTokensProvid
 			try {
 				// not worth showing the error to user for this, just log it
 				const wkspUri = getWorkspaceUriForFile(document.uri);
-				config.logger.logInfo(`${e}`, wkspUri);
+				if (wkspUri)
+					config.logger.logInfo(`${e}`, wkspUri);
 			}
 			catch {
 				config.logger.showError(`${e}`);

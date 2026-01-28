@@ -145,6 +145,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           return;
 
         wkspSettings = getWorkspaceSettingsForFile(item.uri);
+        if (!wkspSettings)
+          return;
         const content = await getContentFromFilesystem(item.uri);
         await data.createScenarioTestItemsFromFeatureFileContent(wkspSettings, content, testData, ctrl, item, "resolveHandler");
       }
@@ -222,6 +224,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           return;
 
         const wkspSettings = getWorkspaceSettingsForFile(uri);
+        if (!wkspSettings)
+          return;
         // We actully need to await this to ensure parsing is done before validation
         await parser.reparseFile(uri, event.document.getText(), wkspSettings, testData, ctrl);
 
