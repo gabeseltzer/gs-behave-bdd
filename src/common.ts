@@ -188,11 +188,12 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
 }
 
 
-export const getWorkspaceUriForFile = (fileorFolderUri: vscode.Uri | undefined): vscode.Uri => {
+export const getWorkspaceUriForFile = (fileorFolderUri: vscode.Uri | undefined): vscode.Uri | undefined => {
+  // Return undefined for non-file URIs (e.g., git: scheme from diff views)
   if (fileorFolderUri?.scheme !== "file")
-    throw new Error(`Unexpected scheme: ${fileorFolderUri?.scheme}`);
+    return undefined;
   if (!fileorFolderUri) // handling this here for caller convenience
-    throw new Error("uri is undefined");
+    return undefined;
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileorFolderUri);
   const wkspUri = workspaceFolder ? workspaceFolder.uri : undefined;
   if (!wkspUri)
@@ -201,8 +202,10 @@ export const getWorkspaceUriForFile = (fileorFolderUri: vscode.Uri | undefined):
 }
 
 
-export const getWorkspaceSettingsForFile = (fileorFolderUri: vscode.Uri | undefined): WorkspaceSettings => {
+export const getWorkspaceSettingsForFile = (fileorFolderUri: vscode.Uri | undefined): WorkspaceSettings | undefined => {
   const wkspUri = getWorkspaceUriForFile(fileorFolderUri);
+  if (!wkspUri)
+    return undefined;
   return config.workspaceSettings[wkspUri.path];
 }
 

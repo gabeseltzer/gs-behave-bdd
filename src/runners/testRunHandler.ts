@@ -97,6 +97,8 @@ async function queueSelectedTestItems(ctrl: vscode.TestController, run: vscode.T
     else {
       if (data instanceof TestFile && !data.didResolve) {
         const wkspSettings = getWorkspaceSettingsForFile(test.uri);
+        if (!wkspSettings)
+          continue;
         const content = await getContentFromFilesystem(test.uri);
         await data.createScenarioTestItemsFromFeatureFileContent(wkspSettings, content, testData, ctrl, test, "queueSelectedItems");
       }
