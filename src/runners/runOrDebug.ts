@@ -192,8 +192,9 @@ function getScenarioRunName(scenName: string, isOutline: boolean) {
 
 function getFriendlyEnvVars(wkspSettings: WorkspaceSettings) {
   let envVars = "";
+  const effectiveEnvVars = wkspSettings.getEffectiveEnvVars();
 
-  for (const [name, value] of Object.entries(wkspSettings.envVarOverrides)) {
+  for (const [name, value] of Object.entries(effectiveEnvVars)) {
     envVars += os.platform() === "win32" ?
       typeof value === "number" ? `$Env:${name}=${value}\n` : `$Env:${`${name}="${value.replace('"', '""')}"`}\n` :
       typeof value === "number" ? `${name}=${value} ` : `${name}="${value.replace('"', '\\"')}" `;

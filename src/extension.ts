@@ -119,14 +119,159 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
 
     const runHandler = testRunHandler(testData, ctrl, parser, junitWatcher, cleanExtensionTempDirectoryCancelSource);
 
-    ctrl.createRunProfile('Run Tests', vscode.TestRunProfileKind.Run,
+    // Environment preset selector command (shown in Testing view title bar)
+    const editPresetButton: vscode.QuickInputButton = {
+      iconPath: new vscode.ThemeIcon("gear"),
+      tooltip: "Edit this preset in settings"
+    };
+
+    const selectEnvPresetCommand = vscode.commands.registerCommand("behave-vsc.selectEnvPreset", async () => {
+      const wkspUris = getUrisOfWkspFoldersWithFeatures();
+      if (wkspUris.length === 0) {
+        vscode.window.showWarningMessage("No workspace folders with features found.");
+        return;
+      }
+
+      // If multiple workspaces, let user select which one to configure
+      let targetWkspUri: vscode.Uri;
+      if (wkspUris.length === 1) {
+        targetWkspUri = wkspUris[0];
+      } else {
+        const wkspItems = wkspUris.map(uri => ({
+          label: vscode.workspace.getWorkspaceFolder(uri)?.name ?? uri.fsPath,
+          uri: uri
+        }));
+        const selected = await vscode.window.showQuickPick(wkspItems, {
+          placeHolder: "Select workspace to configure environment preset"
+        });
+        if (!selected) return;
+        targetWkspUri = selected.uri;
+      }
+
+      // Get current presets for the workspace
+      const wkspConfig = vscode.workspace.getConfiguration("behave-vsc", targetWkspUri);
+      const presets = wkspConfig.get<{ [name: string]: { [key: string]: string } }>("envVarPresets") ?? {};
+      const currentPreset = wkspConfig.get<string>("activeEnvVarPreset") ?? "";
+
+      const presetNames = Object.keys(presets);
+      if (presetNames.length === 0) {
+        const openSettings = await vscode.window.showWarningMessage(
+          "No environment presets configured. Add presets in settings (behave-vsc.envVarPresets).",
+          "Open Settings"
+        );
+        if (openSettings === "Open Settings") {
+          await vscode.commands.executeCommand("workbench.action.openSettings", "behave-vsc.envVarPresets");
+        }
+        return;
+      }
+
+      // Build quick pick items with gear buttons for editing
+      interface PresetQuickPickItem extends vscode.QuickPickItem {
+        presetName: string;
+      }
+
+      const items: PresetQuickPickItem[] = [
+        { label: "(none)", description: currentPreset === "" ? "✓ active" : "", presetName: "" },
+        ...presetNames.map(name => ({
+          label: name,
+          description: name === currentPreset ? "✓ active" : "",
+          detail: Object.entries(presets[name]).map(([k, v]) => `${k}=${v}`).join(", "),
+          presetName: name,
+          buttons: [editPresetButton]
+        }))
+      ];
+
+      // Use createQuickPick for button support
+      const quickPick = vscode.window.createQuickPick<PresetQuickPickItem>();
+      quickPick.items = items;
+      quickPick.placeholder = `Select environment preset (current: ${currentPreset || "(none)"})`;
+
+      quickPick.onDidTriggerItemButton(async e => {
+        const presetName = e.item.presetName;
+        quickPick.hide();
+
+        // Determine where the setting is stored
+        const inspection = wkspConfig.inspect<{ [name: string]: { [key: string]: string } }>("envVarPresets");
+        let settingsUri: vscode.Uri | undefined;
+        let isGlobalSettings = false;
+
+        if (inspection?.workspaceFolderValue !== undefined) {
+          // Setting is in .vscode/settings.json of the workspace folder
+          settingsUri = vscode.Uri.joinPath(targetWkspUri, ".vscode", "settings.json");
+        } else if (inspection?.workspaceValue !== undefined) {
+          // Setting is in the .code-workspace file (multi-root workspace)
+          const workspaceFile = vscode.workspace.workspaceFile;
+          if (workspaceFile && workspaceFile.scheme === "file") {
+            settingsUri = workspaceFile;
+          }
+        } else if (inspection?.globalValue !== undefined) {
+          // Setting is in user settings
+          isGlobalSettings = true;
+        }
+
+        if (!settingsUri && !isGlobalSettings) {
+          // Fallback: try workspace folder settings.json first
+          settingsUri = vscode.Uri.joinPath(targetWkspUri, ".vscode", "settings.json");
+        }
+
+        try {
+          let doc: vscode.TextDocument;
+          let editor: vscode.TextEditor;
+
+          if (isGlobalSettings) {
+            // Open global settings via command, then get the active editor
+            await vscode.commands.executeCommand("workbench.action.openSettingsJson");
+            editor = vscode.window.activeTextEditor!;
+            doc = editor.document;
+          } else {
+            doc = await vscode.workspace.openTextDocument(settingsUri!);
+            editor = await vscode.window.showTextDocument(doc);
+          }
+
+          const text = doc.getText();
+
+          // Find envVarPresets section first, then find the specific preset key within it
+          const envVarPresetsMatch = text.indexOf("behave-vsc.envVarPresets");
+          const searchString = `"${presetName}":`;
+          const presetIndex = text.indexOf(searchString, envVarPresetsMatch);
+
+          if (envVarPresetsMatch !== -1 && presetIndex !== -1) {
+            const position = doc.positionAt(presetIndex);
+            editor.selection = new vscode.Selection(position, position);
+            editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+          }
+        } catch {
+          // If file doesn't exist, open the settings UI instead
+          await vscode.commands.executeCommand(
+            "workbench.action.openSettings",
+            `@id:behave-vsc.envVarPresets`
+          );
+        }
+      });
+
+      quickPick.onDidAccept(async () => {
+        const selected = quickPick.selectedItems[0];
+        quickPick.hide();
+        if (selected && selected.presetName !== currentPreset) {
+          await wkspConfig.update("activeEnvVarPreset", selected.presetName, vscode.ConfigurationTarget.WorkspaceFolder);
+          vscode.window.showInformationMessage(`Environment preset set to: ${selected.presetName || "(none)"}`);
+        }
+      });
+
+      quickPick.onDidHide(() => quickPick.dispose());
+      quickPick.show();
+    });
+
+    context.subscriptions.push(selectEnvPresetCommand);
+
+    ctrl.createRunProfile("Run Tests", vscode.TestRunProfileKind.Run,
       async (request: vscode.TestRunRequest) => {
         await runHandler(false, request);
       }
       , true);
 
 
-    ctrl.createRunProfile('Debug Tests', vscode.TestRunProfileKind.Debug,
+    ctrl.createRunProfile("Debug Tests", vscode.TestRunProfileKind.Debug,
       async (request: vscode.TestRunRequest) => {
         await runHandler(true, request);
       }

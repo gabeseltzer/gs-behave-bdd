@@ -10,6 +10,8 @@ export class TestWorkspaceConfigWithWkspUri {
 export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
 
 	private envVarOverrides: { [name: string]: string } | undefined;
+	private envVarPresets: { [presetName: string]: { [name: string]: string } } | undefined;
+	private activeEnvVarPreset: string | undefined;
 	private featuresPath: string | undefined;
 	private justMyCode: boolean | undefined;
 	private multiRootRunWorkspacesInParallel: boolean | undefined;
@@ -18,11 +20,13 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
 
 	// all user-settable settings in settings.json or *.code-workspace
 	constructor({
-		envVarOverrides, featuresPath: featuresPath, justMyCode,
+		envVarOverrides, envVarPresets, activeEnvVarPreset, featuresPath: featuresPath, justMyCode,
 		multiRootRunWorkspacesInParallel,
 		runParallel, xRay
 	}: {
 		envVarOverrides: { [name: string]: string } | undefined,
+		envVarPresets?: { [presetName: string]: { [name: string]: string } } | undefined,
+		activeEnvVarPreset?: string | undefined,
 		featuresPath: string | undefined,
 		justMyCode: boolean | undefined,
 		multiRootRunWorkspacesInParallel: boolean | undefined,
@@ -30,6 +34,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
 		xRay: boolean | undefined
 	}) {
 		this.envVarOverrides = envVarOverrides;
+		this.envVarPresets = envVarPresets;
+		this.activeEnvVarPreset = activeEnvVarPreset;
 		this.featuresPath = featuresPath;
 		this.justMyCode = justMyCode;
 		this.runParallel = runParallel;
@@ -49,6 +55,10 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
 		switch (section) {
 			case "envVarOverrides":
 				return <T><unknown>(this.envVarOverrides === undefined ? {} : this.envVarOverrides);
+			case "envVarPresets":
+				return <T><unknown>(this.envVarPresets === undefined ? {} : this.envVarPresets);
+			case "activeEnvVarPreset":
+				return <T><unknown>(this.activeEnvVarPreset === undefined ? "" : this.activeEnvVarPreset);
 			case "featuresPath":
 				return <T><unknown>(this.featuresPath === undefined ? "features" : this.featuresPath);
 			case "multiRootRunWorkspacesInParallel":
@@ -79,6 +89,12 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
 		switch (section) {
 			case "envVarOverrides":
 				response = <T><unknown>this.envVarOverrides;
+				break;
+			case "envVarPresets":
+				response = <T><unknown>this.envVarPresets;
+				break;
+			case "activeEnvVarPreset":
+				response = <T><unknown>this.activeEnvVarPreset;
 				break;
 			case "justMyCode":
 				response = <T><unknown>this.justMyCode;

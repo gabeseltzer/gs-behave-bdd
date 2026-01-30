@@ -36,6 +36,8 @@ export class WorkspaceSettings {
 
   // user-settable
   public readonly envVarOverrides: { [name: string]: string } = {};
+  public readonly envVarPresets: { [presetName: string]: { [name: string]: string } } = {};
+  public readonly activeEnvVarPreset: string;
   public readonly justMyCode: boolean;
   public readonly runParallel: boolean;
   public readonly workspaceRelativeFeaturesPath: string;
@@ -61,6 +63,12 @@ export class WorkspaceSettings {
     const envVarOverridesCfg: { [name: string]: string } | undefined = wkspConfig.get("envVarOverrides");
     if (envVarOverridesCfg === undefined)
       throw "envVarOverrides is undefined";
+    const envVarPresetsCfg: { [presetName: string]: { [name: string]: string } } | undefined = wkspConfig.get("envVarPresets");
+    if (envVarPresetsCfg === undefined)
+      throw "envVarPresets is undefined";
+    const activeEnvVarPresetCfg: string | undefined = wkspConfig.get("activeEnvVarPreset");
+    if (activeEnvVarPresetCfg === undefined)
+      throw "activeEnvVarPreset is undefined";
     const featuresPathCfg: string | undefined = wkspConfig.get("featuresPath");
     if (featuresPathCfg === undefined)
       throw "featuresPath is undefined";
@@ -74,6 +82,7 @@ export class WorkspaceSettings {
 
     this.justMyCode = justMyCodeCfg;
     this.runParallel = runParallelCfg;
+    this.activeEnvVarPreset = activeEnvVarPresetCfg;
 
 
     this.workspaceRelativeFeaturesPath = featuresPathCfg.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim();
@@ -101,6 +110,22 @@ export class WorkspaceSettings {
         this.stepsSearchUri = vscode.Uri.file(stepsSearchFsPath);
       else
         logger.showWarn(`No "steps" folder found.`, this.uri);
+    }
+
+    // parse envVarPresets
+    if (envVarPresetsCfg && typeof envVarPresetsCfg === "object") {
+      for (const presetName in envVarPresetsCfg) {
+        const presetVars = envVarPresetsCfg[presetName];
+        if (typeof presetVars === "object") {
+          this.envVarPresets[presetName] = {};
+          for (const name in presetVars) {
+            const value = presetVars[name];
+            if (typeof value === "string") {
+              this.envVarPresets[presetName][name] = value;
+            }
+          }
+        }
+      }
     }
 
     if (envVarOverridesCfg) {
@@ -134,6 +159,18 @@ export class WorkspaceSettings {
 
 
     this.logSettings(logger, winSettings);
+  }
+
+
+  /**
+   * Gets the effective environment variables by merging the active preset with overrides.
+   * The order of precedence (highest to lowest): envVarOverrides > activePreset
+   */
+  getEffectiveEnvVars(): { [name: string]: string } {
+    const presetVars = this.activeEnvVarPreset && this.envVarPresets[this.activeEnvVarPreset]
+      ? this.envVarPresets[this.activeEnvVarPreset]
+      : {};
+    return { ...presetVars, ...this.envVarOverrides };
   }
 
 

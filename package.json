@@ -6,10 +6,28 @@
 				"behave-vsc.envVarOverrides": {
 					"scope": "resource",
 					"type": "object",
-					"markdownDescription": "Optional key-value pairs of environment variable overrides (or additions) to use when calling a behave command. This will apply to all behave tests within the workspace.",
+					"markdownDescription": "Optional key-value pairs of environment variable overrides (or additions) to use when calling a behave command. This will apply to all behave tests within the workspace. These are merged with (and override) any variables from the selected environment preset.",
 					"additionalProperties": {
 						"type": "string"
 					}
+				},
+				"behave-vsc.envVarPresets": {
+					"scope": "resource",
+					"type": "object",
+					"markdownDescription": "Named presets of environment variables. Each key is a preset name, and the value is an object of environment variable key-value pairs. Use the gear icon on the test profile to switch between presets. Example:\n```json\n{\n  \"development\": { \"API_URL\": \"http://localhost:3000\" },\n  \"staging\": { \"API_URL\": \"https://staging.example.com\" }\n}\n```",
+					"default": {},
+					"additionalProperties": {
+						"type": "object",
+						"additionalProperties": {
+							"type": "string"
+						}
+					}
+				},
+				"behave-vsc.activeEnvVarPreset": {
+					"scope": "resource",
+					"type": "string",
+					"markdownDescription": "The currently active environment variable preset name. Use the gear icon on the test profile to change this, or set it manually.",
+					"default": ""
 				},
 				"behave-vsc.featuresPath": {
 					"scope": "resource",
@@ -59,6 +77,11 @@
 			{
 				"command": "behave-vsc.stepReferences.prev",
 				"title": "Step References: Previous"
+			},
+			{
+				"command": "behave-vsc.selectEnvPreset",
+				"title": "Behave: Select Environment Preset",
+				"icon": "$(server-environment)"
 			}
 		],
 		"keybindings": [
@@ -136,6 +159,19 @@
 					"command": "behave-vsc.findStepReferences",
 					"group": "navigation"
 				}
+			],
+			"view/title": [
+				{
+					"command": "behave-vsc.selectEnvPreset",
+					"when": "view == workbench.view.testing",
+					"group": "navigation"
+				}
+			],
+			"testing/item/gutter": [
+				{
+					"command": "behave-vsc.selectEnvPreset",
+					"group": "navigation"
+				}
 			]
 		},
 		"viewsContainers": {
@@ -168,7 +204,7 @@
 	"name": "behave-vsc",
 	"displayName": "Behave VSC",
 	"description": "Debug, Run and Navigate Python behave tests. Forked from jimasp",
-	"version": "0.6.7",
+	"version": "0.6.9",
 	"icon": "images/behave-vsc.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",
