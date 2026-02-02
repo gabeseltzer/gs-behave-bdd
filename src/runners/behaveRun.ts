@@ -19,12 +19,14 @@ export async function runBehaveInstance(wr: WkspRun, parallelMode: boolean,
     diagLog(`${wr.pythonExec} ${local_args.join(" ")}`, wkspUri);
     const effectiveEnvVars = wr.wkspSettings.getEffectiveEnvVars();
     const env = { ...process.env, ...effectiveEnvVars };
-    const options: SpawnOptions = { cwd: wkspUri.fsPath, env: env };
+    // Use projectUri as the working directory (this is where behave.ini etc. should be)
+    const projectUri = wr.wkspSettings.projectUri;
+    const options: SpawnOptions = { cwd: projectUri.fsPath, env: env };
     cp = spawn(wr.pythonExec, local_args, options);
 
     if (!cp.pid) {
       throw `unable to launch python or behave, command: ${wr.pythonExec} ${local_args.join(" ")}\n` +
-      `working directory:${wkspUri.fsPath}\nenv vars: ${JSON.stringify(effectiveEnvVars)}`;
+      `working directory:${projectUri.fsPath}\nenv vars: ${JSON.stringify(effectiveEnvVars)}`;
     }
 
     // if parallel mode, use a buffer so logs gets written out in a human-readable order

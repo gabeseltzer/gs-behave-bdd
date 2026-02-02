@@ -131,16 +131,29 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
 
   function hasFeaturesFolder(folder: vscode.WorkspaceFolder): boolean {
 
+    // check if projectPath and/or featuresPath specified in settings.json
+    // NOTE: this will return package.json defaults (or failing that, type defaults) if no settings.json found
+    const wkspConfig = vscode.workspace.getConfiguration("behave-vsc", folder.uri);
+    const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath");
+    const featuresPath = getActualWorkspaceSetting<string>(wkspConfig, "featuresPath");
+
+    // Determine the project root (either custom projectPath or workspace root)
+    let projectUri = folder.uri;
+    if (projectPath) {
+      projectUri = vscode.Uri.joinPath(folder.uri, projectPath);
+      if (!fs.existsSync(projectUri.fsPath)) {
+        vscode.window.showWarningMessage(`Specified project path "${projectPath}" not found in workspace "${folder.name}". ` +
+          `Behave VSC will ignore this workspace until this is corrected.`, "OK");
+        return false;
+      }
+    }
+
     // default features path, no settings.json required
-    let featuresUri = vscode.Uri.joinPath(folder.uri, "features");
+    let featuresUri = vscode.Uri.joinPath(projectUri, "features");
 
     // try/catch with await vwfs.stat(uri) is much too slow atm
     const hasDefaultFeaturesFolder = fs.existsSync(featuresUri.fsPath);
 
-    // check if featuresPath specified in settings.json
-    // NOTE: this will return package.json defaults (or failing that, type defaults) if no settings.json found, i.e. "features" if no settings.json
-    const wkspConfig = vscode.workspace.getConfiguration("behave-vsc", folder.uri);
-    const featuresPath = getActualWorkspaceSetting(wkspConfig, "featuresPath");
     if (!featuresPath && !hasDefaultFeaturesFolder) {
       return false; // probably a workspace with no behave requirements
     }
@@ -149,7 +162,7 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     if (hasDefaultFeaturesFolder && !featuresPath)
       return true;
 
-    featuresUri = vscode.Uri.joinPath(folder.uri, featuresPath as string);
+    featuresUri = vscode.Uri.joinPath(projectUri, featuresPath as string);
     if (fs.existsSync(featuresUri.fsPath) && vscode.workspace.getWorkspaceFolder(featuresUri) === folder)
       return true;
 

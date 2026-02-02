@@ -89,6 +89,24 @@ paths=my_tests/behave_features
 }
 ```
 
+- If your behave project is not in the workspace root (e.g. in a monorepo), you can use the `projectPath` setting to specify where your behave project lives. The `featuresPath` is then relative to this project path. For example:
+
+```text
+// Directory structure:
+// my-workspace/
+//   └── backend/
+//       └── behave.ini
+//       └── features/
+//           └── my.feature
+//           └── steps/
+
+// settings.json
+{ 
+  "behave-vsc.projectPath": "backend",
+  "behave-vsc.featuresPath": "features"
+}
+```
+
 ---
 
 ## Extension settings

@@ -40,6 +40,23 @@
 			"preLaunchTask": "${defaultBuildTask}",
 		},
 		{
+			"name": "Debug: nested project workspace",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"${workspaceFolder}/example-projects/nested project",
+				"--extensionDevelopmentPath=${workspaceFolder}",
+			],
+			"outFiles": [
+				"${workspaceFolder}/dist/**/*.js"
+			],
+			"skipFiles": [
+				"<node_internals>/**",
+				"**/app/out/vs/**"
+			],
+			"preLaunchTask": "${defaultBuildTask}",
+		},
+		{
 			"name": "Debug: multiroot workspace",
 			"type": "extensionHost",
 			"request": "launch",
@@ -166,6 +183,21 @@
 				"${workspaceFolder}/example-projects/simple",
 				"--extensionDevelopmentPath=${workspaceFolder}",
 				"--extensionTestsPath=${workspaceFolder}/out/_integrationTests/simple suite/index"
+			],
+			"outFiles": [
+				"${workspaceFolder}/out/**/*.js",
+				"${workspaceFolder}/dist/**/*.js"
+			],
+			"preLaunchTask": "tasks: watch-tests",
+		},
+		{
+			"name": "Run Test Suite: nested project workspace",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"${workspaceFolder}/example-projects/nested project",
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--extensionTestsPath=${workspaceFolder}/out/_integrationTests/nested project suite/index"
 			],
 			"outFiles": [
 				"${workspaceFolder}/out/**/*.js",

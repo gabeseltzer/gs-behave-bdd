@@ -16,13 +16,14 @@ export class SharedWorkspaceTests {
 
   runDefault = async (wkspName: string,
     getExpectedCounts: (wkspUri: vscode.Uri, config: Configuration) => WkspParseCounts,
-    getExpectedResults: (wkspUri: vscode.Uri, config: Configuration) => TestResult[]
+    getExpectedResults: (wkspUri: vscode.Uri, config: Configuration) => TestResult[],
+    projectPath?: string
   ) => {
 
-    // default = everything undefined
+    // default = everything undefined (except projectPath if provided for nested projects)
     const testConfig = new TestWorkspaceConfig({
       runParallel: undefined, multiRootRunWorkspacesInParallel: undefined,
-      envVarOverrides: undefined, featuresPath: undefined,
+      envVarOverrides: undefined, projectPath: projectPath, featuresPath: undefined,
       justMyCode: undefined, xRay: undefined
     });
 
@@ -33,12 +34,13 @@ export class SharedWorkspaceTests {
 
   runTogether = async (wkspName: string, wkspRelativeFeaturesPath: string,
     getExpectedCounts: (wkspUri: vscode.Uri, config: Configuration) => WkspParseCounts,
-    getExpectedResults: (wkspUri: vscode.Uri, config: Configuration) => TestResult[]
+    getExpectedResults: (wkspUri: vscode.Uri, config: Configuration) => TestResult[],
+    projectPath?: string
   ) => {
 
     const testConfig = new TestWorkspaceConfig({
       runParallel: false, multiRootRunWorkspacesInParallel: true,
-      envVarOverrides: envVarOverrides, featuresPath: wkspRelativeFeaturesPath,
+      envVarOverrides: envVarOverrides, projectPath: projectPath, featuresPath: wkspRelativeFeaturesPath,
       justMyCode: undefined, xRay: true
     });
 
@@ -49,12 +51,13 @@ export class SharedWorkspaceTests {
 
   runParallel = async (wkspName: string, wkspRelativeFeaturesPath: string,
     getExpectedCounts: (wkspUri: vscode.Uri, config: Configuration) => WkspParseCounts,
-    getExpectedResults: (wskpUri: vscode.Uri, config: Configuration) => TestResult[]
+    getExpectedResults: (wskpUri: vscode.Uri, config: Configuration) => TestResult[],
+    projectPath?: string
   ) => {
 
     const testConfig = new TestWorkspaceConfig({
       runParallel: true, multiRootRunWorkspacesInParallel: true,
-      envVarOverrides: envVarOverrides, featuresPath: wkspRelativeFeaturesPath,
+      envVarOverrides: envVarOverrides, projectPath: projectPath, featuresPath: wkspRelativeFeaturesPath,
       justMyCode: true, xRay: true
     });
 
@@ -64,12 +67,13 @@ export class SharedWorkspaceTests {
 
   runDebug = async (wkspName: string, wkspRelativeFeaturesPath: string,
     getExpectedCounts: (wkspUri: vscode.Uri, config: Configuration) => WkspParseCounts,
-    getExpectedResults: (wskpUri: vscode.Uri, config: Configuration) => TestResult[]
+    getExpectedResults: (wskpUri: vscode.Uri, config: Configuration) => TestResult[],
+    projectPath?: string
   ) => {
 
     const testConfig = new TestWorkspaceConfig({
       runParallel: true, multiRootRunWorkspacesInParallel: true,
-      envVarOverrides: envVarOverrides, featuresPath: wkspRelativeFeaturesPath,
+      envVarOverrides: envVarOverrides, projectPath: projectPath, featuresPath: wkspRelativeFeaturesPath,
       justMyCode: undefined, xRay: true
     });
 
