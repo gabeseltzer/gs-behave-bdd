@@ -76,6 +76,15 @@ async function runTestSuites() {
       launchArgs
     });
 
+    launchArgs = [`"example-projects/nested project"`];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './nested project suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
     launchArgs = [`"example-projects/sibling steps folder 1"`];
     extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './sibling steps folder 1 suite'));
     await runTests({

@@ -17,6 +17,23 @@ const OVERRIDE_ARGS = [
 ];
 
 
+// Convert a workspace-relative path to a project-relative path
+// e.g., "backend/features/test.feature" with projectPath "backend" becomes "features/test.feature"
+function toProjectRelativePath(workspaceRelativePath: string, projectPath: string): string {
+  if (!projectPath) {
+    return workspaceRelativePath;
+  }
+  // Normalize separators to forward slashes
+  const normalizedPath = workspaceRelativePath.replaceAll("\\", "/");
+  const normalizedProjectPath = projectPath.replaceAll("\\", "/").replace(/\/$/, "");
+
+  if (normalizedPath.startsWith(normalizedProjectPath + "/")) {
+    return normalizedPath.slice(normalizedProjectPath.length + 1);
+  }
+  return normalizedPath;
+}
+
+
 export async function runOrDebugAllFeaturesInOneInstance(wr: WkspRun): Promise<void> {
   // runs all features in a single instance of behave
 
@@ -26,7 +43,7 @@ export async function runOrDebugAllFeaturesInOneInstance(wr: WkspRun): Promise<v
   const friendlyArgs = [...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`];
   const args = friendlyArgs.map(x => x.replaceAll('"', ""));
 
-  const friendlyCmd = `${ps1}cd "${wr.wkspSettings.uri.fsPath}"\n` +
+  const friendlyCmd = `${ps1}cd "${wr.wkspSettings.projectUri.fsPath}"\n` +
     `${friendlyEnvVars}${ps2}"${wr.pythonExec}" -m behave ${friendlyArgs.join(" ")}`;
 
   if (wr.debug) {
@@ -55,7 +72,7 @@ export async function runOrDebugFeatures(wr: WkspRun, parallelMode: boolean, sce
     const friendlyArgs = ["-i", `"${pipedPathPatterns}"`, ...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`];
     const args = friendlyArgs.map(x => x.replaceAll('"', ""));
 
-    const friendlyCmd = `${ps1}cd "${wr.wkspSettings.uri.fsPath}"\n` +
+    const friendlyCmd = `${ps1}cd "${wr.wkspSettings.projectUri.fsPath}"\n` +
       `${friendlyEnvVars}${ps2}"${wr.pythonExec}" -m behave ${friendlyArgs.join(" ")}`;
 
     if (wr.debug) {
@@ -89,15 +106,20 @@ export async function runOrDebugFeatureWithSelectedScenarios(wr: WkspRun, parall
     const friendlyEnvVars = getFriendlyEnvVars(wr.wkspSettings);
     const { ps1, ps2 } = getPSCmdModifyIfWindows();
     const featureFileWorkspaceRelativePath = selectedScenarioQueueItems[0].scenario.featureFileWorkspaceRelativePath;
+    // Convert workspace-relative path to project-relative path for behave
+    const featureFileProjectRelativePath = toProjectRelativePath(
+      featureFileWorkspaceRelativePath,
+      wr.wkspSettings.workspaceRelativeProjectPath
+    );
 
     const friendlyArgs = [
-      "-i", `"${featureFileWorkspaceRelativePath}$"`,
+      "-i", `"${featureFileProjectRelativePath}$"`,
       "-n", `"${pipedScenarioNames}"`,
       ...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`,
     ];
     const args = friendlyArgs.map(x => x.replace(/^"(.*)"$/, '$1'));
 
-    const friendlyCmd = `${ps1}cd "${wr.wkspSettings.uri.fsPath}"\n` +
+    const friendlyCmd = `${ps1}cd "${wr.wkspSettings.projectUri.fsPath}"\n` +
       `${friendlyEnvVars}${ps2}"${wr.pythonExec}" -m behave ${friendlyArgs.join(" ")}`;
 
     if (wr.debug) {
@@ -122,6 +144,7 @@ function getPipedFeaturePathsPattern(wr: WkspRun, parallelMode: boolean, filtere
   // which is a regex of the form: 
   // features/path1/|features/path2/|features/path3/|features/path4/my.feature$|features/path5/path6/my.feature$
 
+  const projectPath = wr.wkspSettings.workspaceRelativeProjectPath;
 
   // reduce the folders to the top-level where possible
   const folderPaths: string[] = [];
@@ -130,7 +153,10 @@ function getPipedFeaturePathsPattern(wr: WkspRun, parallelMode: boolean, filtere
     // get the user-selected folder paths
     const selectedFolderIds = wr.request.include?.filter(x => !x.uri).map(x => x.id) ?? [];
 
-    folderPaths.push(...selectedFolderIds.map(id => vscode.workspace.asRelativePath(vscode.Uri.parse(id), false) + "/"));
+    folderPaths.push(...selectedFolderIds.map(id => {
+      const wkspRelPath = vscode.workspace.asRelativePath(vscode.Uri.parse(id), false) + "/";
+      return toProjectRelativePath(wkspRelPath, projectPath);
+    }));
 
     // keep only the top level folder paths (i.e. if we have a/b/c and a/b, remove a/b/c)
     folderPaths.sort();
@@ -141,8 +167,10 @@ function getPipedFeaturePathsPattern(wr: WkspRun, parallelMode: boolean, filtere
   }
 
 
-  // get the feature paths and remove duplicates
-  const distinctFeaturePaths = [...new Set(filteredChildItems.map(qi => qi.scenario.featureFileWorkspaceRelativePath))];
+  // get the feature paths (workspace-relative) and convert to project-relative, remove duplicates
+  const distinctFeaturePaths = [...new Set(filteredChildItems.map(qi =>
+    toProjectRelativePath(qi.scenario.featureFileWorkspaceRelativePath, projectPath)
+  ))];
 
   // remove any feature path already covered by a parent folder selected by the user
   const featurePathsNotCoveredByFolderPaths = distinctFeaturePaths.filter(x => folderPaths.every(y => !x.includes(y)));

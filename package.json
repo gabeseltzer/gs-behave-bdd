@@ -29,10 +29,16 @@
 					"markdownDescription": "The currently active environment variable preset name. Use the gear icon on the test profile to change this, or set it manually.",
 					"default": ""
 				},
+				"behave-vsc.projectPath": {
+					"scope": "resource",
+					"type": "string",
+					"markdownDescription": "*workspace-relative* path to the root of your behave project. This is the directory where behave will be executed from (working directory). If not set (the default), the workspace root folder is used. Example: `myproject/backend`.",
+					"default": ""
+				},
 				"behave-vsc.featuresPath": {
 					"scope": "resource",
 					"type": "string",
-					"markdownDescription": "*workspace-relative* path to the features subfolder. If not `features` (the default), then this must tie up with the `\"paths=\"` setting in your behave configuration file. Example: `mysubfolder/my_behave_tests`.",
+					"markdownDescription": "*project-relative* path to the features subfolder. If not `features` (the default), then this must tie up with the `\"paths=\"` setting in your behave configuration file. This path is relative to `projectPath` (or workspace root if `projectPath` is not set). Example: `my_behave_tests`.",
 					"default": "features"
 				},
 				"behave-vsc.justMyCode": {

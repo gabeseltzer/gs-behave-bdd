@@ -40,13 +40,16 @@ export class WorkspaceSettings {
   public readonly activeEnvVarPreset: string;
   public readonly justMyCode: boolean;
   public readonly runParallel: boolean;
-  public readonly workspaceRelativeFeaturesPath: string;
+  public readonly workspaceRelativeProjectPath: string;
+  public readonly projectRelativeFeaturesPath: string;
   // convenience properties
   public readonly id: string;
   public readonly uri: vscode.Uri;
   public readonly name: string;
+  public readonly projectUri: vscode.Uri;
   public readonly featuresUri: vscode.Uri;
   public readonly stepsSearchUri: vscode.Uri;
+  public readonly workspaceRelativeFeaturesPath: string; // computed: projectPath + featuresPath
   // internal
   private readonly _warnings: string[] = [];
   private readonly _fatalErrors: string[] = [];
@@ -69,6 +72,9 @@ export class WorkspaceSettings {
     const activeEnvVarPresetCfg: string | undefined = wkspConfig.get("activeEnvVarPreset");
     if (activeEnvVarPresetCfg === undefined)
       throw "activeEnvVarPreset is undefined";
+    const projectPathCfg: string | undefined = wkspConfig.get("projectPath");
+    if (projectPathCfg === undefined)
+      throw "projectPath is undefined";
     const featuresPathCfg: string | undefined = wkspConfig.get("featuresPath");
     if (featuresPathCfg === undefined)
       throw "featuresPath is undefined";
@@ -85,12 +91,24 @@ export class WorkspaceSettings {
     this.activeEnvVarPreset = activeEnvVarPresetCfg;
 
 
-    this.workspaceRelativeFeaturesPath = featuresPathCfg.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim();
+    // Process projectPath - this is the root of the behave project
+    this.workspaceRelativeProjectPath = projectPathCfg.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim();
+    if (this.workspaceRelativeProjectPath) {
+      this.projectUri = vscode.Uri.joinPath(wkspUri, this.workspaceRelativeProjectPath);
+      if (!fs.existsSync(this.projectUri.fsPath)) {
+        this._fatalErrors.push(`project path ${this.projectUri.fsPath} not found.`);
+      }
+    } else {
+      this.projectUri = wkspUri;
+    }
+
+    // Process featuresPath - this is relative to projectPath
+    this.projectRelativeFeaturesPath = featuresPathCfg.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim();
     // vscode will not substitute a default if an empty string is specified in settings.json
-    if (!this.workspaceRelativeFeaturesPath)
-      this.workspaceRelativeFeaturesPath = "features";
-    this.featuresUri = vscode.Uri.joinPath(wkspUri, this.workspaceRelativeFeaturesPath);
-    if (this.workspaceRelativeFeaturesPath === ".")
+    if (!this.projectRelativeFeaturesPath)
+      this.projectRelativeFeaturesPath = "features";
+    this.featuresUri = vscode.Uri.joinPath(this.projectUri, this.projectRelativeFeaturesPath);
+    if (this.projectRelativeFeaturesPath === ".")
       this._fatalErrors.push(`"." is not a valid "behave-vsc.featuresPath" value. The features folder must be a subfolder.`);
     if (!fs.existsSync(this.featuresUri.fsPath)) {
       // note - this error should never happen or some logic/hooks are wrong 
@@ -100,12 +118,17 @@ export class WorkspaceSettings {
       this._fatalErrors.push(`features path ${this.featuresUri.fsPath} not found.`);
     }
 
+    // Compute workspace-relative features path for file watchers etc.
+    this.workspaceRelativeFeaturesPath = this.workspaceRelativeProjectPath
+      ? `${this.workspaceRelativeProjectPath}/${this.projectRelativeFeaturesPath}`
+      : this.projectRelativeFeaturesPath;
+
     // default to watching features folder for (possibly multiple) "steps" 
     // subfolders (e.g. like example project B/features folder)
     this.stepsSearchUri = vscode.Uri.joinPath(this.featuresUri);
     if (!findSubdirectorySync(this.stepsSearchUri.fsPath, "steps")) {
-      // if not found, get the highest-level "steps" folder above the features folder inside the workspace
-      const stepsSearchFsPath = findHighestTargetParentDirectorySync(this.featuresUri.fsPath, this.uri.fsPath, "steps");
+      // if not found, get the highest-level "steps" folder above the features folder inside the project
+      const stepsSearchFsPath = findHighestTargetParentDirectorySync(this.featuresUri.fsPath, this.projectUri.fsPath, "steps");
       if (stepsSearchFsPath)
         this.stepsSearchUri = vscode.Uri.file(stepsSearchFsPath);
       else
@@ -187,17 +210,18 @@ export class WorkspaceSettings {
     });
 
     // build sorted output dict of workspace settings
-    const nonUserSettableWkspSettings = ["name", "uri", "id", "featuresUri", "stepsSearchUri"];
+    const nonUserSettableWkspSettings = ["name", "uri", "id", "projectUri", "featuresUri", "stepsSearchUri", "workspaceRelativeFeaturesPath"];
     const rscSettingsDic: { [name: string]: string; } = {};
     let wkspEntries = Object.entries(this).sort();
+    wkspEntries.push(["fullProjectPath", this.projectUri.fsPath]);
     wkspEntries.push(["fullFeaturesPath", this.featuresUri.fsPath]);
     wkspEntries.push(["junitTempPath", config.extensionTempFilesUri.fsPath]);
-    wkspEntries = wkspEntries.filter(([key]) => !key.startsWith("_") && !nonUserSettableWkspSettings.includes(key) && key !== "workspaceRelativeFeaturesPath");
-    wkspEntries.push(["featuresPath", this.workspaceRelativeFeaturesPath]);
+    wkspEntries = wkspEntries.filter(([key]) => !key.startsWith("_") && !nonUserSettableWkspSettings.includes(key) && key !== "workspaceRelativeProjectPath" && key !== "projectRelativeFeaturesPath");
+    wkspEntries.push(["projectPath", this.workspaceRelativeProjectPath || "(workspace root)"]);
+    wkspEntries.push(["featuresPath", this.projectRelativeFeaturesPath]);
     wkspEntries = wkspEntries.sort();
     wkspEntries.forEach(([key, value]) => {
-      const name = key === "workspaceRelativeFeaturesPath" ? "featuresPath" : key;
-      rscSettingsDic[name] = value;
+      rscSettingsDic[key] = value;
     });
 
 
