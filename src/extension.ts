@@ -333,10 +333,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(async (document) => {
       try {
         if (isFeatureFile(document.uri)) {
-          // Wait a bit for parsing to complete
-          setTimeout(() => {
-            validateFixtureTags(document);
-          }, 100);
+          // Wait for steps/fixtures parsing to complete before validating
+          await parser.stepsParseComplete(5000, "onDidOpenTextDocument");
+          validateFixtureTags(document);
         }
       }
       catch (e: unknown) {
@@ -345,14 +344,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       }
     }));
 
-    // Validate all currently open feature files
-    for (const document of vscode.workspace.textDocuments) {
-      if (isFeatureFile(document.uri)) {
-        setTimeout(() => {
-          validateFixtureTags(document);
-        }, 200);
+    // Validate all currently open feature files after parsing completes
+    (async () => {
+      try {
+        await parser.stepsParseComplete(10000, "activate-validateOpenDocs");
+        for (const document of vscode.workspace.textDocuments) {
+          if (isFeatureFile(document.uri)) {
+            validateFixtureTags(document);
+          }
+        }
       }
-    }
+      catch (e: unknown) {
+        config.logger.showError(e, undefined);
+      }
+    })();
 
     // called when a user edits a file.
     // we want to reparse on edit (not just on disk changes) because:
