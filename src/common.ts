@@ -142,8 +142,19 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     if (projectPath) {
       projectUri = vscode.Uri.joinPath(folder.uri, projectPath);
       if (!fs.existsSync(projectUri.fsPath)) {
-        vscode.window.showWarningMessage(`Specified project path "${projectPath}" not found in workspace "${folder.name}". ` +
-          `Behave VSC will ignore this workspace until this is corrected.`, "OK");
+        const fullPath = projectUri.fsPath;
+        // Check if the path looks like it was doubled (common mistake)
+        const hint = fullPath.includes(projectPath + path.sep + projectPath)
+          ? ` Note: The path appears to be duplicated - "projectPath" should be relative to the workspace root, not an absolute path.`
+          : "";
+        vscode.window.showWarningMessage(
+          `Behave VSC: Project path not found.\n\n` +
+          `Workspace: "${folder.name}"\n` +
+          `Configured projectPath: "${projectPath}"\n` +
+          `Full path checked: "${fullPath}"${hint}\n\n` +
+          `Behave VSC will ignore this workspace until the path is corrected.`,
+          "OK"
+        );
         return false;
       }
     }
@@ -167,8 +178,15 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
       return true;
 
     // we don't use config.logger.showWarn here, because we may not have a logger yet
-    vscode.window.showWarningMessage(`Specified features path "${featuresPath}" not found in workspace "${folder.name}". ` +
-      `Behave VSC will ignore this workspace until this is corrected.`, "OK");
+    const projectPathInfo = projectPath ? ` (relative to projectPath "${projectPath}")` : "";
+    vscode.window.showWarningMessage(
+      `Behave VSC: Features path not found.\n\n` +
+      `Workspace: "${folder.name}"\n` +
+      `Configured featuresPath: "${featuresPath}"${projectPathInfo}\n` +
+      `Full path checked: "${featuresUri.fsPath}"\n\n` +
+      `Behave VSC will ignore this workspace until the path is corrected.`,
+      "OK"
+    );
 
     return false;
   }
@@ -328,6 +346,9 @@ export async function findFiles(directory: vscode.Uri, matchSubDirectory: string
 }
 
 export function findSubdirectorySync(searchPath: string, targetDirName: string): string | null {
+  if (!fs.existsSync(searchPath)) {
+    return null;
+  }
   const files = fs.readdirSync(searchPath);
   for (const file of files) {
     const filePath = path.join(searchPath, file);
@@ -351,6 +372,10 @@ export function findHighestTargetParentDirectorySync(startPath: string, stopPath
   let currentPath = startPath;
   let highestMatch = null;
   while (currentPath.startsWith(stopPath)) {
+    if (!fs.existsSync(currentPath)) {
+      currentPath = path.dirname(currentPath);
+      continue;
+    }
     const files = fs.readdirSync(currentPath);
     if (files.includes(targetDirName))
       highestMatch = path.join(currentPath, targetDirName);
