@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { runAllTestsAndAssertTheResults } from './extension.test.helpers';
-import { TestWorkspaceConfig } from './testWorkspaceConfig';
-import { Configuration } from '../../configuration';
+import { TestWorkspaceConfig } from '../../../src/testWorkspaceConfig';
+import { Configuration } from '../../../src/configuration';
 import { TestResult } from './expectedResults.helpers';
-import { WkspParseCounts } from '../../parsers/fileParser';
+import { WkspParseCounts } from '../../../src/parsers/fileParser';
 
 
 const envVarOverrides = { "some_var": "double qu\"oted", "some_var2": "single qu'oted", "space_var": " ", "USERNAME": "bob-163487" };
