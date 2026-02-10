@@ -29,7 +29,7 @@ function getShortPathOnWindows(longPath: string): string {
 async function runTestSuites() {
   try {
     const version = process.argv[2].slice(2);
-    const extensionDevelopmentPath = path.resolve(__dirname, '../../');
+    const extensionDevelopmentPath = path.resolve(__dirname, '../../../..');
 
     // console.log("running pip...");
     // const result = cp.spawnSync("pip", ["install", "-r", path.resolve(extensionDevelopmentPath + "/requirements.txt")], {

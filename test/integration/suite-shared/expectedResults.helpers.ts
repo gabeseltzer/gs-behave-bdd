@@ -1,4 +1,4 @@
-import { WorkspaceSettings } from "../../settings";
+import { WorkspaceSettings } from "../../../src/settings";
 
 interface ITestResult {
   test_id: string | undefined;

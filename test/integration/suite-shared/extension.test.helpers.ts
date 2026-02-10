@@ -2,15 +2,15 @@
 import * as vscode from 'vscode';
 import * as assert from 'assert';
 import { performance } from 'perf_hooks';
-import { Configuration } from "../../configuration";
-import { WorkspaceSettings } from "../../settings";
-import { TestSupport } from '../../extension';
+import { Configuration } from "../../../src/configuration";
+import { WorkspaceSettings } from "../../../src/settings";
+import { TestSupport } from '../../../src/extension';
 import { TestResult } from "./expectedResults.helpers";
-import { TestWorkspaceConfig, TestWorkspaceConfigWithWkspUri } from './testWorkspaceConfig';
-import { WkspParseCounts } from '../../parsers/fileParser';
-import { getUrisOfWkspFoldersWithFeatures, getAllTestItems, getScenarioTests, uriId, isFeatureFile, isStepsFile, getLines, urisMatch } from '../../common';
-import { featureFileStepRe } from '../../parsers/gherkinPatterns';
-import { funcRe } from '../../parsers/stepsParser';
+import { TestWorkspaceConfig, TestWorkspaceConfigWithWkspUri } from '../../../src/testWorkspaceConfig';
+import { WkspParseCounts } from '../../../src/parsers/fileParser';
+import { getUrisOfWkspFoldersWithFeatures, getAllTestItems, getScenarioTests, uriId, isFeatureFile, isStepsFile, getLines, urisMatch } from '../../../src/common';
+import { featureFileStepRe } from '../../../src/parsers/gherkinPatterns';
+import { funcRe } from '../../../src/parsers/stepsParser';
 
 
 function assertTestResultMatchesExpectedResult(expectedResults: TestResult[], actualResult: TestResult, testConfig: TestWorkspaceConfig): TestResult[] {
