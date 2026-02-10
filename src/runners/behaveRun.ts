@@ -1,8 +1,11 @@
 import { ChildProcess, spawn, SpawnOptions } from 'child_process';
-import { config } from "../configuration";
 import { cleanBehaveText } from '../common';
 import { diagLog } from '../logger';
 import { WkspRun } from './testRunHandler';
+
+function toRunOutput(text: string): string {
+  return text.replace(/\r\n/g, "\n").replace(/\n/g, "\r\n");
+}
 
 
 
@@ -38,25 +41,25 @@ export async function runBehaveInstance(wr: WkspRun, parallelMode: boolean,
       if (parallelMode)
         asyncBuff.push(str);
       else
-        config.logger.logInfoNoLF(str, wkspUri);
+        wr.run.appendOutput(toRunOutput(str));
     }
 
     cp.stderr?.on('data', chunk => log(chunk.toString()));
     cp.stdout?.on('data', chunk => log(chunk.toString()));
 
     if (!parallelMode)
-      config.logger.logInfo(`\n${friendlyCmd}\n`, wkspUri);
+      wr.run.appendOutput(toRunOutput(`\n${friendlyCmd}\n`));
 
     await new Promise((resolve) => cp.on('close', () => resolve("")));
 
     if (asyncBuff.length > 0) {
-      config.logger.logInfo(`\n---\n${friendlyCmd}\n`, wkspUri);
-      config.logger.logInfo(asyncBuff.join("").trim(), wkspUri);
-      config.logger.logInfo("---", wkspUri);
+      wr.run.appendOutput(toRunOutput(`\n---\n${friendlyCmd}\n`));
+      wr.run.appendOutput(toRunOutput(asyncBuff.join("").trim()) + "\r\n");
+      wr.run.appendOutput("---\r\n");
     }
 
     if (wr.run.token.isCancellationRequested)
-      config.logger.logInfo(`\n-- TEST RUN ${wr.run.name} CANCELLED --`, wkspUri, wr.run);
+      wr.run.appendOutput(toRunOutput(`\n-- TEST RUN ${wr.run.name} CANCELLED --\n`));
 
   }
   finally {
