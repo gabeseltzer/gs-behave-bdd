@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { Configuration } from "../../configuration";
-import { WkspParseCounts } from "../../parsers/fileParser";
+import { Configuration } from "../../../src/configuration";
+import { WkspParseCounts } from "../../../src/parsers/fileParser";
 import { TestResult, applyTestConfiguration } from "../suite-shared/expectedResults.helpers";
 
 export function getExpectedCounts(wkspUri: vscode.Uri, config: Configuration): WkspParseCounts {
@@ -8,7 +8,7 @@ export function getExpectedCounts(wkspUri: vscode.Uri, config: Configuration): W
   return {
     tests: { nodeCount: 4, testCount: testCount },
     featureFilesExceptEmptyOrCommentedOut: 1, stepFilesExceptEmptyOrCommentedOut: 1,
-    stepFileStepsExceptCommentedOut: 6, featureFileStepsExceptCommentedOut: 7, stepMappings: 7
+    stepFileStepsExceptCommentedOut: 3, featureFileStepsExceptCommentedOut: 7, stepMappings: 7
   };
 }
 
@@ -16,8 +16,8 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
 
   const expectedResults: TestResult[] = [
     new TestResult({
-      scenario_featureFileRelativePath: '{{featurePath}}/basic.feature',
-      scenario_featureName: 'Simple',
+      scenario_featureFileRelativePath: '{{featurePath}}/nested.feature',
+      scenario_featureName: 'Nested Project',
       scenario_getLabel: 'run a successful test',
       scenario_isOutline: false,
       scenario_result: 'passed',
@@ -25,15 +25,15 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
       test_children: undefined,
       test_description: undefined,
       test_error: undefined,
-      test_id: '.../simple/{{featurePath}}/simple.feature/run a successful test',
+      test_id: '.../nested project/{{featurePath}}/nested.feature/run a successful test',
       test_label: 'run a successful test',
-      test_parent: '.../simple/{{featurePath}}/simple.feature',
-      test_uri: '.../simple/{{featurePath}}/simple.feature'
+      test_parent: '.../nested project/{{featurePath}}/nested.feature',
+      test_uri: '.../nested project/{{featurePath}}/nested.feature'
     }),
 
     new TestResult({
-      scenario_featureFileRelativePath: '{{featurePath}}/simple.feature',
-      scenario_featureName: 'Simple',
+      scenario_featureFileRelativePath: '{{featurePath}}/nested.feature',
+      scenario_featureName: 'Nested Project',
       scenario_getLabel: 'run a failing test',
       scenario_isOutline: false,
       scenario_result: 'failed',
@@ -41,15 +41,15 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
       test_children: undefined,
       test_description: undefined,
       test_error: undefined,
-      test_id: '.../simple/{{featurePath}}/simple.feature/run a failing test',
+      test_id: '.../nested project/{{featurePath}}/nested.feature/run a failing test',
       test_label: 'run a failing test',
-      test_parent: '.../simple/{{featurePath}}/simple.feature',
-      test_uri: '.../simple/{{featurePath}}/simple.feature'
+      test_parent: '.../nested project/{{featurePath}}/nested.feature',
+      test_uri: '.../nested project/{{featurePath}}/nested.feature'
     }),
 
     new TestResult({
-      scenario_featureFileRelativePath: '{{featurePath}}/simple.feature',
-      scenario_featureName: 'Simple',
+      scenario_featureFileRelativePath: '{{featurePath}}/nested.feature',
+      scenario_featureName: 'Nested Project',
       scenario_getLabel: 'run a skipped test',
       scenario_isOutline: false,
       scenario_result: 'skipped',
@@ -57,10 +57,10 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
       test_children: undefined,
       test_description: undefined,
       test_error: undefined,
-      test_id: '.../simple/{{featurePath}}/simple.feature/run a skipped test',
+      test_id: '.../nested project/{{featurePath}}/nested.feature/run a skipped test',
       test_label: 'run a skipped test',
-      test_parent: '.../simple/{{featurePath}}/simple.feature',
-      test_uri: '.../simple/{{featurePath}}/simple.feature'
+      test_parent: '.../nested project/{{featurePath}}/nested.feature',
+      test_uri: '.../nested project/{{featurePath}}/nested.feature'
     }),
 
   ];
@@ -69,5 +69,3 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
   const wkspSettings = config.workspaceSettings[wkspUri.path];
   return applyTestConfiguration(wkspSettings, expectedResults);
 }
-
-

@@ -38,6 +38,34 @@
 				"npm: watch-tests"
 			],
 			"problemMatcher": []
+		},
+		{
+			"type": "npm",
+			"script": "test:unit",
+			"problemMatcher": [],
+			"label": "npm: test:unit",
+			"detail": "npm run compile-tests && node ./out/test/test/unit/run.js",
+			"group": "test"
+		},
+		{
+			"type": "npm",
+			"script": "compile-tests",
+			"problemMatcher": "$tsc",
+			"label": "npm: compile-tests",
+			"detail": "tsc -p test/tsconfig.json",
+			"group": "build"
+		},
+		{
+			"label": "watch-unit-tests",
+			"type": "shell",
+			"command": "npm run watch-tests",
+			"isBackground": true,
+			"problemMatcher": "$tsc-watch",
+			"presentation": {
+				"reveal": "never",
+				"group": "watchers"
+			},
+			"group": "build"
 		}
 	]
 }
