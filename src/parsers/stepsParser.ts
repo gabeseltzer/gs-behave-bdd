@@ -4,7 +4,8 @@ import { diagLog } from '../logger';
 
 export const parseRepWildcard = ".*";
 export const funcRe = /^(async )?def/;
-const stepFileStepStartStr = "^\\s*@(behave\\.)?(step|given|when|then)\\(";
+export const stepFileDecoratorPattern = "^\\s*@(behave\\.)?(step|given|when|then)\\(";
+const stepFileStepStartStr = stepFileDecoratorPattern;
 const stepFileStepStartRe = new RegExp(`${stepFileStepStartStr}.*`, "i");
 const stepFileStepRe = new RegExp(`${stepFileStepStartStr}u?(?:"|')(.+)(?:"|').*\\).*$`, "i");
 const stepFileSteps = new Map<string, StepFileStep>();
