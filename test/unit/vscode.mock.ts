@@ -3,11 +3,9 @@
 
 import * as path from 'path';
 
-export class EventEmitter {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  event: any = () => ({ dispose: () => { /* mock */ } });
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-  fire(_event: any) { /* mock */ }
+export class EventEmitter<T = unknown> {
+  event: (listener: (e: T) => unknown) => { dispose: () => void } = () => ({ dispose: () => { /* mock */ } });
+  fire() { /* mock */ }
   dispose() { /* mock */ }
 }
 
@@ -76,27 +74,26 @@ export class Selection {
 
 export class DiagnosticCollection {
   clear() { /* mock */ }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  delete(_uri: Uri) { /* mock */ }
+  delete() { /* mock */ }
   dispose() { /* mock */ }
   forEach() { /* mock */ }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  get(_uri: Uri) { return []; }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  has(_uri: Uri) { return false; }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-  set(_uri: Uri, _diagnostics: any) { /* mock */ }
+  get() { return []; }
+  has() { return false; }
+  set() { /* mock */ }
 }
 
 export class TreeItem {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(public label: string, public collapsibleState?: any) { }
+  constructor(public label: string, public collapsibleState?: TreeItemCollapsibleState) { }
 }
 
 export enum TreeItemCollapsibleState {
   None = 0,
   Collapsed = 1,
   Expanded = 2
+}
+
+export class SemanticTokensLegend {
+  constructor(public tokenTypes: string[], public tokenModifiers: string[] = []) { }
 }
 
 export const workspace = {
@@ -108,12 +105,22 @@ export const workspace = {
   },
   getWorkspaceFolder: () => undefined,
   workspaceFolders: [],
-  getConfiguration: () => ({
-    get: () => undefined,
+  getConfiguration: (section?: string) => ({
+    get: (key: string) => {
+      // Return default values for known configuration keys
+      if (section === 'behave-vsc' || !section) {
+        if (key === 'multiRootRunWorkspacesInParallel') return false;
+      }
+      return undefined;
+    },
     has: () => false,
     inspect: () => undefined,
     update: () => Promise.resolve()
   }),
+  asRelativePath: (pathOrUri: string | Uri) => {
+    const pathStr = typeof pathOrUri === 'string' ? pathOrUri : pathOrUri.fsPath;
+    return pathStr;
+  },
   onDidChangeConfiguration: () => ({ dispose: () => { /* mock */ } }),
   onDidChangeWorkspaceFolders: () => ({ dispose: () => { /* mock */ } }),
   onDidSaveTextDocument: () => ({ dispose: () => { /* mock */ } }),
@@ -122,8 +129,7 @@ export const workspace = {
 };
 
 export const languages = {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  createDiagnosticCollection: (_name?: string) => new DiagnosticCollection(),
+  createDiagnosticCollection: () => new DiagnosticCollection(),
   registerCompletionItemProvider: () => ({ dispose: () => { /* mock */ } }),
   registerDefinitionProvider: () => ({ dispose: () => { /* mock */ } }),
   registerHoverProvider: () => ({ dispose: () => { /* mock */ } }),
@@ -145,7 +151,8 @@ export const window = {
   }),
   createTreeView: () => ({
     dispose: () => { /* mock */ },
-    reveal: () => Promise.resolve()
+    reveal: () => Promise.resolve(),
+    onDidChangeVisibility: () => ({ dispose: () => { /* mock */ } })
   }),
   registerTreeDataProvider: () => ({ dispose: () => { /* mock */ } })
 };
@@ -167,4 +174,15 @@ export enum DiagnosticSeverity {
   Warning = 1,
   Information = 2,
   Hint = 3
+}
+
+export class Diagnostic {
+  constructor(
+    public range: Range,
+    public message: string,
+    public severity: DiagnosticSeverity = DiagnosticSeverity.Error
+  ) { }
+
+  public source?: string;
+  public code?: string | number;
 }

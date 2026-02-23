@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { getContentFromFilesystem } from "../common";
 import { validateAndGetStepInfo, handleProviderError } from "./providerHelpers";
+import { stepFileDecoratorPattern } from "../parsers/stepsParser";
 
 
 export class HoverProvider implements vscode.HoverProvider {
@@ -70,17 +71,17 @@ function extractStepDecoratorAndDocstring(content: string, functionLine: number)
     const line = lines[decoratorStartLine].trim();
 
     // Check if this is a step decorator
-    if (line.match(/^@(behave\.)?(step|given|when|then|and|but)\s*\(/i)) {
+    // Use the centralized pattern from stepsParser which excludes dead code decorators (@and, @but)
+    const stepDecoratorRegex = new RegExp(stepFileDecoratorPattern, 'i');
+    if (line.match(stepDecoratorRegex)) {
       // Found a step decorator, now read it (may be multi-line)
       let decoratorLine = line;
       let scanLine = decoratorStartLine;
 
       // Handle multi-line decorators
-      while (scanLine < functionLine && !decoratorLine.includes(')')) {
+      while (scanLine < functionLine - 1 && !decoratorLine.includes(')')) {
         scanLine++;
-        if (scanLine < functionLine) {
-          decoratorLine += ' ' + lines[scanLine].trim();
-        }
+        decoratorLine += ' ' + lines[scanLine].trim();
       }
 
       decorator = decoratorLine;
@@ -91,9 +92,15 @@ function extractStepDecoratorAndDocstring(content: string, functionLine: number)
     } else if (line === '' || line.startsWith('#')) {
       // Empty line or comment, keep searching
       decoratorStartLine--;
-    } else {
-      // Not a decorator line, stop searching
+    } else if (line === ')' || line.startsWith('"') || line.startsWith("'")) {
+      // Could be part of a multi-line decorator, keep searching
+      decoratorStartLine--;
+    } else if (line.startsWith('def ') || line.startsWith('class ')) {
+      // Reached another function/class definition, stop searching
       break;
+    } else {
+      // Other code, keep searching (could be part of decorator content)
+      decoratorStartLine--;
     }
   }
 
