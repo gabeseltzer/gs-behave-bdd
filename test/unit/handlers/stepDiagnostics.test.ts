@@ -445,6 +445,80 @@ suite('stepDiagnostics', () => {
       assert.ok(diags[0].message.includes('features/steps'),
         `Expected message to include search path, got: ${diags[0].message}`);
     });
+
+    test('library steps should not be marked as undefined', () => {
+      const mockUri = vscode.Uri.file('/test/features/test.feature');
+      const mockDocument = { uri: mockUri } as vscode.TextDocument;
+
+      const featureFileStep = new FeatureFileStep(
+        'key1', mockUri, 'test.feature',
+        new vscode.Range(5, 4, 5, 25), 'Given user is logged in', 'user is logged in', 'given'
+      );
+
+      // Step from a library file (not in steps/ folder)
+      const libraryStepDef = new stepsParser.StepFileStep(
+        'lib-key1', vscode.Uri.file('/test/lib/common_steps.py'), 'common_steps.py', 'given',
+        new vscode.Range(3, 0, 3, 28), 'user is logged in'
+      );
+
+      const setStub = setupValidateStubs({
+        featureSteps: [['key1', featureFileStep]],
+        stepMatch: libraryStepDef,
+        allStepDefs: [['lib-key1', libraryStepDef]],
+      });
+
+      validateStepDefinitions(mockDocument);
+
+      const diags = getDiagsFromSetStub(setStub);
+      assert.strictEqual(diags.length, 0, 'Library step should not create diagnostic');
+    });
+
+    test('actually missing steps should still show diagnostic even with library steps present', () => {
+      const mockUri = vscode.Uri.file('/test/features/test.feature');
+      const mockDocument = { uri: mockUri } as vscode.TextDocument;
+
+      const localStep = new FeatureFileStep(
+        'key1', mockUri, 'test.feature',
+        new vscode.Range(5, 4, 5, 25), 'Given user is logged in', 'user is logged in', 'given'
+      );
+
+      const missingStep = new FeatureFileStep(
+        'key2', mockUri, 'test.feature',
+        new vscode.Range(6, 4, 6, 30), 'When user does something', 'user does something', 'when'
+      );
+
+      // Step from library file
+      const libraryStepDef = new stepsParser.StepFileStep(
+        'lib-key1', vscode.Uri.file('/test/lib/common_steps.py'), 'common_steps.py', 'given',
+        new vscode.Range(3, 0, 3, 28), 'user is logged in'
+      );
+
+      sandbox.stub(common, 'isFeatureFile').returns(true);
+      sandbox.stub(common, 'getWorkspaceSettingsForFile').returns({
+        uri: mockUri,
+        featuresUri: mockUri,
+        stepsSearchUri: vscode.Uri.file('/test/features/steps')
+      } as ReturnType<typeof common.getWorkspaceSettingsForFile>);
+      sandbox.stub(featureParser, 'getFeatureFileSteps').returns([
+        ['key1', localStep],
+        ['key2', missingStep]
+      ]);
+
+      const getStepStub = sandbox.stub(stepMappings, 'getStepFileStepForFeatureFileStep');
+      getStepStub.withArgs(mockUri, 5).returns(libraryStepDef); // Local step matches library step
+      getStepStub.withArgs(mockUri, 6).returns(undefined); // Missing step
+
+      sandbox.stub(stepsParser, 'getStepFileSteps').returns([['lib-key1', libraryStepDef]]);
+      sandbox.stub(config.diagnostics, 'get').returns([]);
+      const setStub = sandbox.stub(config.diagnostics, 'set');
+
+      validateStepDefinitions(mockDocument);
+
+      const diags = getDiagsFromSetStub(setStub);
+      assert.strictEqual(diags.length, 1, 'Should create diagnostic for missing step');
+      assert.strictEqual(diags[0].range, missingStep.range, 'Diagnostic should be for missing step');
+      assert.ok(diags[0].message.includes('No step definition found'));
+    });
   });
 
   suite('clearStepDiagnostics', () => {
