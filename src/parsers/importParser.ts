@@ -6,6 +6,7 @@ export interface PythonImport {
   isRelative: boolean;
   relativeDots: number;
   lineNo: number;
+  isWildcard?: boolean;
 }
 
 /**
@@ -192,6 +193,20 @@ function parseImportStatement_From(statement: string, lineNo: number): PythonImp
   }
 
   const isRelative = relativeDots > 0 || modulePathRaw === '.';
+
+  // Check for wildcard import first
+  const wildcardMatch = importPart.trim().match(/^\*$/);
+  if (wildcardMatch) {
+    // Wildcard import - return without imported names but mark as wildcard
+    return {
+      modulePath,
+      importedNames: ['*'],  // Mark it as wildcard
+      isRelative,
+      relativeDots,
+      lineNo,
+      isWildcard: true
+    };
+  }
 
   // Parse the imported names
   const importedNames = parseImportedNames(importPart);

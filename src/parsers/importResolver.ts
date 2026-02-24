@@ -33,6 +33,7 @@ export async function resolveImports(
   if (relativeImports.length > 0 && sourceFileDir) {
     for (const imp of relativeImports) {
       const resolved = resolveRelativeImport(imp, sourceFileDir);
+      diagLog(`[resolveImports] relative import: ${imp.modulePath} -> ${resolved}`);
       results.set(imp.modulePath, resolved);
     }
   }
@@ -45,6 +46,7 @@ export async function resolveImports(
       projectDir
     );
     for (const [modulePath, filePath] of absoluteResults) {
+      diagLog(`[resolveImports] absolute import: ${modulePath} -> ${filePath}`);
       results.set(modulePath, filePath);
     }
   }

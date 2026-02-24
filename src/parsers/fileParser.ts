@@ -234,22 +234,42 @@ export class FileParser {
     if (cancelToken.isCancellationRequested) return;
 
     const imports = parsePythonImports(content);
-    if (imports.length === 0) return;
+    diagLog(`[_parseImportedLibraries] file=${fileUri.path}, imports=${imports.length}, visited.size=${visited.size}`);
+
+    if (imports.length === 0) {
+      diagLog(`[_parseImportedLibraries] No imports found, returning`);
+      return;
+    }
 
     const sourceFileDir = path.dirname(fileUri.fsPath);
     const resolved = await resolveImports(pythonExec, imports, wkspSettings.projectUri.fsPath, sourceFileDir);
+    diagLog(`[_parseImportedLibraries] resolveImports returned ${resolved.size} results`);
 
     for (const [, filePath] of resolved) {
-      if (!filePath || !filePath.endsWith('.py')) continue;
+      if (!filePath || !filePath.endsWith('.py')) {
+        diagLog(`[_parseImportedLibraries] Skipping: filePath=${filePath}`);
+        continue;
+      }
 
       const libUri = vscode.Uri.file(filePath);
-      if (visited.has(uriId(libUri))) continue;
-      visited.add(uriId(libUri));
+      const libUriId = uriId(libUri);
+
+      if (visited.has(libUriId)) {
+        diagLog(`[_parseImportedLibraries] Already visited: ${filePath}`);
+        continue;
+      }
+
+      visited.add(libUriId);
+      diagLog(`[_parseImportedLibraries] Processing library: ${filePath}`);
 
       try {
         const libContent = await getContentFromFilesystem(libUri);
+        diagLog(`[_parseImportedLibraries] Parsing library file content: ${filePath}`);
         await parseStepsFileContent(wkspSettings.featuresUri, libContent, libUri, caller, true);
+        diagLog(`[_parseImportedLibraries] Successfully parsed library file: ${filePath}`);
+
         // Recurse into the library file's imports
+        diagLog(`[_parseImportedLibraries] Recursing into library file's imports: ${filePath}`);
         await this._parseImportedLibraries(wkspSettings, libContent, libUri, pythonExec, visited, cancelToken, caller);
       } catch (e) {
         diagLog(`error parsing library file ${filePath}: ${e instanceof Error ? e.message : String(e)}`);
@@ -569,7 +589,43 @@ export class FileParser {
       // Handle steps files (in /steps/ folder) and library files (any other Python file)
       if (couldBePythonStepsFile(fileUri) && !isEnvFile) {
         const isLibraryFile = !isStepsFile(fileUri);
+        diagLog(`[reparseFile] Starting: file=${fileUri.path}, isLibraryFile=${isLibraryFile}`);
+
         await this._updateStepsFromStepsFileContent(wkspSettings.featuresUri, content, fileUri, "reparseFile", isLibraryFile);
+
+        // Re-resolve imports for step files (not library files)
+        if (!isLibraryFile) {
+          try {
+            diagLog(`[reparseFile] Re-resolving imports for step file: ${fileUri.path}`);
+
+            // Get all step files in workspace to build visited set
+            let stepFiles: vscode.Uri[] = [];
+            const tokenSource = new vscode.CancellationTokenSource();
+            const cancelToken = tokenSource.token;
+
+            if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
+              stepFiles = await findFiles(wkspSettings.stepsSearchUri, "steps", ".py", cancelToken);
+            else
+              stepFiles = await findFiles(wkspSettings.stepsSearchUri, undefined, ".py", cancelToken);
+
+            stepFiles = stepFiles.filter(uri => isStepsFile(uri));
+
+            // Build visited set with all step files
+            const visited = new Set<string>(stepFiles.map(u => uriId(u)));
+            diagLog(`[reparseFile] Visited set initialized with ${visited.size} step files before import resolution`);
+
+            // Get Python executable and re-resolve imports
+            const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
+            diagLog(`[reparseFile] Calling _parseImportedLibraries, visited set has ${visited.size} items`);
+
+            await this._parseImportedLibraries(wkspSettings, content, fileUri, pythonExec, visited, cancelToken, "reparseFile");
+
+            diagLog(`[reparseFile] _parseImportedLibraries completed, visited set now has ${visited.size} items`);
+            tokenSource.dispose();
+          } catch (e) {
+            diagLog(`reparseFile import resolution error: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
       }
 
       if (isEnvFile)
