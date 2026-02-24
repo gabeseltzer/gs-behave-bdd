@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { config } from "../configuration";
-import { uriId, getWorkspaceUriForFile, isStepsFile, openDocumentRange } from '../common';
+import { uriId, getWorkspaceUriForFile, isStepsFile, openDocumentRange, couldBePythonStepsFile } from '../common';
 import { StepReference as StepReference, StepReferencesTree as StepReferencesTree } from './stepReferencesView';
 import { getStepMappingsForStepsFileFunction, waitOnReadyForStepsNavigation } from '../parsers/stepMappings';
 import { FeatureFileStep } from '../parsers/featureParser';
@@ -50,7 +50,7 @@ export async function findStepReferencesHandler(textEditor?: vscode.TextEditor) 
 
   try {
 
-    if (textEditor && (!fileUri || !isStepsFile(fileUri))) {
+    if (textEditor && (!fileUri || (!isStepsFile(fileUri) && !couldBePythonStepsFile(fileUri)))) {
       // this should never happen - command availability context is controlled by package.json editor/context
       throw `Find All Step References must be used from a steps file, uri was: ${fileUri}`;
     }
@@ -114,6 +114,8 @@ export async function findStepReferencesHandler(textEditor?: vscode.TextEditor) 
   }
 
 }
+
+
 
 export function refreshStepReferencesView() {
   if (!refreshStore.uri)

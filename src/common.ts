@@ -272,6 +272,10 @@ export const isFeatureFile = (uri: vscode.Uri): boolean => {
   return path.endsWith(".feature");
 }
 
+export const couldBePythonStepsFile = (uri: vscode.Uri): boolean => {
+  const path = uri.path.toLowerCase();
+  return path.endsWith('.py') && !isFeatureFile(uri);
+}
 
 export const getAllTestItems = (wkspId: string | null, collection: vscode.TestItemCollection): vscode.TestItem[] => {
   const items: vscode.TestItem[] = [];
