@@ -2,7 +2,7 @@
 
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { stepFileDecoratorPattern, parseStepsFileContent, getStepFileSteps, deleteStepFileSteps } from '../../../src/parsers/stepsParser';
+import { stepFileDecoratorPattern, parseStepsFileContent, getStepFileSteps, deleteStepFileSteps, recordImportedLibraries, getImportedLibrariesByStepFile } from '../../../src/parsers/stepsParser';
 
 suite('stepsParser', () => {
 
@@ -199,6 +199,74 @@ def step_impl(context):
       });
     });
 
+  });
+
+  suite('deleteStepFileSteps cleanup', () => {
+    test('should clean up import tracking entries when deleting step file steps', () => {
+      const featuresUri = vscode.Uri.file('c:/workspace1/features');
+      const stepFileUri = vscode.Uri.file('c:/workspace1/features/steps/steps.py');
+      const libraryUri1 = vscode.Uri.file('c:/workspace1/step_library/lib1.py');
+      const libraryUri2 = vscode.Uri.file('c:/workspace1/step_library/lib2.py');
+
+      // Record imported libraries for this step file
+      recordImportedLibraries(stepFileUri, [libraryUri1, libraryUri2]);
+
+      // Verify import tracking was recorded
+      let importTracking = getImportedLibrariesByStepFile();
+      let stepFileFound = false;
+      for (const [stepFileId] of importTracking) {
+        if (stepFileId.includes('features/steps/steps.py')) {
+          stepFileFound = true;
+          break;
+        }
+      }
+      assert.ok(stepFileFound, 'Import tracking should contain step file entry before deletion');
+
+      // Delete step file steps
+      deleteStepFileSteps(featuresUri);
+
+      // Verify import tracking was cleaned up for this workspace
+      importTracking = getImportedLibrariesByStepFile();
+      stepFileFound = false;
+      for (const [stepFileId] of importTracking) {
+        if (stepFileId.includes('workspace1')) {
+          stepFileFound = true;
+          break;
+        }
+      }
+      assert.ok(!stepFileFound, 'Import tracking should not contain workspace1 entries after deletion');
+    });
+
+    test('should preserve import tracking entries from other workspaces', () => {
+      const workspace1FeaturesUri = vscode.Uri.file('c:/workspace1/features');
+      const workspace2FeaturesUri = vscode.Uri.file('c:/workspace2/features');
+      const workspace1StepFileUri = vscode.Uri.file('c:/workspace1/features/steps/steps.py');
+      const workspace2StepFileUri = vscode.Uri.file('c:/workspace2/features/steps/steps.py');
+      const libraryUri = vscode.Uri.file('c:/shared/library.py');
+
+      // Record imported libraries for both workspaces
+      recordImportedLibraries(workspace1StepFileUri, [libraryUri]);
+      recordImportedLibraries(workspace2StepFileUri, [libraryUri]);
+
+      // Verify both are recorded
+      let importTracking = getImportedLibrariesByStepFile();
+      const initialSize = importTracking.size;
+      assert.ok(initialSize >= 2, 'Should have entries for both workspaces');
+
+      // Delete steps for workspace1 only
+      deleteStepFileSteps(workspace1FeaturesUri);
+
+      // Verify workspace2 entries are preserved
+      importTracking = getImportedLibrariesByStepFile();
+      let workspace2Found = false;
+      for (const [stepFileId] of importTracking) {
+        if (stepFileId.includes('workspace2')) {
+          workspace2Found = true;
+          break;
+        }
+      }
+      assert.ok(workspace2Found, 'Workspace2 import tracking should be preserved after workspace1 deletion');
+    });
   });
 
 });

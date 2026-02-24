@@ -8,7 +8,7 @@ import {
   countTestItemsInCollection, getAllTestItems, uriId, getWorkspaceFolder,
   getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem, couldBePythonStepsFile
 } from '../common';
-import { parseStepsFileContent, getStepFileSteps, deleteStepFileSteps } from './stepsParser';
+import { parseStepsFileContent, getStepFileSteps, deleteStepFileSteps, cleanupOldImportedLibraries, recordImportedLibraries } from './stepsParser';
 import { parseEnvironmentFileContent, deleteFixtures } from './fixtureParser';
 import { parsePythonImports } from './importParser';
 import { resolveImports } from './importResolver';
@@ -198,7 +198,9 @@ export class FileParser {
       for (const uri of stepFiles) {
         if (cancelToken.isCancellationRequested) break;
         const content = stepFileContents.get(uriId(uri)) ?? '';
-        await this._parseImportedLibraries(wkspSettings, content, uri, pythonExec, visited, cancelToken, caller);
+        const importedLibraries = await this._parseImportedLibraries(wkspSettings, content, uri, pythonExec, visited, cancelToken, caller, true);
+        // Record which libraries are imported by this step file
+        recordImportedLibraries(uri, Array.from(importedLibraries));
       }
     } catch (e) {
       diagLog(`import resolution error: ${e instanceof Error ? e.message : String(e)}`);
@@ -229,16 +231,18 @@ export class FileParser {
     pythonExec: string,
     visited: Set<string>,
     cancelToken: vscode.CancellationToken,
-    caller: string
-  ): Promise<void> {
-    if (cancelToken.isCancellationRequested) return;
+    caller: string,
+    trackDirectImports = false
+  ): Promise<Set<vscode.Uri>> {
+    const directImports = new Set<vscode.Uri>();
+    if (cancelToken.isCancellationRequested) return directImports;
 
     const imports = parsePythonImports(content);
     diagLog(`[_parseImportedLibraries] file=${fileUri.path}, imports=${imports.length}, visited.size=${visited.size}`);
 
     if (imports.length === 0) {
       diagLog(`[_parseImportedLibraries] No imports found, returning`);
-      return;
+      return directImports;
     }
 
     const sourceFileDir = path.dirname(fileUri.fsPath);
@@ -253,6 +257,11 @@ export class FileParser {
 
       const libUri = vscode.Uri.file(filePath);
       const libUriId = uriId(libUri);
+
+      // Track direct imports only if requested (for non-recursive calls)
+      if (trackDirectImports) {
+        directImports.add(libUri);
+      }
 
       if (visited.has(libUriId)) {
         diagLog(`[_parseImportedLibraries] Already visited: ${filePath}`);
@@ -270,11 +279,13 @@ export class FileParser {
 
         // Recurse into the library file's imports
         diagLog(`[_parseImportedLibraries] Recursing into library file's imports: ${filePath}`);
-        await this._parseImportedLibraries(wkspSettings, libContent, libUri, pythonExec, visited, cancelToken, caller);
+        await this._parseImportedLibraries(wkspSettings, libContent, libUri, pythonExec, visited, cancelToken, caller, false);
       } catch (e) {
         diagLog(`error parsing library file ${filePath}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
+
+    return directImports;
   }
 
 
@@ -618,9 +629,16 @@ export class FileParser {
             const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
             diagLog(`[reparseFile] Calling _parseImportedLibraries, visited set has ${visited.size} items`);
 
-            await this._parseImportedLibraries(wkspSettings, content, fileUri, pythonExec, visited, cancelToken, "reparseFile");
+            const importedLibraries = await this._parseImportedLibraries(wkspSettings, content, fileUri, pythonExec, visited, cancelToken, "reparseFile", true);
 
-            diagLog(`[reparseFile] _parseImportedLibraries completed, visited set now has ${visited.size} items`);
+            diagLog(`[reparseFile] _parseImportedLibraries completed, visited set now has ${visited.size} items, found ${importedLibraries.size} direct imports`);
+
+            // Clean up old imported libraries that are no longer imported
+            cleanupOldImportedLibraries(fileUri, Array.from(importedLibraries));
+
+            // Record new imported libraries
+            recordImportedLibraries(fileUri, Array.from(importedLibraries));
+
             tokenSource.dispose();
           } catch (e) {
             diagLog(`reparseFile import resolution error: ${e instanceof Error ? e.message : String(e)}`);
