@@ -4,7 +4,7 @@ import { BehaveTestData, Scenario, TestData, TestFile } from './parsers/testFile
 import {
   getContentFromFilesystem,
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, isFeatureFile,
-  isStepsFile, logExtensionVersion, cleanExtensionTempDirectory, urisMatch
+  logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile
 } from './common';
 import { StepFileStep } from './parsers/stepsParser';
 import { gotoStepHandler } from './handlers/gotoStepHandler';
@@ -382,7 +382,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         const uri = event.document.uri;
         const isEnvFile = uri.path.endsWith("/environment.py");
 
-        if (!isFeatureFile(uri) && !isStepsFile(uri) && !isEnvFile)
+        if (!isFeatureFile(uri) && !couldBePythonStepsFile(uri) && !isEnvFile)
           return;
 
         const wkspSettings = getWorkspaceSettingsForFile(uri);
@@ -404,10 +404,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           }
         }
 
-        // If steps file changes, re-validate step definitions in all open feature files
-        if (isStepsFile(uri)) {
+        // If steps file or library file changes, re-validate step definitions in all open feature files
+        if (couldBePythonStepsFile(uri) && !isEnvFile) {
           for (const document of vscode.workspace.textDocuments) {
-            validateStepDefinitions(document);
+            if (isFeatureFile(document.uri)) {
+              validateStepDefinitions(document);
+            }
           }
         }
       }

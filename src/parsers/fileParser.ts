@@ -6,7 +6,7 @@ import { WorkspaceSettings } from "../settings";
 import { deleteFeatureFileSteps, getFeatureFileSteps, getFeatureNameFromContent } from './featureParser';
 import {
   countTestItemsInCollection, getAllTestItems, uriId, getWorkspaceFolder,
-  getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem
+  getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem, couldBePythonStepsFile
 } from '../common';
 import { parseStepsFileContent, getStepFileSteps, deleteStepFileSteps } from './stepsParser';
 import { parseEnvironmentFileContent, deleteFixtures } from './fixtureParser';
@@ -213,12 +213,12 @@ export class FileParser {
   }
 
 
-  private async _updateStepsFromStepsFileContent(featuresUri: vscode.Uri, content: string, fileUri: vscode.Uri, caller: string) {
+  private async _updateStepsFromStepsFileContent(featuresUri: vscode.Uri, content: string, fileUri: vscode.Uri, caller: string, isLibraryFile = false) {
 
-    if (!isStepsFile(fileUri))
+    if (!isLibraryFile && !isStepsFile(fileUri))
       throw new Error(`${fileUri.fsPath} is not a steps file`);
 
-    await parseStepsFileContent(featuresUri, content, fileUri, caller);
+    await parseStepsFileContent(featuresUri, content, fileUri, caller, isLibraryFile);
   }
 
 
@@ -560,14 +560,17 @@ export class FileParser {
       // Check for environment.py specifically
       const isEnvFile = fileUri.path.endsWith("/environment.py");
 
-      if (!isStepsFile(fileUri) && !isFeatureFile(fileUri) && !isEnvFile)
+      if (!couldBePythonStepsFile(fileUri) && !isFeatureFile(fileUri) && !isEnvFile)
         return;
 
       if (!content)
         content = await getContentFromFilesystem(fileUri);
 
-      if (isStepsFile(fileUri))
-        await this._updateStepsFromStepsFileContent(wkspSettings.featuresUri, content, fileUri, "reparseFile");
+      // Handle steps files (in /steps/ folder) and library files (any other Python file)
+      if (couldBePythonStepsFile(fileUri) && !isEnvFile) {
+        const isLibraryFile = !isStepsFile(fileUri);
+        await this._updateStepsFromStepsFileContent(wkspSettings.featuresUri, content, fileUri, "reparseFile", isLibraryFile);
+      }
 
       if (isEnvFile)
         await parseEnvironmentFileContent(wkspSettings.featuresUri, content, fileUri, "reparseFile");
