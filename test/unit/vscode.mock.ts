@@ -3,11 +3,9 @@
 
 import * as path from 'path';
 
-export class EventEmitter {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  event: any = () => ({ dispose: () => { /* mock */ } });
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-  fire(_event: any) { /* mock */ }
+export class EventEmitter<T = unknown> {
+  event: () => { dispose: () => void } = () => ({ dispose: () => { /* mock */ } });
+  fire(_event: T) { /* mock */ }
   dispose() { /* mock */ }
 }
 
@@ -54,10 +52,20 @@ export class Uri {
 }
 
 export class Range {
-  constructor(
-    public readonly start: Position,
-    public readonly end: Position
-  ) { }
+  public readonly start: Position;
+  public readonly end: Position;
+
+  constructor(startLine: number, startCharacter: number, endLine: number, endCharacter: number);
+  constructor(start: Position, end: Position);
+  constructor(startOrLine: Position | number, endOrChar: Position | number, endLine?: number, endChar?: number) {
+    if (typeof startOrLine === 'number') {
+      this.start = new Position(startOrLine, endOrChar as number);
+      this.end = new Position(endLine ?? 0, endChar ?? 0);
+    } else {
+      this.start = startOrLine as Position;
+      this.end = endOrChar as Position;
+    }
+  }
 }
 
 export class Position {
@@ -75,22 +83,25 @@ export class Selection {
 }
 
 export class DiagnosticCollection {
-  clear() { /* mock */ }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  delete(_uri: Uri) { /* mock */ }
-  dispose() { /* mock */ }
+  private diagnostics = new Map<string, Diagnostic[]>();
+
+  clear() { this.diagnostics.clear(); }
+  delete(uri: Uri) { this.diagnostics.delete(uri.toString()); }
+  dispose() { this.diagnostics.clear(); }
   forEach() { /* mock */ }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  get(_uri: Uri) { return []; }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  has(_uri: Uri) { return false; }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-  set(_uri: Uri, _diagnostics: any) { /* mock */ }
+  get(uri: Uri): Diagnostic[] { return this.diagnostics.get(uri.toString()) || []; }
+  has(uri: Uri): boolean { return this.diagnostics.has(uri.toString()); }
+  set(uri: Uri, diagnostics: Diagnostic[] | undefined) {
+    if (diagnostics === undefined || diagnostics.length === 0) {
+      this.diagnostics.delete(uri.toString());
+    } else {
+      this.diagnostics.set(uri.toString(), diagnostics);
+    }
+  }
 }
 
 export class TreeItem {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(public label: string, public collapsibleState?: any) { }
+  constructor(public label: string, public collapsibleState?: TreeItemCollapsibleState) { }
 }
 
 export enum TreeItemCollapsibleState {
@@ -118,17 +129,21 @@ export const workspace = {
   onDidChangeWorkspaceFolders: () => ({ dispose: () => { /* mock */ } }),
   onDidSaveTextDocument: () => ({ dispose: () => { /* mock */ } }),
   onDidOpenTextDocument: () => ({ dispose: () => { /* mock */ } }),
-  onDidCloseTextDocument: () => ({ dispose: () => { /* mock */ } })
+  onDidCloseTextDocument: () => ({ dispose: () => { /* mock */ } }),
+  asRelativePath: (pathOrUri: string | Uri): string => {
+    if (typeof pathOrUri === 'string') return pathOrUri;
+    return pathOrUri.fsPath || pathOrUri.path || String(pathOrUri);
+  }
 };
 
 export const languages = {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   createDiagnosticCollection: (_name?: string) => new DiagnosticCollection(),
   registerCompletionItemProvider: () => ({ dispose: () => { /* mock */ } }),
   registerDefinitionProvider: () => ({ dispose: () => { /* mock */ } }),
   registerHoverProvider: () => ({ dispose: () => { /* mock */ } }),
   registerDocumentSymbolProvider: () => ({ dispose: () => { /* mock */ } }),
-  registerReferenceProvider: () => ({ dispose: () => { /* mock */ } })
+  registerReferenceProvider: () => ({ dispose: () => { /* mock */ } }),
+  registerDocumentSemanticTokensProvider: (_selector: unknown, _provider: unknown, _legend: unknown) => ({ dispose: () => { /* mock */ } })
 };
 
 export const window = {
@@ -145,7 +160,8 @@ export const window = {
   }),
   createTreeView: () => ({
     dispose: () => { /* mock */ },
-    reveal: () => Promise.resolve()
+    reveal: () => Promise.resolve(),
+    onDidChangeVisibility: () => ({ dispose: () => { /* mock */ } })
   }),
   registerTreeDataProvider: () => ({ dispose: () => { /* mock */ } })
 };
@@ -167,4 +183,45 @@ export enum DiagnosticSeverity {
   Warning = 1,
   Information = 2,
   Hint = 3
+}
+
+export class Diagnostic {
+  public code?: string | number;
+  public source?: string;
+  public relatedInformation?: DiagnosticRelatedInformation[];
+  constructor(
+    public readonly range: Range,
+    public readonly message: string,
+    public readonly severity: DiagnosticSeverity = DiagnosticSeverity.Error
+  ) { }
+}
+
+export class DiagnosticRelatedInformation {
+  constructor(
+    public readonly location: Location,
+    public readonly message: string
+  ) { }
+}
+
+export class Location {
+  constructor(
+    public readonly uri: Uri,
+    public readonly range: Range
+  ) { }
+}
+
+export class SemanticTokensLegend {
+  constructor(public tokenTypes: string[], public tokenModifiers: string[] = []) {
+    // Store token types and modifiers for legend
+  }
+}
+
+export class SemanticTokens {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  constructor(public readonly data: Uint32Array) { }
+}
+
+export class SemanticTokensBuilder {
+  push(..._args: unknown[]) { /* mock */ }
+  build() { return new SemanticTokens(new Uint32Array(0)); }
 }

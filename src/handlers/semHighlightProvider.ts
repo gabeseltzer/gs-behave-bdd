@@ -10,7 +10,6 @@ const tokenTypes = new Map<string, number>();
 
 export const semLegend = (function () {
 	const tokenTypesLegend = [
-		"missing_step",
 		"function",
 	];
 	tokenTypesLegend.forEach((tokenType, index) => tokenTypes.set(tokenType, index));
@@ -26,7 +25,7 @@ interface ParsedToken {
 
 // NOTE: most colourising is done via gherkin.grammar.json,
 // this is only to do advanced custom highlighting 
-// i.e. to highlight step {parameters} and missing steps, by comparing feature file steps against parsed stepmappings
+// i.e. to highlight step {parameters}, by comparing feature file steps against parsed stepmappings
 export class SemHighlightProvider implements vscode.DocumentSemanticTokensProvider {
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, cancelToken: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
@@ -88,18 +87,6 @@ export class SemHighlightProvider implements vscode.DocumentSemanticTokensProvid
 
 			const line = lines[i];
 			const stepFileStep = getStepFileStepForFeatureFileStep(document.uri, i);
-
-			if (!stepFileStep && featureFileStepRe.test(line)) {
-
-				r.push({
-					line: i,
-					startCharacter: 0,
-					length: line.length,
-					tokenType: "missing_step",
-				});
-
-				continue;
-			}
 
 			if (stepFileStep && stepFileStep.textAsRe.includes(parseRepWildcard)) {
 				const grpWldText = stepFileStep.textAsRe.replaceAll(parseRepWildcard, `(${parseRepWildcard})`);

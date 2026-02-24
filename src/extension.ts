@@ -25,6 +25,7 @@ import { HoverProvider } from './handlers/hoverProvider';
 import { FixtureDefinitionProvider, FixtureHoverProvider, FixtureReferenceProvider } from './handlers/fixtureProviders';
 import { StepReferenceProvider } from './handlers/stepReferenceProvider';
 import { validateFixtureTags } from './handlers/fixtureDiagnostics';
+import { validateStepDefinitions } from './handlers/stepDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
 import { JunitWatcher } from './watchers/junitWatcher';
 
@@ -33,6 +34,7 @@ const testData = new WeakMap<vscode.TestItem, BehaveTestData>();
 const wkspWatchers = new Map<vscode.Uri, vscode.FileSystemWatcher[]>();
 export const parser = new FileParser();
 export interface QueueItem { test: vscode.TestItem; scenario: Scenario; }
+let initialParsingComplete = false;
 
 
 export type TestSupport = {
@@ -56,6 +58,8 @@ export type TestSupport = {
 export async function activate(context: vscode.ExtensionContext): Promise<TestSupport | undefined> {
 
   try {
+    // Reset flag on each activation (important for integration tests)
+    initialParsingComplete = false;
 
     const start = performance.now();
     diagLog("activate called, node pid:" + process.pid);
@@ -221,10 +225,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           if (isGlobalSettings) {
             // Open global settings via command, then get the active editor
             await vscode.commands.executeCommand("workbench.action.openSettingsJson");
-            editor = vscode.window.activeTextEditor!;
+            const activeEditor = vscode.window.activeTextEditor;
+            if (!activeEditor) return;
+            editor = activeEditor;
             doc = editor.document;
           } else {
-            doc = await vscode.workspace.openTextDocument(settingsUri!);
+            if (!settingsUri) return;
+            doc = await vscode.workspace.openTextDocument(settingsUri);
             editor = await vscode.window.showTextDocument(doc);
           }
 
@@ -333,9 +340,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(async (document) => {
       try {
         if (isFeatureFile(document.uri)) {
+          // Skip validation during initial startup - the async IIFE below will handle it
+          if (!initialParsingComplete) {
+            return;
+          }
           // Wait for steps/fixtures parsing to complete before validating
           await parser.stepsParseComplete(5000, "onDidOpenTextDocument");
           validateFixtureTags(document);
+          validateStepDefinitions(document);
         }
       }
       catch (e: unknown) {
@@ -348,10 +360,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     (async () => {
       try {
         await parser.stepsParseComplete(10000, "activate-validateOpenDocs");
+        initialParsingComplete = true;
         for (const document of vscode.workspace.textDocuments) {
-          if (isFeatureFile(document.uri)) {
-            validateFixtureTags(document);
-          }
+          validateFixtureTags(document);
+          validateStepDefinitions(document);
         }
       }
       catch (e: unknown) {
@@ -379,10 +391,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         // We actully need to await this to ensure parsing is done before validation
         await parser.reparseFile(uri, event.document.getText(), wkspSettings, testData, ctrl);
 
-        // Validate fixture tags when feature file changes
-        if (isFeatureFile(uri)) {
-          validateFixtureTags(event.document);
-        }
+        // Validate fixture tags and step definitions when feature file changes
+        validateFixtureTags(event.document);
+        validateStepDefinitions(event.document);
 
         // If enviroment file changes, re-validate fixtures in all open feature files
         if (isEnvFile) {
@@ -390,6 +401,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
             if (isFeatureFile(document.uri)) {
               validateFixtureTags(document);
             }
+          }
+        }
+
+        // If steps file changes, re-validate step definitions in all open feature files
+        if (isStepsFile(uri)) {
+          for (const document of vscode.workspace.textDocuments) {
+            validateStepDefinitions(document);
           }
         }
       }
