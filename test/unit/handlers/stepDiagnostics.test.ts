@@ -567,4 +567,316 @@ suite('stepDiagnostics', () => {
       assert.strictEqual(filtered.length, 0);
     });
   });
+
+  suite('Triple-quoted text blocks and tables (Phase 2)', () => {
+    test('should not create diagnostic for text that looks like a step inside """ block', () => {
+      const mockUri = vscode.Uri.file('/test/features/test.feature');
+      const mockDocument = { uri: mockUri } as vscode.TextDocument;
+
+      // Only the real step before the block is in the feature steps map
+      // The text inside the """ block is NOT in the map because Phase 1 parser skips it
+      const realStep = new FeatureFileStep(
+        'key1', mockUri, 'test.feature',
+        new vscode.Range(3, 4, 3, 20), 'Given user exists', 'user exists', 'given'
+      );
+
+      // Setup: No step that looks like a step is in the map because it's inside the """ block
+      const setStub = setupValidateStubs({
+        featureSteps: [['key1', realStep]],
+        stepMatch: undefined, // Given user exists is unmatched
+        allStepDefs: [],
+      });
+
+      validateStepDefinitions(mockDocument);
+
+      const diags = getDiagsFromSetStub(setStub);
+      // Should only have 1 diagnostic for the real step, not for the text inside the block
+      assert.strictEqual(diags.length, 1, 'Should only diagnose the real step outside the block');
+      assert.strictEqual(diags[0].range.start.line, 3, 'Diagnostic should be for step on line 3');
+    });
+
+    test('should not create diagnostic for text that looks like a step inside \'\'\'  block', () => {
+      const mockUri = vscode.Uri.file('/test/features/test.feature');
+      const mockDocument = { uri: mockUri } as vscode.TextDocument;
+
+      // Only the real step before the block is in the feature steps map
+      const realStep = new FeatureFileStep(
+        'key1', mockUri, 'test.feature',
+        new vscode.Range(2, 4, 2, 22), 'When something happens', 'something happens', 'when'
+      );
+
+      // Text inside ''' block is NOT in the map
+      const setStub = setupValidateStubs({
+        featureSteps: [['key1', realStep]],
+        stepMatch: undefined,
+        allStepDefs: [],
+      });
+
+      validateStepDefinitions(mockDocument);
+
+      const diags = getDiagsFromSetStub(setStub);
+      assert.strictEqual(diags.length, 1, 'Should only have diagnostic for real step, not text in triple-quote block');
+      assert.strictEqual(diags[0].range.start.line, 2);
+    });
+
+    test('should not create diagnostic for table rows', () => {
+      const mockUri = vscode.Uri.file('/test/features/test.feature');
+      const mockDocument = { uri: mockUri } as vscode.TextDocument;
+
+      // Only the step before the table is in the feature steps map
+      // Table rows like "| Given something | And more |" are NOT in the map because Phase 1 parser skips them
+      const stepBeforeTable = new FeatureFileStep(
+        'key1', mockUri, 'test.feature',
+        new vscode.Range(5, 4, 5, 22), 'Given a user exists', 'a user exists', 'given'
+      );
+
+      const setStub = setupValidateStubs({
+        featureSteps: [['key1', stepBeforeTable]],
+        stepMatch: undefined,
+        allStepDefs: [],
+      });
+
+      validateStepDefinitions(mockDocument);
+
+      const diags = getDiagsFromSetStub(setStub);
+      // Should only have 1 diagnostic for the step before the table
+      assert.strictEqual(diags.length, 1, 'Should not create diagnostics for table rows');
+      assert.strictEqual(diags[0].range.start.line, 5);
+    });
+
+    test('should validate steps before and after """ block', () => {
+      const mockUri = vscode.Uri.file('/test/features/test.feature');
+      const mockDocument = { uri: mockUri } as vscode.TextDocument;
+
+      // Steps before and after the block are in the map, but not steps inside the block
+      const stepBefore = new FeatureFileStep(
+        'key1', mockUri, 'test.feature',
+        new vscode.Range(2, 4, 2, 20), 'Given precondition', 'precondition', 'given'
+      );
+
+      const stepAfter = new FeatureFileStep(
+        'key2', mockUri, 'test.feature',
+        new vscode.Range(8, 4, 8, 18), 'Then verify result', 'verify result', 'then'
+      );
+
+      // Mock getStepFileStepForFeatureFileStep to return a match for the second step but not the first
+      sandbox.stub(common, 'isFeatureFile').returns(true);
+      sandbox.stub(common, 'getWorkspaceSettingsForFile').returns({
+        uri: mockUri,
+        featuresUri: mockUri,
+        stepsSearchUri: vscode.Uri.file('/test/features/steps')
+      } as ReturnType<typeof common.getWorkspaceSettingsForFile>);
+      sandbox.stub(featureParser, 'getFeatureFileSteps').returns([
+        ['key1', stepBefore],
+        ['key2', stepAfter]
+      ]);
+
+      const getStepStub = sandbox.stub(stepMappings, 'getStepFileStepForFeatureFileStep');
+      getStepStub.withArgs(mockUri, 2).returns(undefined); // Before block: no match
+      getStepStub.withArgs(mockUri, 8).returns(new stepsParser.StepFileStep(
+        'skey2', vscode.Uri.file('/test/steps/steps.py'), 'steps.py', 'then',
+        new vscode.Range(10, 0, 10, 18), 'verify result'
+      )); // After block: matched
+
+      sandbox.stub(stepsParser, 'getStepFileSteps').returns([]);
+      sandbox.stub(config.diagnostics, 'get').returns([]);
+      const setStub = sandbox.stub(config.diagnostics, 'set');
+
+      validateStepDefinitions(mockDocument);
+
+      const diags = getDiagsFromSetStub(setStub);
+      // Should have 1 diagnostic for the unmatched step before the block
+      assert.strictEqual(diags.length, 1, 'Should have diagnostic for unmatched step before block');
+      assert.strictEqual(diags[0].range.start.line, 2, 'Diagnostic should be for step before block');
+    });
+
+    test('should validate steps before and after \'\'\' block', () => {
+      const mockUri = vscode.Uri.file('/test/features/test.feature');
+      const mockDocument = { uri: mockUri } as vscode.TextDocument;
+
+      // Steps before and after the ''' block are in the map
+      const stepBefore = new FeatureFileStep(
+        'key1', mockUri, 'test.feature',
+        new vscode.Range(3, 4, 3, 25), 'When action is taken', 'action is taken', 'when'
+      );
+
+      const stepAfter = new FeatureFileStep(
+        'key2', mockUri, 'test.feature',
+        new vscode.Range(10, 4, 10, 20), 'Then result shown', 'result shown', 'then'
+      );
+
+      const stepDef = new stepsParser.StepFileStep(
+        'skey1', vscode.Uri.file('/test/steps/steps.py'), 'steps.py', 'when',
+        new vscode.Range(5, 0, 5, 25), 'action is taken'
+      );
+
+      sandbox.stub(common, 'isFeatureFile').returns(true);
+      sandbox.stub(common, 'getWorkspaceSettingsForFile').returns({
+        uri: mockUri,
+        featuresUri: mockUri,
+        stepsSearchUri: vscode.Uri.file('/test/features/steps')
+      } as ReturnType<typeof common.getWorkspaceSettingsForFile>);
+      sandbox.stub(featureParser, 'getFeatureFileSteps').returns([
+        ['key1', stepBefore],
+        ['key2', stepAfter]
+      ]);
+
+      const getStepStub = sandbox.stub(stepMappings, 'getStepFileStepForFeatureFileStep');
+      getStepStub.withArgs(mockUri, 3).returns(stepDef); // Before block: matched
+      getStepStub.withArgs(mockUri, 10).returns(undefined); // After block: no match
+
+      sandbox.stub(stepsParser, 'getStepFileSteps').returns([['skey1', stepDef]]);
+      sandbox.stub(config.diagnostics, 'get').returns([]);
+      const setStub = sandbox.stub(config.diagnostics, 'set');
+
+      validateStepDefinitions(mockDocument);
+
+      const diags = getDiagsFromSetStub(setStub);
+      assert.strictEqual(diags.length, 1, 'Should have diagnostic for unmatched step after block');
+      assert.strictEqual(diags[0].range.start.line, 10, 'Diagnostic should be for step after block');
+    });
+
+    test('should handle nested text blocks correctly (""")', () => {
+      const mockUri = vscode.Uri.file('/test/features/test.feature');
+      const mockDocument = { uri: mockUri } as vscode.TextDocument;
+
+      // In a feature with multiple text blocks, only real steps outside blocks should be checked
+      const step1 = new FeatureFileStep(
+        'key1', mockUri, 'test.feature',
+        new vscode.Range(1, 4, 1, 20), 'Given setup done', 'setup done', 'given'
+      );
+
+      // The step on line 9 is NOT in the map because it's inside a """ block
+      // So we only have step1 in the map
+
+      const step3 = new FeatureFileStep(
+        'key3', mockUri, 'test.feature',
+        new vscode.Range(15, 4, 15, 22), 'Then verify final', 'verify final', 'then'
+      );
+
+      const setStub = setupValidateStubs({
+        featureSteps: [['key1', step1], ['key3', step3]],
+        stepMatch: undefined,
+        allStepDefs: [],
+      });
+
+      validateStepDefinitions(mockDocument);
+
+      const diags = getDiagsFromSetStub(setStub);
+      // Should have 2 diagnostics: one for step1 and one for step3
+      // NO diagnostic for the step inside the """ block (which is not in the map)
+      assert.strictEqual(diags.length, 2, 'Should have diagnostics only for steps outside blocks');
+      const lineNumbers = diags.map(d => d.range.start.line).sort((a, b) => a - b);
+      assert.deepStrictEqual(lineNumbers, [1, 15], 'Diagnostics should be on lines with real steps');
+    });
+
+    test('should handle mixed scenarios with text blocks and tables', () => {
+      const mockUri = vscode.Uri.file('/test/features/test.feature');
+      const mockDocument = { uri: mockUri } as vscode.TextDocument;
+
+      // Feature with both """ blocks and table rows
+      const step1 = new FeatureFileStep(
+        'key1', mockUri, 'test.feature',
+        new vscode.Range(2, 4, 2, 25), 'Given initial state', 'initial state', 'given'
+      );
+
+      // Step inside """ block is NOT in the map (line 6)
+      // Table rows like "| column1 | column2 |" are NOT in the map (line 10-12)
+
+      const step2 = new FeatureFileStep(
+        'key2', mockUri, 'test.feature',
+        new vscode.Range(14, 4, 14, 18), 'Then end state', 'end state', 'then'
+      );
+
+      const setStub = setupValidateStubs({
+        featureSteps: [['key1', step1], ['key2', step2]],
+        stepMatch: undefined,
+        allStepDefs: [],
+      });
+
+      validateStepDefinitions(mockDocument);
+
+      const diags = getDiagsFromSetStub(setStub);
+      assert.strictEqual(diags.length, 2, 'Should only diagnose real steps, not text in blocks or table rows');
+      assert.strictEqual(diags[0].range.start.line, 2);
+      assert.strictEqual(diags[1].range.start.line, 14);
+    });
+
+    test('should not double-report text that looks like steps in multiple blocks', () => {
+      const mockUri = vscode.Uri.file('/test/features/test.feature');
+      const mockDocument = { uri: mockUri } as vscode.TextDocument;
+
+      // Multiple text blocks in the same feature
+      const realStep1 = new FeatureFileStep(
+        'key1', mockUri, 'test.feature',
+        new vscode.Range(3, 4, 3, 20), 'Given real step', 'real step', 'given'
+      );
+
+      const realStep2 = new FeatureFileStep(
+        'key2', mockUri, 'test.feature',
+        new vscode.Range(12, 4, 12, 18), 'When second step', 'second step', 'when'
+      );
+
+      const setStub = setupValidateStubs({
+        featureSteps: [['key1', realStep1], ['key2', realStep2]],
+        stepMatch: undefined,
+        allStepDefs: [],
+      });
+
+      validateStepDefinitions(mockDocument);
+
+      const diags = getDiagsFromSetStub(setStub);
+      // Each real step should appear exactly once
+      assert.strictEqual(diags.length, 2, 'Should report each real step exactly once');
+      assert.strictEqual(diags.filter(d => d.range.start.line === 3).length, 1);
+      assert.strictEqual(diags.filter(d => d.range.start.line === 12).length, 1);
+    });
+
+    test('should skip table rows with pipe delimiters', () => {
+      const mockUri = vscode.Uri.file('/test/features/test.feature');
+      const mockDocument = { uri: mockUri } as vscode.TextDocument;
+
+      // A scenario with a data table - only the step before the table is in the map
+      const stepBeforeTable = new FeatureFileStep(
+        'key1', mockUri, 'test.feature',
+        new vscode.Range(4, 4, 4, 28), 'Given a data table exists', 'a data table exists', 'given'
+      );
+
+      // Table rows like "| name | age |" are NOT in the map (lines 5-7)
+
+      const stepAfterTable = new FeatureFileStep(
+        'key2', mockUri, 'test.feature',
+        new vscode.Range(8, 4, 8, 20), 'Then process data', 'process data', 'then'
+      );
+
+      sandbox.stub(common, 'isFeatureFile').returns(true);
+      sandbox.stub(common, 'getWorkspaceSettingsForFile').returns({
+        uri: mockUri,
+        featuresUri: mockUri,
+        stepsSearchUri: vscode.Uri.file('/test/features/steps')
+      } as ReturnType<typeof common.getWorkspaceSettingsForFile>);
+      sandbox.stub(featureParser, 'getFeatureFileSteps').returns([
+        ['key1', stepBeforeTable],
+        ['key2', stepAfterTable]
+      ]);
+
+      const getStepStub = sandbox.stub(stepMappings, 'getStepFileStepForFeatureFileStep');
+      getStepStub.withArgs(mockUri, 4).returns(new stepsParser.StepFileStep(
+        'skey1', vscode.Uri.file('/test/steps/steps.py'), 'steps.py', 'given',
+        new vscode.Range(1, 0, 1, 28), 'a data table exists'
+      )); // Before table: matched
+      getStepStub.withArgs(mockUri, 8).returns(undefined); // After table: no match
+
+      sandbox.stub(stepsParser, 'getStepFileSteps').returns([]);
+      sandbox.stub(config.diagnostics, 'get').returns([]);
+      const setStub = sandbox.stub(config.diagnostics, 'set');
+
+      validateStepDefinitions(mockDocument);
+
+      const diags = getDiagsFromSetStub(setStub);
+      // Should have 1 diagnostic for the unmatched step after the table
+      assert.strictEqual(diags.length, 1, 'Should not create diagnostics for table rows');
+      assert.strictEqual(diags[0].range.start.line, 8);
+    });
+  });
 });
