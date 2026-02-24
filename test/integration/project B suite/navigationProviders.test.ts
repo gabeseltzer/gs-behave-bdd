@@ -9,19 +9,27 @@ import { couldBePythonStepsFile } from '../../../src/common';
 
 let testSupport: TestSupport;
 
+// Helper function to get workspace URI by name
+function getWorkspaceUri(wkspName: string): vscode.Uri {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  assert.ok(workspaceFolders, 'workspace folders should exist');
+  const wkspFolder = workspaceFolders.find(folder => folder.uri.path.includes(wkspName));
+  assert.ok(wkspFolder, `workspace folder "${wkspName}" should exist`);
+  return wkspFolder.uri;
+}
+
 // Helper function to wait for extension to be ready
 async function ensureExtensionReady(): Promise<void> {
-  const extension = vscode.extensions.getExtension('Behave.behave-vsc');
+  const extension = vscode.extensions.getExtension('gabeseltzer.behave-vsc');
   if (!extension) {
     throw new Error('Behave VSC extension not found');
   }
-  if (!extension.isActive) {
-    testSupport = await extension.activate() as TestSupport;
-  }
+  // Always get exports (activate() returns exports immediately if already active)
+  testSupport = await extension.activate() as TestSupport;
 }
 
 suite('Navigation Providers - Library Steps Integration', () => {
-  const wkspIndex = 0;
+  const wkspName = 'project B';
 
   suiteSetup(async function () {
     this.timeout(60000);
@@ -31,8 +39,7 @@ suite('Navigation Providers - Library Steps Integration', () => {
   test('should find library step definition via goto definition (F12)', async function () {
     this.timeout(30000);
 
-    const wkspUri = vscode.workspace.workspaceFolders?.[wkspIndex].uri;
-    assert.ok(wkspUri, 'workspace uri should exist');
+    const wkspUri = getWorkspaceUri(wkspName);
 
     // Get the feature file that uses library steps (table.feature in grouped folder)
     const featureUri = vscode.Uri.joinPath(wkspUri, 'features', 'grouped', 'table.feature');
@@ -76,8 +83,7 @@ suite('Navigation Providers - Library Steps Integration', () => {
   test('should find references from library step file via Find All Step References (Alt+F12)', async function () {
     this.timeout(30000);
 
-    const wkspUri = vscode.workspace.workspaceFolders?.[wkspIndex].uri;
-    assert.ok(wkspUri, 'workspace uri should exist');
+    const wkspUri = getWorkspaceUri(wkspName);
 
     // Use the internal API to verify step mappings work for library steps
     const libraryStepUri = vscode.Uri.joinPath(wkspUri, 'features', 'grouped', 'steps', 'table_feature_steps.py');
@@ -109,8 +115,7 @@ suite('Navigation Providers - Library Steps Integration', () => {
   test('should support library steps in step mappings', async function () {
     this.timeout(30000);
 
-    const wkspUri = vscode.workspace.workspaceFolders?.[wkspIndex].uri;
-    assert.ok(wkspUri, 'workspace uri should exist');
+    const wkspUri = getWorkspaceUri(wkspName);
 
     // Get a feature file in the grouped folder that uses library steps
     const featureUri = vscode.Uri.joinPath(wkspUri, 'features', 'grouped', 'table.feature');
@@ -147,8 +152,7 @@ suite('Navigation Providers - Library Steps Integration', () => {
   });
 
   test('should allow couldBePythonStepsFile function to identify library steps', async function () {
-    const wkspUri = vscode.workspace.workspaceFolders?.[wkspIndex].uri;
-    assert.ok(wkspUri, 'workspace uri should exist');
+    const wkspUri = getWorkspaceUri(wkspName);
 
     // Test the couldBePythonStepsFile function directly
     const libraryStepUri = vscode.Uri.joinPath(wkspUri, 'features', 'grouped', 'steps', 'table_feature_steps.py');
