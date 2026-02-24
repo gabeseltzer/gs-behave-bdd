@@ -10,6 +10,10 @@ const stepFileStepStartRe = new RegExp(`${stepFileStepStartStr}.*`, "i");
 const stepFileStepRe = new RegExp(`${stepFileStepStartStr}u?(?:"|')(.+)(?:"|').*\\).*$`, "i");
 const stepFileSteps = new Map<string, StepFileStep>();
 
+// Track which library files are imported by each step file
+// Key: step file URI id, Value: set of library file URI ids
+const importedLibrariesByStepFile = new Map<string, Set<string>>();
+
 export class StepFileStep {
   public functionDefinitionRange: vscode.Range = new vscode.Range(0, 0, 0, 0);
   constructor(
@@ -32,11 +36,74 @@ export function getStepFileSteps(featuresUri: vscode.Uri, removeFileUriPrefix = 
   return steps;
 }
 
+// For testing: get the import tracking map state
+export function getImportedLibrariesByStepFile(): ReadonlyMap<string, ReadonlySet<string>> {
+  return new Map(importedLibrariesByStepFile);
+}
+
 
 export function deleteStepFileSteps(featuresUri: vscode.Uri) {
   const wkspStepFileSteps = getStepFileSteps(featuresUri);
   for (const [key,] of wkspStepFileSteps) {
     stepFileSteps.delete(key);
+  }
+
+  // Clean up import tracking for this workspace
+  const featuresUriId = uriId(featuresUri);
+  for (const [stepFileId] of importedLibrariesByStepFile) {
+    if (stepFileId.startsWith(featuresUriId)) {
+      importedLibrariesByStepFile.delete(stepFileId);
+    }
+  }
+}
+
+export function deleteLibrarySteps(libraryFileUri: vscode.Uri) {
+  const libraryUriId = uriId(libraryFileUri);
+  const keysToDelete: string[] = [];
+
+  for (const [key, stepFileStep] of stepFileSteps) {
+    if (uriId(stepFileStep.uri) === libraryUriId) {
+      keysToDelete.push(key);
+    }
+  }
+
+  for (const key of keysToDelete) {
+    stepFileSteps.delete(key);
+  }
+}
+
+export function recordImportedLibraries(stepFileUri: vscode.Uri, libraryUris: vscode.Uri[]) {
+  const stepFileUriId = uriId(stepFileUri);
+  const libraryUriIds = new Set(libraryUris.map(uri => uriId(uri)));
+  importedLibrariesByStepFile.set(stepFileUriId, libraryUriIds);
+}
+
+export function cleanupOldImportedLibraries(stepFileUri: vscode.Uri, newLibraryUris: vscode.Uri[]) {
+  const stepFileUriId = uriId(stepFileUri);
+  const oldLibraries = importedLibrariesByStepFile.get(stepFileUriId) || new Set();
+  const newLibraryUriIds = new Set(newLibraryUris.map(uri => uriId(uri)));
+
+  // Find libraries that are no longer imported
+  for (const oldLibraryId of oldLibraries) {
+    if (!newLibraryUriIds.has(oldLibraryId)) {
+      // This library is no longer imported
+      // Check if any OTHER step file still imports it
+      let otherStepFileImportsIt = false;
+      for (const [otherStepFileId, otherLibraries] of importedLibrariesByStepFile) {
+        if (otherStepFileId !== stepFileUriId && otherLibraries.has(oldLibraryId)) {
+          otherStepFileImportsIt = true;
+          break;
+        }
+      }
+
+      // Only delete if no other step file imports this library
+      if (!otherStepFileImportsIt) {
+        diagLog(`cleanupOldImportedLibraries: deleting steps from library ${oldLibraryId}`);
+        deleteLibrarySteps(vscode.Uri.parse(oldLibraryId));
+      } else {
+        diagLog(`cleanupOldImportedLibraries: keeping library ${oldLibraryId} (used by other step file)`);
+      }
+    }
   }
 }
 
