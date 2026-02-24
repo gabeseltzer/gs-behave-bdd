@@ -1,7 +1,8 @@
 // Unit tests for stepsParser module - step decorator pattern validation
 
 import * as assert from 'assert';
-import { stepFileDecoratorPattern } from '../../../src/parsers/stepsParser';
+import * as vscode from 'vscode';
+import { stepFileDecoratorPattern, parseStepsFileContent, getStepFileSteps, deleteStepFileSteps } from '../../../src/parsers/stepsParser';
 
 suite('stepsParser', () => {
 
@@ -137,6 +138,64 @@ def step_impl(context):
     pass`;
         const firstLine = lines.split('\n')[0];
         assert.ok(pattern.test(firstLine), 'Should match first line of multi-line context');
+      });
+    });
+
+  });
+
+  suite('parseStepsFileContent', () => {
+    const stepContent = `
+@given('I have a precondition')
+def step_impl(context):
+    pass
+`;
+
+    suite('isLibraryFile parameter validation', () => {
+      test('should successfully parse step definitions from non-steps-file URI when isLibraryFile=true', async () => {
+        // Create a URI that doesn't have /steps/ in its path (library file)
+        const libraryUri = vscode.Uri.file('c:/project/lib/helpers.py');
+        const featuresUri = vscode.Uri.file('c:/project/features');
+
+        // Clean up any existing steps first
+        deleteStepFileSteps(featuresUri);
+
+        // Should not throw when isLibraryFile=true
+        await parseStepsFileContent(featuresUri, stepContent, libraryUri, 'test', true);
+
+        // Verify steps were parsed
+        const steps = getStepFileSteps(featuresUri);
+        assert.ok(steps.length > 0, 'Steps should be parsed from library file');
+      });
+
+      test('should throw error for non-steps-file URI when isLibraryFile=false (default)', async () => {
+        // Create a URI that doesn't have /steps/ in its path
+        const nonStepsUri = vscode.Uri.file('c:/project/lib/helpers.py');
+        const featuresUri = vscode.Uri.file('c:/project/features');
+
+        // Should throw when isLibraryFile=false (default)
+        try {
+          await parseStepsFileContent(featuresUri, stepContent, nonStepsUri, 'test', false);
+          assert.fail('Should have thrown an error for non-steps-file URI');
+        } catch (e) {
+          assert.ok(e instanceof Error, 'Should throw an Error');
+          assert.match((e as Error).message, /is not a steps file/, 'Error message should indicate not a steps file');
+        }
+      });
+
+      test('should successfully parse step definitions from steps-file URI when isLibraryFile=false', async () => {
+        // Create a URI that has /steps/ in its path (proper steps file)
+        const stepsUri = vscode.Uri.file('c:/project/steps/helpers.py');
+        const featuresUri = vscode.Uri.file('c:/project/features');
+
+        // Clean up any existing steps first
+        deleteStepFileSteps(featuresUri);
+
+        // Should not throw when URI follows steps file naming convention
+        await parseStepsFileContent(featuresUri, stepContent, stepsUri, 'test', false);
+
+        // Verify steps were parsed
+        const steps = getStepFileSteps(featuresUri);
+        assert.ok(steps.length > 0, 'Steps should be parsed from steps file');
       });
     });
 

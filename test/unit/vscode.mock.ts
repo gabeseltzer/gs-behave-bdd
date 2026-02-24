@@ -120,7 +120,16 @@ export const workspace = {
   getWorkspaceFolder: () => undefined,
   workspaceFolders: [],
   getConfiguration: () => ({
-    get: () => undefined,
+    get: (key: string) => {
+      // Return default values for required configuration keys
+      if (key === 'multiRootRunWorkspacesInParallel') {
+        return true;
+      }
+      if (key === 'xRay') {
+        return false;
+      }
+      return undefined;
+    },
     has: () => false,
     inspect: () => undefined,
     update: () => Promise.resolve()
