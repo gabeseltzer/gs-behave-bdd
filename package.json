@@ -146,11 +146,6 @@
 		"configurationDefaults": {
 			"[gherkin]": {
 				"editor.stickyScroll.enabled": true
-			},
-			"editor.semanticTokenColorCustomizations": {
-				"rules": {
-					"missing_step": "#cf1036"
-				}
 			}
 		},
 		"menus": {

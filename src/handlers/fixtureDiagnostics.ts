@@ -55,7 +55,10 @@ export function validateFixtureTags(document: vscode.TextDocument): void {
       }
     }
 
-    config.diagnostics.set(document.uri, diagnostics);
+    // Preserve existing non-fixture diagnostics (e.g., step diagnostics)
+    const existingDiagnostics = config.diagnostics.get(document.uri) || [];
+    const nonFixtureDiagnostics = [...existingDiagnostics].filter(d => d.code !== 'fixture-not-found');
+    config.diagnostics.set(document.uri, [...nonFixtureDiagnostics, ...diagnostics]);
   }
   catch (e: unknown) {
     try {
@@ -69,5 +72,7 @@ export function validateFixtureTags(document: vscode.TextDocument): void {
 }
 
 export function clearFixtureDiagnostics(uri: vscode.Uri): void {
-  config.diagnostics.delete(uri);
+  const existingDiagnostics = config.diagnostics.get(uri) || [];
+  const nonFixtureDiagnostics = [...existingDiagnostics].filter(d => d.code !== 'fixture-not-found');
+  config.diagnostics.set(uri, nonFixtureDiagnostics);
 }
