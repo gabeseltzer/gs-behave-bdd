@@ -609,6 +609,8 @@ export class FileParser {
           try {
             diagLog(`[reparseFile] Re-resolving imports for step file: ${fileUri.path}`);
 
+            const importResolutionStartTime = performance.now();
+
             // Get all step files in workspace to build visited set
             let stepFiles: vscode.Uri[] = [];
             const tokenSource = new vscode.CancellationTokenSource();
@@ -631,7 +633,9 @@ export class FileParser {
 
             const importedLibraries = await this._parseImportedLibraries(wkspSettings, content, fileUri, pythonExec, visited, cancelToken, "reparseFile", true);
 
-            diagLog(`[reparseFile] _parseImportedLibraries completed, visited set now has ${visited.size} items, found ${importedLibraries.size} direct imports`);
+            const importResolutionEndTime = performance.now();
+            const importResolutionTime = importResolutionEndTime - importResolutionStartTime;
+            diagLog(`[reparseFile] Import resolution completed in ${importResolutionTime.toFixed(2)}ms (${importedLibraries.size} direct imports found, ${visited.size} total files visited)`);
 
             // Clean up old imported libraries that are no longer imported
             cleanupOldImportedLibraries(fileUri, Array.from(importedLibraries));
