@@ -3,7 +3,7 @@ import { WorkspaceSettings } from "../settings";
 import { uriId, sepr, basename, getLines, getWorkspaceUriForFile } from '../common';
 import { diagLog } from '../logger';
 import { config } from '../configuration';
-import { featureRe, featureMultiLineRe, scenarioRe, scenarioOutlineRe, featureFileStepRe, tagRe } from './gherkinPatterns';
+import { featureRe, featureMultiLineRe, scenarioRe, scenarioOutlineRe, featureFileStepRe, tagRe, textBlockDelimiterRe, tableRowRe } from './gherkinPatterns';
 
 const commentedFeatureMultilineReStr = /^\s*#.*Feature:(.*)$/im;
 
@@ -103,6 +103,7 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
   let fileScenarios = 0;
   let fileSteps = 0;
   let lastStepType = "given";
+  let insideStepTextBlock = false;
 
   const fileUriMatchString = uriId(uri);
 
@@ -127,6 +128,24 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
 
     const line = lines[lineNo].trim();
     if (line === '' || line.startsWith("#")) {
+      continue;
+    }
+
+    // Check for text block delimiters (""" or ''')
+    const textBlockMatch = textBlockDelimiterRe.exec(line);
+    if (textBlockMatch) {
+      insideStepTextBlock = !insideStepTextBlock;
+      continue;
+    }
+
+    // Skip lines inside text blocks
+    if (insideStepTextBlock) {
+      continue;
+    }
+
+    // Skip table rows (lines starting with |)
+    const tableRowMatch = tableRowRe.exec(line);
+    if (tableRowMatch) {
       continue;
     }
 
