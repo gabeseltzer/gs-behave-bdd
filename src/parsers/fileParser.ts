@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { performance } from 'perf_hooks';
+import * as path from 'path';
 import { config } from "../configuration";
 import { WorkspaceSettings } from "../settings";
 import { deleteFeatureFileSteps, getFeatureFileSteps, getFeatureNameFromContent } from './featureParser';
@@ -9,6 +10,8 @@ import {
 } from '../common';
 import { parseStepsFileContent, getStepFileSteps, deleteStepFileSteps } from './stepsParser';
 import { parseEnvironmentFileContent, deleteFixtures } from './fixtureParser';
+import { parsePythonImports } from './importParser';
+import { resolveImports } from './importResolver';
 import { TestData, TestFile } from './testFile';
 import { diagLog } from '../logger';
 import { deleteStepMappings, rebuildStepMappings, getStepMappings } from './stepMappings';
@@ -169,11 +172,14 @@ export class FileParser {
       config.logger.showWarn("No step files found", wkspSettings.uri);
     }
 
+    // Store contents as we parse to avoid re-reading
+    const stepFileContents = new Map<string, string>();
     let processedStepFiles = 0;
     for (const uri of stepFiles) {
       if (cancelToken.isCancellationRequested)
         break;
       const content = await getContentFromFilesystem(uri);
+      stepFileContents.set(uriId(uri), content);
       await this._updateStepsFromStepsFileContent(wkspSettings.featuresUri, content, uri, caller);
       processedStepFiles++;
     }
@@ -183,6 +189,19 @@ export class FileParser {
         break;
       const content = await getContentFromFilesystem(uri);
       await parseEnvironmentFileContent(wkspSettings.featuresUri, content, uri, caller);
+    }
+
+    // Now resolve imports from step files
+    try {
+      const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
+      const visited = new Set<string>(stepFiles.map(u => uriId(u)));
+      for (const uri of stepFiles) {
+        if (cancelToken.isCancellationRequested) break;
+        const content = stepFileContents.get(uriId(uri)) ?? '';
+        await this._parseImportedLibraries(wkspSettings, content, uri, pythonExec, visited, cancelToken, caller);
+      }
+    } catch (e) {
+      diagLog(`import resolution error: ${e instanceof Error ? e.message : String(e)}`);
     }
 
     if (cancelToken.isCancellationRequested) {
@@ -200,6 +219,42 @@ export class FileParser {
       throw new Error(`${fileUri.fsPath} is not a steps file`);
 
     await parseStepsFileContent(featuresUri, content, fileUri, caller);
+  }
+
+
+  private async _parseImportedLibraries(
+    wkspSettings: WorkspaceSettings,
+    content: string,
+    fileUri: vscode.Uri,
+    pythonExec: string,
+    visited: Set<string>,
+    cancelToken: vscode.CancellationToken,
+    caller: string
+  ): Promise<void> {
+    if (cancelToken.isCancellationRequested) return;
+
+    const imports = parsePythonImports(content);
+    if (imports.length === 0) return;
+
+    const sourceFileDir = path.dirname(fileUri.fsPath);
+    const resolved = await resolveImports(pythonExec, imports, wkspSettings.projectUri.fsPath, sourceFileDir);
+
+    for (const [, filePath] of resolved) {
+      if (!filePath || !filePath.endsWith('.py')) continue;
+
+      const libUri = vscode.Uri.file(filePath);
+      if (visited.has(uriId(libUri))) continue;
+      visited.add(uriId(libUri));
+
+      try {
+        const libContent = await getContentFromFilesystem(libUri);
+        await parseStepsFileContent(wkspSettings.featuresUri, libContent, libUri, caller, true);
+        // Recurse into the library file's imports
+        await this._parseImportedLibraries(wkspSettings, libContent, libUri, pythonExec, visited, cancelToken, caller);
+      } catch (e) {
+        diagLog(`error parsing library file ${filePath}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
   }
 
 
