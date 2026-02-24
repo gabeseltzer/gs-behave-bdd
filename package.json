@@ -99,7 +99,7 @@
 			{
 				"command": "behave-vsc.findStepReferences",
 				"key": "alt+f12",
-				"when": "!isInEmbeddedEditor && editorTextFocus && resourcePath =~ /steps/ && resourceExtname =~ /\\.py$/"
+				"when": "!isInEmbeddedEditor && editorTextFocus && editorLangId == python && resourceExtname =~ /\\.py$/"
 			},
 			{
 				"command": "behave-vsc.stepReferences.next",
@@ -257,7 +257,6 @@
 		"test": "node ./out/_integrationTests/runTestSuites.js --stable",
 		"pretest": "npm run compitest/tsconfig.json",
 		"watch-tests": "tsc -p test/tsconfig.json -w",
-		"lint": "eslint src --ext ts",
 		"test:unit": "npm run compile-tests && node ./out/test/test/unit/run.js",
 		"test:integration": "npm run compile-tests && node ./out/test/test/integration/runTestSuites.js --stable",
 		"test": "npm run test:unit && npm run test:integration",
