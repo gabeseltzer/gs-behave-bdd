@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { uriId, sepr, basename } from '../common';
 import type { BehaveStepDefinition } from './behaveStepLoader';
 import { StepFileStep, parseRepWildcard, storeStepFileStep } from './stepsParser';
+import * as fs from 'fs';
 import { diagLog } from '../logger';
 
 /**
@@ -18,16 +19,34 @@ export function storeBehaveStepDefinitions(
   behaveDefinitions: BehaveStepDefinition[]
 ): number {
   let stored = 0;
+  // Cache file contents to avoid re-reading the same file multiple times
+  const fileContents = new Map<string, string | undefined>();
 
   for (const behavioral of behaveDefinitions) {
     try {
       // Convert behave definition to VSCode URI for the step file
       const stepFileUri = vscode.Uri.file(behavioral.filePath);
 
+      // Load file content if not cached
+      let fileContent: string | undefined;
+      if (!fileContents.has(behavioral.filePath)) {
+        try {
+          fileContent = fs.readFileSync(behavioral.filePath, 'utf8');
+          fileContents.set(behavioral.filePath, fileContent);
+        } catch (e) {
+          // If we can't read the file, store undefined
+          fileContents.set(behavioral.filePath, undefined);
+          fileContent = undefined;
+        }
+      } else {
+        fileContent = fileContents.get(behavioral.filePath);
+      }
+
       const stepFileStep = createStepFileStepFromBehaveDefinition(
         featuresUri,
         stepFileUri,
-        behavioral
+        behavioral,
+        fileContent || undefined
       );
 
       storeStepFileStep(featuresUri, stepFileStep);
@@ -47,11 +66,13 @@ export function storeBehaveStepDefinitions(
  * - Line number conversion from 1-indexed (behave) to 0-indexed (VSCode)
  * - Pattern conversion from behave format to textAsRe format
  * - Creating the proper key for step mapping
+ * - Finding the actual function definition line (behave returns decorator line)
  */
 export function createStepFileStepFromBehaveDefinition(
   featuresUri: vscode.Uri,
   stepFileUri: vscode.Uri,
-  behaveDef: BehaveStepDefinition
+  behaveDef: BehaveStepDefinition,
+  fileContent?: string
 ): StepFileStep {
   // Normalize step type to lowercase
   const stepType = behaveDef.stepType.toLowerCase();
@@ -67,8 +88,23 @@ export function createStepFileStepFromBehaveDefinition(
   const stepFileStep = new StepFileStep(reKey, stepFileUri, fileName, stepType, textAsRe);
 
   // Convert line number from 1-indexed (behave) to 0-indexed (VSCode)
-  // The lineNumber from behave's registry is where the decorator is
-  const zeroIndexedLine = Math.max(0, behaveDef.lineNumber - 1);
+  // Behave returns the line number of the decorator, but we need the function definition line
+  let zeroIndexedLine = Math.max(0, behaveDef.lineNumber - 1);
+
+  // If we have file content, try to find the actual function definition
+  if (fileContent) {
+    const lines = fileContent.split('\n');
+    // Start from the behave line and search downward for the function definition
+    for (let i = zeroIndexedLine; i < lines.length; i++) {
+      const trimmed = lines[i].trim();
+      if (trimmed.startsWith('def ') && trimmed.includes('(')) {
+        // Found the function definition line
+        zeroIndexedLine = i;
+        break;
+      }
+    }
+  }
+
   stepFileStep.functionDefinitionRange = new vscode.Range(zeroIndexedLine, 0, zeroIndexedLine, 0);
 
   return stepFileStep;

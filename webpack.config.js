@@ -2,8 +2,9 @@
 
 'use strict';
 
-const path = require('path');
-const TerserPlugin = require("terser-webpack-plugin");
+import path from 'path';
+import TerserPlugin from "terser-webpack-plugin";
+import CopyPlugin from "copy-webpack-plugin";
 
 //@ts-check
 /** @typedef {import('webpack').Configuration} WebpackConfig **/
@@ -47,6 +48,14 @@ const extensionConfig = {
     level: "log", // enables logging required for problem matchers
   },
 
+  plugins: [
+    new CopyPlugin({
+      patterns: [
+        { from: "src/python", to: "python" },
+      ],
+    }),
+  ],
+
   optimization: {
     minimize: true,
     minimizer: [
@@ -58,4 +67,4 @@ const extensionConfig = {
 
 };
 
-module.exports = [extensionConfig];
+export default [extensionConfig];

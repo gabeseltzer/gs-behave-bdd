@@ -5,6 +5,8 @@
  */
 
 import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { performance } from 'perf_hooks';
 import { diagLog } from '../logger';
 
@@ -24,88 +26,20 @@ export interface BehaveStepDefinition {
  * 
  * @param pythonExec Path to the Python executable
  * @param projectPath Project root directory (used as cwd for subprocess)
- * @param stepsPath Directory containing step files (e.g., features/steps)
+ * @param stepsPaths Array of directories containing step files (e.g., ["features/steps", "features/grouped/steps"])
  * @returns Array of step definitions discovered by behave
  * @throws Error if behave is not installed or if import errors occur
  */
 export async function loadStepsFromBehave(
   pythonExec: string,
   projectPath: string,
-  stepsPath: string
+  stepsPaths: string[]
 ): Promise<BehaveStepDefinition[]> {
   const startTime = performance.now();
 
   try {
-    // Python script that uses behave's step registry to discover steps
-    const pythonScript = `
-import sys
-import json
-import os
-
-def main():
-    try:
-        # Import behave modules
-        from behave import step_registry
-        from behave import runner_util
-        
-        project_path = sys.argv[1] if len(sys.argv) > 1 else '.'
-        steps_path = sys.argv[2] if len(sys.argv) > 2 else './steps'
-        
-        # Add project to sys.path so imports work
-        if project_path not in sys.path:
-            sys.path.insert(0, project_path)
-        
-        # Load step modules from the steps directory
-        # This triggers decorator execution and registers steps
-        step_dir = os.path.abspath(steps_path)
-        if os.path.exists(step_dir):
-            try:
-                runner_util.load_step_modules([step_dir])
-            except Exception as load_err:
-                print(json.dumps({"error": f"Failed to load steps: {str(load_err)}"}), file=sys.stderr)
-                sys.exit(1)
-        
-        # Get all registered steps from the global registry
-        steps = []
-        registry = step_registry.registry
-        
-        # Registry contains step matchers organized by step type
-        for step_type in ['given', 'when', 'then', 'step']:
-            if step_type in registry.steps:
-                for matcher in registry.steps[step_type]:
-                    # Extract step information
-                    # Use regex_pattern if available, otherwise fall back to pattern
-                    regex_pat = getattr(matcher, 'regex_pattern', None)
-                    if regex_pat is None and hasattr(matcher, 'regex'):
-                        regex_pat = matcher.regex.pattern
-                    if regex_pat is None:
-                        regex_pat = matcher.pattern
-                    
-                    step_info = {
-                        'step_type': step_type,
-                        'pattern': matcher.pattern,  # Original pattern text
-                        'file': matcher.location.filename if hasattr(matcher, 'location') and matcher.location else 'unknown',
-                        'line': matcher.location.line if hasattr(matcher, 'location') and matcher.location else 0,
-                        'regex_pattern': regex_pat
-                    }
-                    steps.append(step_info)
-        
-        # Output JSON to stdout
-        print(json.dumps(steps))
-        sys.exit(0)
-        
-    except ImportError as e:
-        print(json.dumps({"error": f"behave is not installed: {str(e)}"}), file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(json.dumps({"error": f"Unexpected error: {str(e)}"}), file=sys.stderr)
-        sys.exit(1)
-
-if __name__ == '__main__':
-    main()
-`;
-
-    const output = await spawnPython(pythonExec, pythonScript, [projectPath, stepsPath], projectPath);
+    const scriptPath = getStepsScriptPath();
+    const output = await spawnPython(pythonExec, scriptPath, [projectPath, JSON.stringify(stepsPaths)], projectPath);
 
     // Parse JSON output
     interface RawStepInfo {
@@ -145,31 +79,60 @@ if __name__ == '__main__':
 }
 
 /**
- * Spawns Python process with inline script
- * Similar to importResolver's spawnPython but with better error messages for behave errors
+ * Returns the path to the get_steps.py helper script.
+ * In production (webpack bundle), __dirname points to dist/.
+ * In tests (tsc output), __dirname points to out/test/src/parsers/.
+ */
+export function getStepsScriptPath(): string {
+  // When running from webpack bundle, python/ is a sibling of the bundle in dist/
+  const webpackPath = path.join(__dirname, 'python', 'get_steps.py');
+  if (fs.existsSync(webpackPath))
+    return webpackPath;
+
+  // When running from tsc output (tests), walk up to find project root (contains package.json)
+  let dir = __dirname;
+  for (let i = 0; i < 10; i++) {
+    const candidate = path.join(dir, 'src', 'python', 'get_steps.py');
+    if (fs.existsSync(candidate))
+      return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir)
+      break;
+    dir = parent;
+  }
+
+  throw new Error(`Could not find get_steps.py (searched from ${__dirname})`);
+}
+
+/**
+ * Spawns Python process with a script file
  */
 function spawnPython(
   pythonExec: string,
-  script: string,
+  scriptPath: string,
   args: string[],
   cwd: string
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     let stdout = '';
     let stderr = '';
+    let settled = false;
 
-    const cp = spawn(pythonExec, ['-c', script, ...args], {
+    const settle = (err?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      if (err) reject(err);
+      else resolve(stdout.trim());
+    };
+
+    const cp = spawn(pythonExec, [scriptPath, ...args], {
       cwd
     });
 
-    if (!cp.pid) {
-      reject(new Error(`Failed to spawn Python process: ${pythonExec}`));
-      return;
-    }
-
     const timeoutId = setTimeout(() => {
       cp.kill();
-      reject(new Error('Python process timeout after 10 seconds'));
+      settle(new Error('Python process timeout after 10 seconds'));
     }, 10000);
 
     cp.stdout?.on('data', (chunk) => {
@@ -181,12 +144,10 @@ function spawnPython(
     });
 
     cp.on('error', (err) => {
-      clearTimeout(timeoutId);
-      reject(err);
+      settle(new Error(`Failed to spawn Python process: ${pythonExec} (${err.message})`));
     });
 
     cp.on('close', (code) => {
-      clearTimeout(timeoutId);
       if (code !== 0) {
         // Parse error messages for better user feedback
         const stderrLower = stderr.toLowerCase();
@@ -194,16 +155,16 @@ function spawnPython(
         // Check if behave module itself is missing
         if ((stderrLower.includes('modulenotfounderror') || stderrLower.includes('importerror'))
           && stderrLower.includes('behave')) {
-          reject(new Error(`behave is not installed in the Python environment. Please install it: pip install behave`));
+          settle(new Error(`behave is not installed in the Python environment. Please install it: pip install behave`));
         } else if (stderrLower.includes('behave') && stderrLower.includes('not installed')) {
-          reject(new Error(`behave is not installed in the Python environment. Please install it: pip install behave`));
+          settle(new Error(`behave is not installed in the Python environment. Please install it: pip install behave`));
         } else if (stderrLower.includes('importerror') || stderrLower.includes('modulenotfounderror')) {
-          reject(new Error(`Import error in step files: ${stderr}`));
+          settle(new Error(`Import error in step files: ${stderr}`));
         } else {
-          reject(new Error(`Python process exited with code ${code}: ${stderr}`));
+          settle(new Error(`Python process exited with code ${code}: ${stderr}`));
         }
       } else {
-        resolve(stdout.trim());
+        settle();
       }
     });
   });
@@ -211,11 +172,11 @@ function spawnPython(
 
 /**
  * Checks if the Python helper script exists
- * For development, we use inline Python script in spawnPython
- * For production, we could bundle a separate .py file
  */
 export function checkPythonHelperExists(): boolean {
-  // Currently using inline script, so always returns true
-  // Future: check if bundled get_steps.py exists
-  return true;
+  try {
+    return fs.existsSync(getStepsScriptPath());
+  } catch {
+    return false;
+  }
 }

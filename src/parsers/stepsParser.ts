@@ -21,7 +21,6 @@ export class StepFileStep {
     public readonly uri: vscode.Uri,
     public readonly fileName: string,
     public readonly stepType: string,
-    public readonly stepTextRange: vscode.Range,
     public readonly textAsRe: string
   ) { }
 }
@@ -128,7 +127,6 @@ export async function parseStepsFileContent(featuresUri: vscode.Uri, content: st
   let setFuncLineKeys: string[] = [];
   let multiLineBuilding = false;
   let multiLine = "";
-  let startLineNo = 0;
   let multiLineStepType = "";
   const lines = getLines(content);
 
@@ -167,7 +165,6 @@ export async function parseStepsFileContent(featuresUri: vscode.Uri, content: st
     const foundStep = stepFileStepStartRe.exec(line);
     if (foundStep) {
       if (foundStep && line.endsWith("(")) {
-        startLineNo = lineNo;
         multiLineStepType = foundStep[2];
         multiLineBuilding = true;
         continue;
@@ -191,15 +188,11 @@ export async function parseStepsFileContent(featuresUri: vscode.Uri, content: st
       line = `@${multiLineStepType}(${multiLine})`;
       multiLine = "";
     }
-    else {
-      startLineNo = lineNo;
-    }
 
 
     const step = stepFileStepRe.exec(line);
     if (step) {
-      const range = new vscode.Range(new vscode.Position(startLineNo, 0), new vscode.Position(lineNo, step[0].length));
-      const stepFsRk = createStepFileStepAndReKey(featuresUri, stepFileUri, range, step);
+      const stepFsRk = createStepFileStepAndReKey(featuresUri, stepFileUri, step);
       if (stepFileSteps.get(stepFsRk.reKey))
         diagLog("replacing duplicate step file step reKey: " + stepFsRk.reKey);
       stepFileSteps.set(stepFsRk.reKey, stepFsRk.stepFileStep); // map.set() = no duplicate keys allowed (per workspace)
@@ -220,7 +213,7 @@ export function storeStepFileStep(featuresUri: vscode.Uri, stepFileStep: StepFil
   stepFileSteps.set(stepFileStep.key, stepFileStep);
 }
 
-function createStepFileStepAndReKey(featuresUri: vscode.Uri, fileUri: vscode.Uri, range: vscode.Range, step: RegExpExecArray) {
+function createStepFileStepAndReKey(featuresUri: vscode.Uri, fileUri: vscode.Uri, step: RegExpExecArray) {
   const stepType = step[2];
   let textAsRe = step[3].trim();
   textAsRe = textAsRe.replace(/[.*+?^$()|[\]]/g, '\\$&'); // escape any regex chars except for \ { }
@@ -229,6 +222,6 @@ function createStepFileStepAndReKey(featuresUri: vscode.Uri, fileUri: vscode.Uri
   // NOTE: it's important the key contains the featuresUri, NOT the fileUri, because we 
   // don't want to allow duplicate text matches in the workspace
   const reKey = `${uriId(featuresUri)}${sepr}^${stepType}${sepr}${textAsRe}$`;
-  const stepFileStep = new StepFileStep(reKey, fileUri, fileName, stepType, range, textAsRe);
+  const stepFileStep = new StepFileStep(reKey, fileUri, fileName, stepType, textAsRe);
   return { reKey, stepFileStep };
 }
