@@ -213,6 +213,13 @@ export async function parseStepsFileContent(featuresUri: vscode.Uri, content: st
 }
 
 
+// Store a pre-constructed StepFileStep (used when loading from behave registry)
+export function storeStepFileStep(featuresUri: vscode.Uri, stepFileStep: StepFileStep) {
+  if (stepFileSteps.get(stepFileStep.key))
+    diagLog("replacing duplicate step file step reKey: " + stepFileStep.key);
+  stepFileSteps.set(stepFileStep.key, stepFileStep);
+}
+
 function createStepFileStepAndReKey(featuresUri: vscode.Uri, fileUri: vscode.Uri, range: vscode.Range, step: RegExpExecArray) {
   const stepType = step[2];
   let textAsRe = step[3].trim();

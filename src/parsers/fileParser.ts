@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { performance } from 'perf_hooks';
-import * as path from 'path';
 import { config } from "../configuration";
 import { WorkspaceSettings } from "../settings";
 import { deleteFeatureFileSteps, getFeatureFileSteps, getFeatureNameFromContent } from './featureParser';
@@ -8,10 +7,10 @@ import {
   countTestItemsInCollection, getAllTestItems, uriId, getWorkspaceFolder,
   getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem, couldBePythonStepsFile
 } from '../common';
-import { parseStepsFileContent, getStepFileSteps, deleteStepFileSteps, cleanupOldImportedLibraries, recordImportedLibraries } from './stepsParser';
+import { getStepFileSteps, deleteStepFileSteps } from './stepsParser';
 import { parseEnvironmentFileContent, deleteFixtures } from './fixtureParser';
-import { parsePythonImports } from './importParser';
-import { resolveImports } from './importResolver';
+import { loadStepsFromBehave } from './behaveStepLoader';
+import { storeBehaveStepDefinitions } from './stepsParserBehaveAdapter';
 import { TestData, TestFile } from './testFile';
 import { diagLog } from '../logger';
 import { deleteStepMappings, rebuildStepMappings, getStepMappings } from './stepMappings';
@@ -151,15 +150,7 @@ export class FileParser {
     deleteStepFileSteps(wkspSettings.featuresUri);
     deleteFixtures(wkspSettings.featuresUri);
 
-    let stepFiles: vscode.Uri[] = [];
-    if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
-      stepFiles = await findFiles(wkspSettings.stepsSearchUri, "steps", ".py", cancelToken);
-    else
-      stepFiles = await findFiles(wkspSettings.stepsSearchUri, undefined, ".py", cancelToken);
-
-    stepFiles = stepFiles.filter(uri => isStepsFile(uri));
-
-    // Also find environment.py files for fixtures
+    // Find environment.py files for fixtures
     let potentialEnvFiles: vscode.Uri[] = [];
     if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
       potentialEnvFiles = await findFiles(wkspSettings.featuresUri, undefined, ".py", cancelToken);
@@ -168,22 +159,7 @@ export class FileParser {
 
     const environmentFiles = potentialEnvFiles.filter(uri => uri.path.endsWith("/environment.py"));
 
-    if (stepFiles.length < 1 && !cancelToken.isCancellationRequested) {
-      config.logger.showWarn("No step files found", wkspSettings.uri);
-    }
-
-    // Store contents as we parse to avoid re-reading
-    const stepFileContents = new Map<string, string>();
-    let processedStepFiles = 0;
-    for (const uri of stepFiles) {
-      if (cancelToken.isCancellationRequested)
-        break;
-      const content = await getContentFromFilesystem(uri);
-      stepFileContents.set(uriId(uri), content);
-      await this._updateStepsFromStepsFileContent(wkspSettings.featuresUri, content, uri, caller);
-      processedStepFiles++;
-    }
-
+    // Parse environment.py files
     for (const uri of environmentFiles) {
       if (cancelToken.isCancellationRequested)
         break;
@@ -191,102 +167,60 @@ export class FileParser {
       await parseEnvironmentFileContent(wkspSettings.featuresUri, content, uri, caller);
     }
 
-    // Now resolve imports from step files
+    // Load all steps using behave's built-in registry (handles imports automatically)
     try {
       const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
-      const visited = new Set<string>(stepFiles.map(u => uriId(u)));
-      for (const uri of stepFiles) {
-        if (cancelToken.isCancellationRequested) break;
-        const content = stepFileContents.get(uriId(uri)) ?? '';
-        const importedLibraries = await this._parseImportedLibraries(wkspSettings, content, uri, pythonExec, visited, cancelToken, caller, true);
-        // Record which libraries are imported by this step file
-        recordImportedLibraries(uri, Array.from(importedLibraries));
+      const startTime = performance.now();
+
+      // Find step files to determine what to pass to behave
+      let stepFiles: vscode.Uri[] = [];
+      if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
+        stepFiles = await findFiles(wkspSettings.stepsSearchUri, "steps", ".py", cancelToken);
+      else
+        stepFiles = await findFiles(wkspSettings.stepsSearchUri, undefined, ".py", cancelToken);
+
+      stepFiles = stepFiles.filter(uri => isStepsFile(uri));
+
+      // If steps files exist, determine the steps directory to pass to behave
+      let stepsPath = wkspSettings.stepsSearchUri.fsPath;
+      if (stepFiles.length > 0) {
+        // Extract the directory containing step files (usually .../features/steps or .../steps)
+        // For this, we find the first steps file and use its parent directory
+        const firstStepsFile = stepFiles[0];
+        stepsPath = firstStepsFile.fsPath.substring(0, firstStepsFile.fsPath.lastIndexOf('/'));
       }
+
+      const behaveDefinitions = await loadStepsFromBehave(
+        pythonExec,
+        wkspSettings.projectUri.fsPath,
+        stepsPath
+      );
+
+      if (cancelToken.isCancellationRequested) {
+        diagLog(`${caller}: cancelling, _parseStepsFiles stopped after behave load`);
+        return 0;
+      }
+
+      // Convert and store all behave definitions
+      const storedCount = storeBehaveStepDefinitions(wkspSettings.featuresUri, behaveDefinitions);
+
+      const elapsed = Math.round(performance.now() - startTime);
+      diagLog(`${caller}: loaded ${storedCount} steps from behave in ${elapsed}ms`);
+
+      return storedCount;
+
     } catch (e) {
-      diagLog(`import resolution error: ${e instanceof Error ? e.message : String(e)}`);
+      const errMsg = e instanceof Error ? e.message : String(e);
+      diagLog(`behave step loading error: ${errMsg}`);
+      config.logger.showWarn(`Failed to load step definitions: ${errMsg}`, wkspSettings.uri);
+      return 0;
     }
-
-    if (cancelToken.isCancellationRequested) {
-      // either findFiles or loop will have exited early, log it either way
-      diagLog(`${caller}: cancelling, _parseStepFiles stopped`);
-    }
-
-    return processedStepFiles;
   }
 
 
-  private async _updateStepsFromStepsFileContent(featuresUri: vscode.Uri, content: string, fileUri: vscode.Uri, caller: string, isLibraryFile = false) {
-
-    if (!isLibraryFile && !isStepsFile(fileUri))
-      throw new Error(`${fileUri.fsPath} is not a steps file`);
-
-    await parseStepsFileContent(featuresUri, content, fileUri, caller, isLibraryFile);
-  }
 
 
-  private async _parseImportedLibraries(
-    wkspSettings: WorkspaceSettings,
-    content: string,
-    fileUri: vscode.Uri,
-    pythonExec: string,
-    visited: Set<string>,
-    cancelToken: vscode.CancellationToken,
-    caller: string,
-    trackDirectImports = false
-  ): Promise<Set<vscode.Uri>> {
-    const directImports = new Set<vscode.Uri>();
-    if (cancelToken.isCancellationRequested) return directImports;
 
-    const imports = parsePythonImports(content);
-    diagLog(`[_parseImportedLibraries] file=${fileUri.path}, imports=${imports.length}, visited.size=${visited.size}`);
-
-    if (imports.length === 0) {
-      diagLog(`[_parseImportedLibraries] No imports found, returning`);
-      return directImports;
-    }
-
-    const sourceFileDir = path.dirname(fileUri.fsPath);
-    const resolved = await resolveImports(pythonExec, imports, wkspSettings.projectUri.fsPath, sourceFileDir);
-    diagLog(`[_parseImportedLibraries] resolveImports returned ${resolved.size} results`);
-
-    for (const [, filePath] of resolved) {
-      if (!filePath || !filePath.endsWith('.py')) {
-        diagLog(`[_parseImportedLibraries] Skipping: filePath=${filePath}`);
-        continue;
-      }
-
-      const libUri = vscode.Uri.file(filePath);
-      const libUriId = uriId(libUri);
-
-      // Track direct imports only if requested (for non-recursive calls)
-      if (trackDirectImports) {
-        directImports.add(libUri);
-      }
-
-      if (visited.has(libUriId)) {
-        diagLog(`[_parseImportedLibraries] Already visited: ${filePath}`);
-        continue;
-      }
-
-      visited.add(libUriId);
-      diagLog(`[_parseImportedLibraries] Processing library: ${filePath}`);
-
-      try {
-        const libContent = await getContentFromFilesystem(libUri);
-        diagLog(`[_parseImportedLibraries] Parsing library file content: ${filePath}`);
-        await parseStepsFileContent(wkspSettings.featuresUri, libContent, libUri, caller, true);
-        diagLog(`[_parseImportedLibraries] Successfully parsed library file: ${filePath}`);
-
-        // Recurse into the library file's imports
-        diagLog(`[_parseImportedLibraries] Recursing into library file's imports: ${filePath}`);
-        await this._parseImportedLibraries(wkspSettings, libContent, libUri, pythonExec, visited, cancelToken, caller, false);
-      } catch (e) {
-        diagLog(`error parsing library file ${filePath}: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
-
-    return directImports;
-  }
 
 
   private async _updateTestItemFromFeatureFileContent(wkspSettings: WorkspaceSettings, content: string, testData: TestData,
@@ -598,55 +532,50 @@ export class FileParser {
         content = await getContentFromFilesystem(fileUri);
 
       // Handle steps files (in /steps/ folder) and library files (any other Python file)
+      // With behave loader, we reload ALL steps when any step file changes (simpler, ensures correctness)
       if (couldBePythonStepsFile(fileUri) && !isEnvFile) {
         const isLibraryFile = !isStepsFile(fileUri);
         diagLog(`[reparseFile] Starting: file=${fileUri.path}, isLibraryFile=${isLibraryFile}`);
 
-        await this._updateStepsFromStepsFileContent(wkspSettings.featuresUri, content, fileUri, "reparseFile", isLibraryFile);
+        // Reload all steps from behave (handles imports automatically)
+        try {
+          deleteStepFileSteps(wkspSettings.featuresUri);
+          
+          const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
+          const startTime = performance.now();
 
-        // Re-resolve imports for step files (not library files)
-        if (!isLibraryFile) {
-          try {
-            diagLog(`[reparseFile] Re-resolving imports for step file: ${fileUri.path}`);
+          // Find step files to determine what to pass to behave
+          let stepFiles: vscode.Uri[] = [];
+          const tokenSource = new vscode.CancellationTokenSource();
+          const cancelToken = tokenSource.token;
 
-            const importResolutionStartTime = performance.now();
+          if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
+            stepFiles = await findFiles(wkspSettings.stepsSearchUri, "steps", ".py", cancelToken);
+          else
+            stepFiles = await findFiles(wkspSettings.stepsSearchUri, undefined, ".py", cancelToken);
 
-            // Get all step files in workspace to build visited set
-            let stepFiles: vscode.Uri[] = [];
-            const tokenSource = new vscode.CancellationTokenSource();
-            const cancelToken = tokenSource.token;
+          stepFiles = stepFiles.filter(uri => isStepsFile(uri));
 
-            if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
-              stepFiles = await findFiles(wkspSettings.stepsSearchUri, "steps", ".py", cancelToken);
-            else
-              stepFiles = await findFiles(wkspSettings.stepsSearchUri, undefined, ".py", cancelToken);
-
-            stepFiles = stepFiles.filter(uri => isStepsFile(uri));
-
-            // Build visited set with all step files
-            const visited = new Set<string>(stepFiles.map(u => uriId(u)));
-            diagLog(`[reparseFile] Visited set initialized with ${visited.size} step files before import resolution`);
-
-            // Get Python executable and re-resolve imports
-            const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
-            diagLog(`[reparseFile] Calling _parseImportedLibraries, visited set has ${visited.size} items`);
-
-            const importedLibraries = await this._parseImportedLibraries(wkspSettings, content, fileUri, pythonExec, visited, cancelToken, "reparseFile", true);
-
-            const importResolutionEndTime = performance.now();
-            const importResolutionTime = importResolutionEndTime - importResolutionStartTime;
-            diagLog(`[reparseFile] Import resolution completed in ${importResolutionTime.toFixed(2)}ms (${importedLibraries.size} direct imports found, ${visited.size} total files visited)`);
-
-            // Clean up old imported libraries that are no longer imported
-            cleanupOldImportedLibraries(fileUri, Array.from(importedLibraries));
-
-            // Record new imported libraries
-            recordImportedLibraries(fileUri, Array.from(importedLibraries));
-
-            tokenSource.dispose();
-          } catch (e) {
-            diagLog(`reparseFile import resolution error: ${e instanceof Error ? e.message : String(e)}`);
+          // Determine stepsPath: use the directory containing the first step file
+          let stepsPath = wkspSettings.stepsSearchUri.fsPath;
+          if (stepFiles.length > 0) {
+            const firstStepsFile = stepFiles[0];
+            stepsPath = firstStepsFile.fsPath.substring(0, firstStepsFile.fsPath.lastIndexOf('/'));
           }
+
+          const behaveDefinitions = await loadStepsFromBehave(
+            pythonExec,
+            wkspSettings.projectUri.fsPath,
+            stepsPath
+          );
+
+          const storedCount = storeBehaveStepDefinitions(wkspSettings.featuresUri, behaveDefinitions);
+          const elapsed = Math.round(performance.now() - startTime);
+          diagLog(`[reparseFile] Reloaded ${storedCount} steps from behave in ${elapsed}ms`);
+
+          tokenSource.dispose();
+        } catch (e) {
+          diagLog(`[reparseFile] Behave step loading error: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
 
@@ -666,6 +595,7 @@ export class FileParser {
       this._reparsingFile = false;
     }
   }
+
 
 
   private _logTimesToConsole = (callName: string, testCounts: TestCounts, featParseTime: number, stepsParseTime: number,
