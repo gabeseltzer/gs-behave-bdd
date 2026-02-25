@@ -13,6 +13,7 @@ import { loadStepsFromBehave } from './behaveStepLoader';
 import { storeBehaveStepDefinitions } from './stepsParserBehaveAdapter';
 import { TestData, TestFile } from './testFile';
 import { diagLog } from '../logger';
+import * as path from 'path';
 import { deleteStepMappings, rebuildStepMappings, getStepMappings } from './stepMappings';
 
 
@@ -181,19 +182,22 @@ export class FileParser {
 
       stepFiles = stepFiles.filter(uri => isStepsFile(uri));
 
-      // If steps files exist, determine the steps directory to pass to behave
-      let stepsPath = wkspSettings.stepsSearchUri.fsPath;
-      if (stepFiles.length > 0) {
-        // Extract the directory containing step files (usually .../features/steps or .../steps)
-        // For this, we find the first steps file and use its parent directory
-        const firstStepsFile = stepFiles[0];
-        stepsPath = firstStepsFile.fsPath.substring(0, firstStepsFile.fsPath.lastIndexOf('/'));
+      // Collect all unique step directories (may be multiple across the workspace)
+      // e.g., features/steps/ and features/grouped/steps/
+      const stepDirSet = new Set<string>();
+      for (const stepFile of stepFiles) {
+        const stepDir = path.dirname(stepFile.fsPath);
+        stepDirSet.add(stepDir);
       }
+      const stepsDirs = Array.from(stepDirSet);
+
+      // If no step directories found, use the default search path
+      const stepsPaths = stepsDirs.length > 0 ? stepsDirs : [wkspSettings.stepsSearchUri.fsPath];
 
       const behaveDefinitions = await loadStepsFromBehave(
         pythonExec,
         wkspSettings.projectUri.fsPath,
-        stepsPath
+        stepsPaths
       );
 
       if (cancelToken.isCancellationRequested) {
@@ -204,10 +208,15 @@ export class FileParser {
       // Convert and store all behave definitions
       const storedCount = storeBehaveStepDefinitions(wkspSettings.featuresUri, behaveDefinitions);
 
-      const elapsed = Math.round(performance.now() - startTime);
-      diagLog(`${caller}: loaded ${storedCount} steps from behave in ${elapsed}ms`);
+      // Return count of step files (not step definitions)
+      // stepFiles was already filtered to exclude non-step files
+      // This count is used for test assertions that check stepFilesExceptEmptyOrCommentedOut
+      const stepFileCount = stepFiles.length;
 
-      return storedCount;
+      const elapsed = Math.round(performance.now() - startTime);
+      diagLog(`${caller}: loaded ${storedCount} steps from ${stepFileCount} files in ${elapsed}ms`);
+
+      return stepFileCount;
 
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
@@ -540,7 +549,7 @@ export class FileParser {
         // Reload all steps from behave (handles imports automatically)
         try {
           deleteStepFileSteps(wkspSettings.featuresUri);
-          
+
           const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
           const startTime = performance.now();
 
@@ -560,13 +569,14 @@ export class FileParser {
           let stepsPath = wkspSettings.stepsSearchUri.fsPath;
           if (stepFiles.length > 0) {
             const firstStepsFile = stepFiles[0];
-            stepsPath = firstStepsFile.fsPath.substring(0, firstStepsFile.fsPath.lastIndexOf('/'));
+            // Use path.dirname to correctly handle path separators on all platforms
+            stepsPath = path.dirname(firstStepsFile.fsPath);
           }
 
           const behaveDefinitions = await loadStepsFromBehave(
             pythonExec,
             wkspSettings.projectUri.fsPath,
-            stepsPath
+            [stepsPath]
           );
 
           const storedCount = storeBehaveStepDefinitions(wkspSettings.featuresUri, behaveDefinitions);

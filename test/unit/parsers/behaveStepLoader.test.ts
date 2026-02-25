@@ -15,7 +15,7 @@ suite('behaveStepLoader', () => {
   let spawnStub: sinon.SinonStub;
   let diagLogStub: sinon.SinonStub;
   let mockProcess: MockChildProcess;
-  let loadStepsFromBehave: (pythonExec: string, projectPath: string, stepsPath: string) => Promise<BehaveStepDefinition[]>;
+  let loadStepsFromBehave: (pythonExec: string, projectPath: string, stepsPaths: string[]) => Promise<BehaveStepDefinition[]>;
 
   class MockChildProcess extends EventEmitter {
     pid = 12345;
@@ -48,7 +48,7 @@ suite('behaveStepLoader', () => {
   test('should call Python with correct arguments', async () => {
     const pythonExec = 'python';
     const projectPath = '/path/to/project';
-    const stepsPath = '/path/to/project/steps';
+    const stepsPaths = ['/path/to/project/steps'];
 
     // Mock Python process response
     setImmediate(() => {
@@ -56,7 +56,7 @@ suite('behaveStepLoader', () => {
       mockProcess.emit('close', 0);
     });
 
-    await loadStepsFromBehave(pythonExec, projectPath, stepsPath);
+    await loadStepsFromBehave(pythonExec, projectPath, stepsPaths);
 
     assert.ok(spawnStub.calledOnce, 'spawn should be called once');
     const spawnArgs = spawnStub.firstCall.args;
@@ -64,14 +64,14 @@ suite('behaveStepLoader', () => {
     // Verify Python executable
     assert.strictEqual(spawnArgs[0], pythonExec);
 
-    // Verify script is passed via -c flag
+    // Verify args array: [scriptPath, projectPath, stepsPathsJson]
     assert.ok(Array.isArray(spawnArgs[1]), 'spawn args should be an array');
-    assert.strictEqual(spawnArgs[1][0], '-c', 'should use -c flag for inline script');
-    assert.ok(typeof spawnArgs[1][1] === 'string', 'script should be a string');
+    const scriptPath = spawnArgs[1][0] as string;
+    assert.ok(scriptPath.endsWith('get_steps.py'), 'first arg should be the Python script path');
 
     // Verify project and steps paths are passed as arguments
     assert.ok(spawnArgs[1].includes(projectPath), 'project path should be in arguments');
-    assert.ok(spawnArgs[1].includes(stepsPath), 'steps path should be in arguments');
+    assert.ok(spawnArgs[1].includes(JSON.stringify(stepsPaths)), 'steps paths JSON should be in arguments');
 
     // Verify cwd is set to project path
     assert.ok(spawnArgs[2], 'spawn options should exist');
@@ -81,7 +81,7 @@ suite('behaveStepLoader', () => {
   test('should parse JSON output from Python script', async () => {
     const pythonExec = 'python';
     const projectPath = '/path/to/project';
-    const stepsPath = '/path/to/project/steps';
+    const stepsPath = ['/path/to/project/steps'];
 
     const mockSteps = [
       {
@@ -125,7 +125,7 @@ suite('behaveStepLoader', () => {
   test('should handle Python script errors', async () => {
     const pythonExec = 'python';
     const projectPath = '/path/to/project';
-    const stepsPath = '/path/to/project/steps';
+    const stepsPath = ['/path/to/project/steps'];
 
     setImmediate(() => {
       mockProcess.stderr.emit('data', 'ModuleNotFoundError: No module named \'behave\'');
@@ -142,7 +142,7 @@ suite('behaveStepLoader', () => {
   test('should handle JSON parse errors', async () => {
     const pythonExec = 'python';
     const projectPath = '/path/to/project';
-    const stepsPath = '/path/to/project/steps';
+    const stepsPath = ['/path/to/project/steps'];
 
     setImmediate(() => {
       mockProcess.stdout.emit('data', 'Invalid JSON output');
@@ -159,10 +159,14 @@ suite('behaveStepLoader', () => {
   test('should handle process spawn failure', async () => {
     const pythonExec = 'python';
     const projectPath = '/path/to/project';
-    const stepsPath = '/path/to/project/steps';
+    const stepsPath = ['/path/to/project/steps'];
 
-    // Mock process with no PID (spawn failure)
-    mockProcess.pid = undefined as unknown as number;
+    // Simulate spawn failure (ENOENT) by emitting error event
+    setImmediate(() => {
+      const err = new Error('spawn python ENOENT') as NodeJS.ErrnoException;
+      err.code = 'ENOENT';
+      mockProcess.emit('error', err);
+    });
 
     await assert.rejects(
       async () => await loadStepsFromBehave(pythonExec, projectPath, stepsPath),
@@ -174,7 +178,7 @@ suite('behaveStepLoader', () => {
   test('should handle process timeout', async () => {
     const pythonExec = 'python';
     const projectPath = '/path/to/project';
-    const stepsPath = '/path/to/project/steps';
+    const stepsPath = ['/path/to/project/steps'];
 
     // Don't emit any events - let it timeout
     // Note: We use a short timeout in the actual implementation
@@ -189,7 +193,7 @@ suite('behaveStepLoader', () => {
   test('should handle import errors in step files', async () => {
     const pythonExec = 'python';
     const projectPath = '/path/to/project';
-    const stepsPath = '/path/to/project/steps';
+    const stepsPath = ['/path/to/project/steps'];
 
     setImmediate(() => {
       mockProcess.stderr.emit('data', 'ImportError: cannot import name \'something\' from \'lib.library_steps\'');
@@ -203,30 +207,23 @@ suite('behaveStepLoader', () => {
     );
   });
 
-  test('should construct correct Python script path', async () => {
+  test('should use correct Python script file', async () => {
     const pythonExec = 'python';
     const projectPath = '/path/to/project';
-    const stepsPath = '/path/to/project/steps';
+    const stepsPaths = ['/path/to/project/steps'];
 
     setImmediate(() => {
       mockProcess.stdout.emit('data', '[]');
       mockProcess.emit('close', 0);
     });
 
-    await loadStepsFromBehave(pythonExec, projectPath, stepsPath);
+    await loadStepsFromBehave(pythonExec, projectPath, stepsPaths);
 
     const spawnArgs = spawnStub.firstCall.args;
-    const script = spawnArgs[1][1] as string;
+    const scriptPath = spawnArgs[1][0] as string;
 
-    // Verify script imports behave
-    assert.ok(script.includes('import behave') || script.includes('from behave'),
-      'script should import behave');
-
-    // Verify script uses step registry
-    assert.ok(script.includes('registry') || script.includes('step_registry'),
-      'script should reference step registry');
-
-    // Verify script outputs JSON
-    assert.ok(script.includes('json'), 'script should use json module');
+    // Verify script path points to get_steps.py
+    assert.ok(scriptPath.endsWith('get_steps.py'),
+      `script path should end with get_steps.py, got: ${scriptPath}`);
   });
 });

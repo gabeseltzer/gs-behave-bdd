@@ -37,14 +37,14 @@ suite('Behave Step Registry Integration', () => {
   test('should discover all local step definitions', async function () {
     this.timeout(30000);
 
-    const wkspUri = getWorkspaceUri('simple');
+    const wkspUri = getWorkspaceUri('step library');
     const projectPath = wkspUri.fsPath;
-    const stepsPath = path.join(projectPath, 'features', 'steps');
-    const pythonExec = 'python'; // Use default python from environment
+    const stepsPath = path.join(projectPath, 'steps');
+    const pythonExec = 'python';
 
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, stepsPath);
+    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
 
-    // The simple project should have several steps defined locally
+    // The step library project should have steps defined locally and via imports
     assert.ok(steps.length > 0, 'should find at least one step definition');
 
     // Verify step structure
@@ -59,7 +59,7 @@ suite('Behave Step Registry Integration', () => {
       assert.ok(step.regex, 'step should have regex');
     }
 
-    console.log(`Found ${steps.length} steps in simple project`);
+    console.log(`Found ${steps.length} steps in step library project`);
     steps.forEach(step => {
       console.log(`  ${step.stepType}: "${step.pattern}" at ${path.basename(step.filePath)}:${step.lineNumber}`);
     });
@@ -73,7 +73,7 @@ suite('Behave Step Registry Integration', () => {
     const stepsPath = path.join(projectPath, 'steps');
     const pythonExec = 'python';
 
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, stepsPath);
+    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
 
     // Should find steps from both local steps and imported library
     assert.ok(steps.length > 0, 'should find step definitions');
@@ -104,7 +104,7 @@ suite('Behave Step Registry Integration', () => {
     const stepsPath = path.join(projectPath, 'steps');
     const pythonExec = 'python';
 
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, stepsPath);
+    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
 
     // Find step with typed parameter {a:d}
     const addStep = steps.find(s => s.pattern.includes('add') && s.pattern.includes('{a:d}'));
@@ -123,22 +123,22 @@ suite('Behave Step Registry Integration', () => {
 
     // Verify it's different from simple {param} replacement
     // Our current AST parser just converts {a:d} to .* which is inadequate
-    assert.ok(!addStep.regex.includes('.*'), 
+    assert.ok(!addStep.regex.includes('.*'),
       'regex should not use simple .* wildcard for typed parameters');
   });
 
   test('should handle behave not installed error gracefully', async function () {
     this.timeout(30000);
 
-    const wkspUri = getWorkspaceUri('simple');
+    const wkspUri = getWorkspaceUri('step library');
     const projectPath = wkspUri.fsPath;
-    const stepsPath = path.join(projectPath, 'features', 'steps');
-    
+    const stepsPath = path.join(projectPath, 'steps');
+
     // Use a non-existent Python executable
     const pythonExec = 'python-nonexistent-12345';
 
     await assert.rejects(
-      async () => await loadStepsFromBehave(pythonExec, projectPath, stepsPath),
+      async () => await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]),
       (err: Error) => {
         return err.message.includes('spawn') || err.message.includes('not found');
       },
@@ -149,14 +149,12 @@ suite('Behave Step Registry Integration', () => {
   test('should discover steps from multiple step files', async function () {
     this.timeout(30000);
 
-    // Use a project with multiple step files if available
-    // Otherwise use simple project
-    const wkspUri = getWorkspaceUri('simple');
+    const wkspUri = getWorkspaceUri('step library');
     const projectPath = wkspUri.fsPath;
-    const stepsPath = path.join(projectPath, 'features', 'steps');
+    const stepsPath = path.join(projectPath, 'steps');
     const pythonExec = 'python';
 
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, stepsPath);
+    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
 
     // Group steps by file
     const stepsByFile = new Map<string, typeof steps>();
@@ -188,15 +186,15 @@ suite('Behave Step Registry Integration', () => {
     const stepsPath = path.join(projectPath, 'steps');
     const pythonExec = 'python';
 
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, stepsPath);
+    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
 
     // All steps should have valid line numbers
     for (const step of steps) {
       assert.ok(typeof step.lineNumber === 'number', 'lineNumber should be a number');
       assert.ok(step.lineNumber > 0, 'lineNumber should be positive');
-      
+
       // Line numbers should be reasonable (not in the thousands for these small test files)
-      assert.ok(step.lineNumber < 1000, 
+      assert.ok(step.lineNumber < 1000,
         `lineNumber seems unreasonable: ${step.lineNumber} for ${step.pattern}`);
     }
   });
@@ -209,7 +207,7 @@ suite('Behave Step Registry Integration', () => {
     const stepsPath = path.join(projectPath, 'steps');
     const pythonExec = 'python';
 
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, stepsPath);
+    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
 
     // Look for any steps with typed parameters
     const typedSteps = steps.filter(s => s.pattern.includes(':'));
@@ -219,9 +217,9 @@ suite('Behave Step Registry Integration', () => {
       for (const step of typedSteps) {
         console.log(`  Pattern: ${step.pattern}`);
         console.log(`  Regex: ${step.regex}`);
-        
+
         // Verify regex is not just a simple wildcard replacement
-        assert.ok(!step.regex.includes('.*.*'), 
+        assert.ok(!step.regex.includes('.*.*'),
           'regex should not have consecutive .* wildcards from naive replacement');
       }
     } else {

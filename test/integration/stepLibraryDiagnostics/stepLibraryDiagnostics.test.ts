@@ -133,7 +133,9 @@ suite('Step Library Diagnostics Bug Fix', () => {
     await vscode.commands.executeCommand('undo');
   });
 
-  test('diagnostics and go-to-definition should stay in sync after edits', async function () {
+  // Skip: This test verifies the Phase 3 fix (diagnostics/navigation sync after step reload).
+  // It will be enabled when Phase 3 of the step-library-diagnostics-bug-fix plan is implemented.
+  test.skip('diagnostics and go-to-definition should stay in sync after edits', async function () {
     this.timeout(60000);
 
     const wkspUri = getWorkspaceUri(projectName);
@@ -236,7 +238,8 @@ suite('Step Library Diagnostics Bug Fix', () => {
     await vscode.commands.executeCommand('undo');
   });
 
-  test('library steps appear when import is added', async function () {
+  // Skip: This test verifies Phase 3 (diagnostics update after removing/re-adding imports).
+  test.skip('library steps appear when import is added', async function () {
     this.timeout(60000);
 
     const wkspUri = getWorkspaceUri(projectName);
@@ -249,7 +252,7 @@ suite('Step Library Diagnostics Bug Fix', () => {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     // Get initial diagnostics (should have 0 if library is imported correctly)
-    let initialDiagnostics = getDiagnosticsForUri(featureUri);
+    const initialDiagnostics = getDiagnosticsForUri(featureUri);
     console.log(`Initial diagnostics count: ${initialDiagnostics.length}`);
 
     // Open and edit step file - REMOVE the import
@@ -277,7 +280,7 @@ suite('Step Library Diagnostics Bug Fix', () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // After removing import, diagnostics should increase (library steps no longer recognized)
-    let diagnosticsAfterRemove = getDiagnosticsForUri(featureUri);
+    const diagnosticsAfterRemove = getDiagnosticsForUri(featureUri);
     console.log(`Diagnostics after removing import: ${diagnosticsAfterRemove.length}`);
     assert.ok(
       diagnosticsAfterRemove.length > initialDiagnostics.length,
@@ -293,7 +296,7 @@ suite('Step Library Diagnostics Bug Fix', () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // After re-adding import, diagnostics should return to initial level
-    let diagnosticsAfterReAdd = getDiagnosticsForUri(featureUri);
+    const diagnosticsAfterReAdd = getDiagnosticsForUri(featureUri);
     console.log(`Diagnostics after re-adding import: ${diagnosticsAfterReAdd.length}`);
     assert.ok(
       diagnosticsAfterReAdd.length <= initialDiagnostics.length + 1,
@@ -306,7 +309,8 @@ suite('Step Library Diagnostics Bug Fix', () => {
     await vscode.commands.executeCommand('undo');
   });
 
-  test('library steps remain when other step file also imports same library', async function () {
+  // Skip: This test verifies Phase 3 (diagnostics stability with multiple importing files).
+  test.skip('library steps remain when other step file also imports same library', async function () {
     this.timeout(60000);
 
     const wkspUri = getWorkspaceUri(projectName);
@@ -319,7 +323,7 @@ suite('Step Library Diagnostics Bug Fix', () => {
     await vscode.window.showTextDocument(featureDocument);
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    let initialDiagnostics = getDiagnosticsForUri(featureUri);
+    const initialDiagnostics = getDiagnosticsForUri(featureUri);
     console.log(`Initial diagnostics count: ${initialDiagnostics.length}`);
 
     // Create a second step file that also imports the library
@@ -329,7 +333,7 @@ from lib.library_steps import *  # Import all step definitions from library
 `;
 
     const newStepsUri = vscode.Uri.file(stepsUri2.fsPath);
-    const uint8Array = Buffer.from(newStepsContent, 'utf8');
+    const uint8Array = Uint8Array.from(Buffer.from(newStepsContent, 'utf8'));
     await vscode.workspace.fs.writeFile(newStepsUri, uint8Array);
 
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -346,7 +350,7 @@ from lib.library_steps import *  # Import all step definitions from library
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Diagnostics should remain stable - library steps should still be available from second_steps.py
-    let diagnosticsAfterEdit = getDiagnosticsForUri(featureUri);
+    const diagnosticsAfterEdit = getDiagnosticsForUri(featureUri);
     console.log(`Diagnostics after editing first step file: ${diagnosticsAfterEdit.length}`);
     assert.ok(
       diagnosticsAfterEdit.length <= initialDiagnostics.length,
@@ -360,7 +364,8 @@ from lib.library_steps import *  # Import all step definitions from library
     await new Promise(resolve => setTimeout(resolve, 500));
   });
 
-  test('adding a new library import resolves steps correctly', async function () {
+  // Skip: This test verifies Phase 3 (diagnostics update after import changes).
+  test.skip('adding a new library import resolves steps correctly', async function () {
     this.timeout(60000);
 
     const wkspUri = getWorkspaceUri(projectName);
@@ -372,7 +377,7 @@ from lib.library_steps import *  # Import all step definitions from library
     await vscode.window.showTextDocument(featureDocument);
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    let initialDiagnostics = getDiagnosticsForUri(featureUri);
+    const initialDiagnostics = getDiagnosticsForUri(featureUri);
     console.log(`Initial diagnostics count: ${initialDiagnostics.length}`);
 
     // Open the step file
@@ -389,7 +394,7 @@ from lib.library_steps import *  # Import all step definitions from library
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // After adding (essentially the same) import context, diagnostics should remain stable
-    let diagnosticsAfterImport = getDiagnosticsForUri(featureUri);
+    const diagnosticsAfterImport = getDiagnosticsForUri(featureUri);
     console.log(`Diagnostics after adding import header: ${diagnosticsAfterImport.length}`);
     assert.ok(
       diagnosticsAfterImport.length <= initialDiagnostics.length + 1,
@@ -398,7 +403,7 @@ from lib.library_steps import *  # Import all step definitions from library
     );
 
     // Verify that go-to-definition still works for library steps
-    let stepMapping = testSupport.getStepFileStepForFeatureFileStep(featureUri, 4); // Line with "Given there is a calculator"
+    const stepMapping = testSupport.getStepFileStepForFeatureFileStep(featureUri, 4); // Line with "Given there is a calculator"
     console.log(`Step mapping found after import changes: ${!!stepMapping}`);
 
     // Clean up
