@@ -44,15 +44,18 @@
     - `code --install-extension ms-python.python` (if not already installed)
     - `code --install-extension dbaeumer.vscode-eslint`
     - `code --install-extension amodio.tsl-problem-matcher`
-8. Install behave 1.2.6 globally (for simplicity, no venv is used in the example projects):
+8. Install behave 1.3.3 globally (the extension and integration tests use the system Python interpreter from the ms-python.python extension, not a virtual environment):
     - `pip install behave==1.2.6`
     - Change to the root directory: `cd /` (or `cd \` on Windows)
     - Ensure that this global command works from the root directory: `"python" -m behave --version` (include the quotes)
-9. Change back to the cloned directory. Check that all tests pass BEFORE opening visual studio code. This will confirm your environment is set up correctly before you start development.
-    - `cd <mysourcedir>/behave-vsc`
+9. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and set up the Python dev tooling virtual environment (for mypy and ruff):
+    - Install uv: see [uv installation docs](https://docs.astral.sh/uv/getting-started/installation/)
+    - Change back to the cloned directory: `cd <mysourcedir>/behave-vsc`
+    - `uv sync`
+10. Check that all tests pass BEFORE opening visual studio code. This will confirm your environment is set up correctly before you start development.
     - `npm run test`
-10. If any of the tests fail, then double-check the steps above. Otherwise, you can debug them - see [Debugging integration tests](#debugging-integration-tests) further down.
-11. Note - if at any point you perform a `git clean`, or pull a new version of the source code, or switch branch, you will need to run `npm install` again.
+11. If any of the tests fail, then double-check the steps above. Otherwise, you can debug them - see [Debugging integration tests](#debugging-integration-tests) further down.
+12. Note - if at any point you perform a `git clean`, or pull a new version of the source code, or switch branch, you will need to run `npm install` and `uv sync` again.
 
 ---
 

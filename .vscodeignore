@@ -21,3 +21,6 @@ images/behave-vsc.gif
 **/venv/**
 .specstory/**
 **/.mypy_cache/**
+**/.ruff_cache/**
+uv.lock
+pyproject.toml

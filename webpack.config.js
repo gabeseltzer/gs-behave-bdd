@@ -3,8 +3,12 @@
 'use strict';
 
 import path from 'path';
+import { fileURLToPath } from 'url';
 import TerserPlugin from "terser-webpack-plugin";
 import CopyPlugin from "copy-webpack-plugin";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 //@ts-check
 /** @typedef {import('webpack').Configuration} WebpackConfig **/

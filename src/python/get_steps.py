@@ -9,10 +9,13 @@ Outputs JSON array to stdout:
   [{"step_type": "given", "pattern": "...", "file": "...", "line": 1, "regex_pattern": "..."}, ...]
 """
 
+from __future__ import annotations
+
 import importlib.util
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from behave import runner_util, step_registry
 
@@ -52,9 +55,9 @@ def load_step_directories(steps_paths: list[str]) -> None:
     sys.exit(1)
 
 
-def collect_steps_from_registry(registry) -> list:
+def collect_steps_from_registry(registry: Any) -> list[dict[str, Any]]:
   """Collect all registered steps from the registry."""
-  steps = []
+  steps: list[dict[str, Any]] = []
   for step_type in ["given", "when", "then", "step"]:
     if step_type not in registry.steps:
       continue
@@ -79,17 +82,17 @@ def collect_steps_from_registry(registry) -> list:
   return steps
 
 
-def _get_regex_pattern(matcher):
+def _get_regex_pattern(matcher: Any) -> str:
   """Extract regex pattern from matcher."""
   regex_pat = getattr(matcher, "regex_pattern", None)
   if regex_pat is None and hasattr(matcher, "regex"):
     regex_pat = matcher.regex.pattern
   if regex_pat is None:
     regex_pat = matcher.pattern
-  return regex_pat
+  return str(regex_pat)
 
 
-def _get_file_path(matcher) -> str:
+def _get_file_path(matcher: Any) -> str:
   """Get file path from matcher and convert to absolute path."""
   file_path = (
     matcher.location.filename
@@ -101,7 +104,7 @@ def _get_file_path(matcher) -> str:
   return file_path
 
 
-def main():
+def main() -> None:
   """Main entry point for step discovery."""
   try:
     project_path = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -126,10 +129,6 @@ def main():
   except (OSError, ValueError, json.JSONDecodeError) as e:
     print(json.dumps({"error": f"Unexpected error: {e!s}"}), file=sys.stderr)
     sys.exit(1)
-
-
-if __name__ == "__main__":
-  main()
 
 
 if __name__ == "__main__":
