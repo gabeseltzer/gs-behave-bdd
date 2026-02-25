@@ -108,7 +108,7 @@ suite('stepDiagnostics', () => {
       );
       const stepFilStep = new stepsParser.StepFileStep(
         'skey1', vscode.Uri.file('/test/steps/steps.py'), 'steps.py', 'given',
-        new vscode.Range(1, 0, 1, 20), 'test step'
+        'test step'
       );
       const setStub = setupValidateStubs({
         featureSteps: [['key1', featureFileStep]],
@@ -250,11 +250,11 @@ suite('stepDiagnostics', () => {
       );
       const stepDef1 = new stepsParser.StepFileStep(
         'skey1', vscode.Uri.file('/test/steps/common.py'), 'common.py', 'given',
-        new vscode.Range(1, 0, 1, 20), 'test step 1'
+        'test step 1'
       );
       const stepDef2 = new stepsParser.StepFileStep(
         'skey2', vscode.Uri.file('/test/steps/login.py'), 'login.py', 'when',
-        new vscode.Range(5, 0, 5, 25), 'test step 2'
+        'test step 2'
       );
       const setStub = setupValidateStubs({
         featureSteps: [['key1', featureFileStep]],
@@ -339,7 +339,7 @@ suite('stepDiagnostics', () => {
 
       const matchedStepDef = new stepsParser.StepFileStep(
         'skey1', vscode.Uri.file('/test/steps/steps.py'), 'steps.py', 'given',
-        new vscode.Range(1, 0, 1, 20), 'matched step'
+        'matched step'
       );
 
       sandbox.stub(common, 'isFeatureFile').returns(true);
@@ -397,7 +397,7 @@ suite('stepDiagnostics', () => {
       // Second validation: step is now matched
       const stepDef = new stepsParser.StepFileStep(
         'skey1', vscode.Uri.file('/test/steps/steps.py'), 'steps.py', 'given',
-        new vscode.Range(1, 0, 1, 20), 'test step'
+        'test step'
       );
 
       setStub = setupValidateStubs({
@@ -458,7 +458,7 @@ suite('stepDiagnostics', () => {
       // Step from a library file (not in steps/ folder)
       const libraryStepDef = new stepsParser.StepFileStep(
         'lib-key1', vscode.Uri.file('/test/lib/common_steps.py'), 'common_steps.py', 'given',
-        new vscode.Range(3, 0, 3, 28), 'user is logged in'
+        'user is logged in'
       );
 
       const setStub = setupValidateStubs({
@@ -490,7 +490,7 @@ suite('stepDiagnostics', () => {
       // Step from library file
       const libraryStepDef = new stepsParser.StepFileStep(
         'lib-key1', vscode.Uri.file('/test/lib/common_steps.py'), 'common_steps.py', 'given',
-        new vscode.Range(3, 0, 3, 28), 'user is logged in'
+        'user is logged in'
       );
 
       sandbox.stub(common, 'isFeatureFile').returns(true);
@@ -675,7 +675,7 @@ suite('stepDiagnostics', () => {
       getStepStub.withArgs(mockUri, 2).returns(undefined); // Before block: no match
       getStepStub.withArgs(mockUri, 8).returns(new stepsParser.StepFileStep(
         'skey2', vscode.Uri.file('/test/steps/steps.py'), 'steps.py', 'then',
-        new vscode.Range(10, 0, 10, 18), 'verify result'
+        'verify result'
       )); // After block: matched
 
       sandbox.stub(stepsParser, 'getStepFileSteps').returns([]);
@@ -707,7 +707,7 @@ suite('stepDiagnostics', () => {
 
       const stepDef = new stepsParser.StepFileStep(
         'skey1', vscode.Uri.file('/test/steps/steps.py'), 'steps.py', 'when',
-        new vscode.Range(5, 0, 5, 25), 'action is taken'
+        'action is taken'
       );
 
       sandbox.stub(common, 'isFeatureFile').returns(true);
@@ -863,7 +863,7 @@ suite('stepDiagnostics', () => {
       const getStepStub = sandbox.stub(stepMappings, 'getStepFileStepForFeatureFileStep');
       getStepStub.withArgs(mockUri, 4).returns(new stepsParser.StepFileStep(
         'skey1', vscode.Uri.file('/test/steps/steps.py'), 'steps.py', 'given',
-        new vscode.Range(1, 0, 1, 28), 'a data table exists'
+        'a data table exists'
       )); // Before table: matched
       getStepStub.withArgs(mockUri, 8).returns(undefined); // After table: no match
 

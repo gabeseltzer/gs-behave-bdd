@@ -44,7 +44,6 @@ suite('Navigation Providers with Library Steps', () => {
         libraryStepUri,
         'library_steps.py',
         'given',
-        new vscode.Range(1, 0, 1, 30),
         'I have a step'
       );
 
@@ -93,7 +92,6 @@ suite('Navigation Providers with Library Steps', () => {
         libraryStepUri,
         'library_steps.py',
         'given',
-        new vscode.Range(1, 0, 1, 30),
         'I have a library step'
       );
 
@@ -137,7 +135,6 @@ suite('Navigation Providers with Library Steps', () => {
         stepsFileUri,
         'steps.py',
         'given',
-        new vscode.Range(1, 0, 1, 30),
         'I have a local step'
       );
 
@@ -178,7 +175,6 @@ suite('Navigation Providers with Library Steps', () => {
         libraryStepUri,
         'library_steps.py',
         'given',
-        new vscode.Range(5, 0, 5, 40),
         'I have a library step'
       );
 
@@ -232,7 +228,6 @@ suite('Navigation Providers with Library Steps', () => {
         libraryStepUri,
         'library_steps.py',
         'given',
-        new vscode.Range(5, 0, 5, 40),
         'I have a library step'
       );
 
@@ -271,7 +266,6 @@ suite('Navigation Providers with Library Steps', () => {
         stepsFileUri,
         'steps.py',
         'given',
-        new vscode.Range(3, 0, 3, 30),
         'I have a local step'
       );
 
