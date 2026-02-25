@@ -9,17 +9,38 @@ import * as commonModule from '../../../src/common';
 import * as stepsMapModule from '../../../src/parsers/stepMappings';
 import * as configModule from '../../../src/configuration';
 
+// Type to access private methods for testing
+type FileParserWithPrivates = FileParser & {
+  _parseImportedLibraries(
+    wkspSettings: WorkspaceSettings,
+    content: string,
+    fileUri: vscode.Uri,
+    pythonExec: string,
+    visited: Set<string>,
+    cancelToken: vscode.CancellationToken,
+    caller: string,
+    trackDirectImports?: boolean
+  ): Promise<Set<vscode.Uri>>;
+  _updateStepsFromStepsFileContent(
+    featuresUri: vscode.Uri,
+    content: string,
+    fileUri: vscode.Uri,
+    caller: string,
+    isLibraryFile?: boolean
+  ): Promise<void>;
+};
+
 suite('fileParser - reparseFile', () => {
   let fileParser: FileParser;
   let parseImportedLibrariesStub: sinon.SinonStub;
   let updateStepsStub: sinon.SinonStub;
   let isStepsFileStub: sinon.SinonStub;
-  let isFeatureFileStub: sinon.SinonStub;
-  let couldBePythonStepsFileStub: sinon.SinonStub;
-  let getContentFromFilesystemStub: sinon.SinonStub;
-  let rebuildStepMappingsStub: sinon.SinonStub;
-  let findFilesStub: sinon.SinonStub;
-  let getPythonExecutableStub: sinon.SinonStub;
+  let _isFeatureFileStub: sinon.SinonStub;
+  let _couldBePythonStepsFileStub: sinon.SinonStub;
+  let _getContentFromFilesystemStub: sinon.SinonStub;
+  let _rebuildStepMappingsStub: sinon.SinonStub;
+  let _findFilesStub: sinon.SinonStub;
+  let _getPythonExecutableStub: sinon.SinonStub;
 
   const wkspUri = vscode.Uri.file('c:/test-workspace');
   const featuresUri = vscode.Uri.joinPath(wkspUri, 'features');
@@ -39,28 +60,28 @@ suite('fileParser - reparseFile', () => {
     fileParser = new FileParser();
 
     // Stub the private methods
-    parseImportedLibrariesStub = sinon.stub(
-      fileParser as any,
+    parseImportedLibrariesStub = (sinon.stub(
+      fileParser as FileParserWithPrivates,
       '_parseImportedLibraries'
-    ).resolves();
+    ) as sinon.SinonStub).resolves();
 
-    updateStepsStub = sinon.stub(
-      fileParser as any,
+    updateStepsStub = (sinon.stub(
+      fileParser as FileParserWithPrivates,
       '_updateStepsFromStepsFileContent'
-    ).resolves();
+    ) as sinon.SinonStub).resolves();
 
     // Stub common functions
     isStepsFileStub = sinon.stub(commonModule, 'isStepsFile').returns(false);
-    isFeatureFileStub = sinon.stub(commonModule, 'isFeatureFile').returns(false);
-    couldBePythonStepsFileStub = sinon.stub(commonModule, 'couldBePythonStepsFile').returns(true);
-    getContentFromFilesystemStub = sinon.stub(commonModule, 'getContentFromFilesystem').resolves('from lib import helper\n');
-    findFilesStub = sinon.stub(commonModule, 'findFiles').resolves([stepsFileUri]);
+    _isFeatureFileStub = sinon.stub(commonModule, 'isFeatureFile').returns(false);
+    _couldBePythonStepsFileStub = sinon.stub(commonModule, 'couldBePythonStepsFile').returns(true);
+    _getContentFromFilesystemStub = sinon.stub(commonModule, 'getContentFromFilesystem').resolves('from lib import helper\n');
+    _findFilesStub = sinon.stub(commonModule, 'findFiles').resolves([stepsFileUri]);
 
     // Stub rebuildStepMappings
-    rebuildStepMappingsStub = sinon.stub(stepsMapModule, 'rebuildStepMappings');
+    _rebuildStepMappingsStub = sinon.stub(stepsMapModule, 'rebuildStepMappings');
 
     // Stub getPythonExecutable
-    getPythonExecutableStub = sinon.stub(configModule.config, 'getPythonExecutable').resolves('python3');
+    _getPythonExecutableStub = sinon.stub(configModule.config, 'getPythonExecutable').resolves('python3');
   });
 
   teardown(() => {
