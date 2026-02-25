@@ -69,3 +69,12 @@ export function clearStepDiagnostics(uri: vscode.Uri): void {
   const nonStepDiagnostics = [...existingDiagnostics].filter(d => d.code !== 'step-not-found');
   config.diagnostics.set(uri, nonStepDiagnostics);
 }
+
+export function validateAllOpenFeatureDocuments(): void {
+  const docs = vscode.workspace.textDocuments;
+  for (const document of docs) {
+    if (isFeatureFile(document.uri)) {
+      validateStepDefinitions(document);
+    }
+  }
+}

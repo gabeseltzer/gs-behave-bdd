@@ -105,8 +105,8 @@ suite('Step Library Diagnostics Bug Fix', () => {
       2000
     );
 
-    // Give the extension time to process the change and update diagnostics
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait for the extension to finish parsing steps
+    await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
 
     // After editing: diagnostics count should REMAIN THE SAME or improve
     // (the bug is that diagnostics might become inconsistent or worse after editing)
@@ -133,9 +133,7 @@ suite('Step Library Diagnostics Bug Fix', () => {
     await vscode.commands.executeCommand('undo');
   });
 
-  // Skip: This test verifies the Phase 3 fix (diagnostics/navigation sync after step reload).
-  // It will be enabled when Phase 3 of the step-library-diagnostics-bug-fix plan is implemented.
-  test.skip('diagnostics and go-to-definition should stay in sync after edits', async function () {
+  test('diagnostics and go-to-definition should stay in sync after edits', async function () {
     this.timeout(60000);
 
     const wkspUri = getWorkspaceUri(projectName);
@@ -191,8 +189,8 @@ suite('Step Library Diagnostics Bug Fix', () => {
       2000
     );
 
-    // Give extension time to process
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait for the extension to finish parsing steps
+    await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
 
     // Record state after edit
     diagnostics = getDiagnosticsForUri(featureUri);
@@ -238,79 +236,81 @@ suite('Step Library Diagnostics Bug Fix', () => {
     await vscode.commands.executeCommand('undo');
   });
 
-  // Skip: This test verifies Phase 3 (diagnostics update after removing/re-adding imports).
-  test.skip('library steps appear when import is added', async function () {
+  test('library steps appear when import is added', async function () {
     this.timeout(60000);
 
     const wkspUri = getWorkspaceUri(projectName);
     const featureUri = vscode.Uri.joinPath(wkspUri, 'features', 'example.feature');
     const stepsUri = vscode.Uri.joinPath(wkspUri, 'steps', 'example_steps.py');
 
-    // Open feature file first to set baseline
+    // Close all editors to avoid dirty document conflicts
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    // Wait for any deferred saves from closeAllEditors to complete
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Open feature file to set baseline
     const featureDocument = await vscode.workspace.openTextDocument(featureUri);
     await vscode.window.showTextDocument(featureDocument);
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
 
     // Get initial diagnostics (should have 0 if library is imported correctly)
     const initialDiagnostics = getDiagnosticsForUri(featureUri);
     console.log(`Initial diagnostics count: ${initialDiagnostics.length}`);
 
-    // Open and edit step file - REMOVE the import
-    const stepsDocument = await vscode.workspace.openTextDocument(stepsUri);
-    const stepsEditor = await vscode.window.showTextDocument(stepsDocument);
+    // Read the original file content for reliable restoration
+    const originalContent = await vscode.workspace.fs.readFile(stepsUri);
 
-    // Find the import line
-    let importLineNo = -1;
-    for (let i = 0; i < stepsDocument.lineCount; i++) {
-      const line = stepsDocument.lineAt(i).text;
-      if (line.includes('from lib.library_steps')) {
-        importLineNo = i;
-        break;
+    try {
+      // Delete the step file entirely to ensure no race conditions
+      await vscode.workspace.fs.delete(stepsUri);
+
+      // Wait for watcher events to settle, then force a clean reparse
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await testSupport.parser.parseFilesForWorkspace(
+        wkspUri, testSupport.testData, testSupport.ctrl, "test-import-removed", false
+      );
+      await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
+
+      // After removing step file, diagnostics should increase (library steps no longer recognized)
+      const diagnosticsAfterRemove = getDiagnosticsForUri(featureUri);
+      console.log(`Diagnostics after removing step file: ${diagnosticsAfterRemove.length}`);
+      assert.ok(
+        diagnosticsAfterRemove.length > initialDiagnostics.length,
+        'Diagnostics should increase when step file is removed (library steps no longer recognized)'
+      );
+
+      // Restore the step file
+      await vscode.workspace.fs.writeFile(stepsUri, originalContent);
+
+      // Wait for watcher events to settle, then force a clean reparse
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await testSupport.parser.parseFilesForWorkspace(
+        wkspUri, testSupport.testData, testSupport.ctrl, "test-import-restored", false
+      );
+      await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
+
+      // After restoring step file, diagnostics should return to initial level
+      const diagnosticsAfterReAdd = getDiagnosticsForUri(featureUri);
+      console.log(`Diagnostics after restoring step file: ${diagnosticsAfterReAdd.length}`);
+      assert.ok(
+        diagnosticsAfterReAdd.length <= initialDiagnostics.length,
+        'Diagnostics should decrease when step file is restored (library steps should be recognized again). ' +
+        `Initial: ${initialDiagnostics.length}, After remove: ${diagnosticsAfterRemove.length}, After re-add: ${diagnosticsAfterReAdd.length}`
+      );
+    } finally {
+      // Always restore original file content
+      try { await vscode.workspace.fs.stat(stepsUri); } catch {
+        await vscode.workspace.fs.writeFile(stepsUri, originalContent);
       }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await testSupport.parser.parseFilesForWorkspace(
+        wkspUri, testSupport.testData, testSupport.ctrl, "test-cleanup", false
+      );
+      await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
     }
-
-    assert.notStrictEqual(importLineNo, -1, 'Should find the import line');
-
-    // Delete the import line
-    const importLine = stepsDocument.lineAt(importLineNo);
-    await stepsEditor.edit(edit => {
-      edit.delete(new vscode.Range(importLineNo, 0, importLineNo + 1, 0));
-    });
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // After removing import, diagnostics should increase (library steps no longer recognized)
-    const diagnosticsAfterRemove = getDiagnosticsForUri(featureUri);
-    console.log(`Diagnostics after removing import: ${diagnosticsAfterRemove.length}`);
-    assert.ok(
-      diagnosticsAfterRemove.length > initialDiagnostics.length,
-      'Diagnostics should increase when import is removed (library steps no longer recognized)'
-    );
-
-    // Now add the import back
-    const insertPosition = new vscode.Position(0, 0);
-    await stepsEditor.edit(edit => {
-      edit.insert(insertPosition, importLine.text + '\n');
-    });
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // After re-adding import, diagnostics should return to initial level
-    const diagnosticsAfterReAdd = getDiagnosticsForUri(featureUri);
-    console.log(`Diagnostics after re-adding import: ${diagnosticsAfterReAdd.length}`);
-    assert.ok(
-      diagnosticsAfterReAdd.length <= initialDiagnostics.length + 1,
-      'Diagnostics should decrease when import is re-added (library steps should be recognized again). ' +
-      `Initial: ${initialDiagnostics.length}, After remove: ${diagnosticsAfterRemove.length}, After re-add: ${diagnosticsAfterReAdd.length}`
-    );
-
-    // Clean up
-    await vscode.commands.executeCommand('undo');
-    await vscode.commands.executeCommand('undo');
   });
 
-  // Skip: This test verifies Phase 3 (diagnostics stability with multiple importing files).
-  test.skip('library steps remain when other step file also imports same library', async function () {
+  test('library steps remain when other step file also imports same library', async function () {
     this.timeout(60000);
 
     const wkspUri = getWorkspaceUri(projectName);
@@ -321,7 +321,7 @@ suite('Step Library Diagnostics Bug Fix', () => {
     // Open feature file to get initial state
     const featureDocument = await vscode.workspace.openTextDocument(featureUri);
     await vscode.window.showTextDocument(featureDocument);
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
 
     const initialDiagnostics = getDiagnosticsForUri(featureUri);
     console.log(`Initial diagnostics count: ${initialDiagnostics.length}`);
@@ -336,7 +336,7 @@ from lib.library_steps import *  # Import all step definitions from library
     const uint8Array = Uint8Array.from(Buffer.from(newStepsContent, 'utf8'));
     await vscode.workspace.fs.writeFile(newStepsUri, uint8Array);
 
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
 
     // Edit the first step file (add a comment)
     const stepsDocument = await vscode.workspace.openTextDocument(stepsUri1);
@@ -347,7 +347,7 @@ from lib.library_steps import *  # Import all step definitions from library
       edit.insert(editPosition, '\n# Test shared library import\n');
     });
 
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
 
     // Diagnostics should remain stable - library steps should still be available from second_steps.py
     const diagnosticsAfterEdit = getDiagnosticsForUri(featureUri);
@@ -361,11 +361,10 @@ from lib.library_steps import *  # Import all step definitions from library
     // Clean up: delete the second step file and undo the edit
     await vscode.workspace.fs.delete(newStepsUri);
     await vscode.commands.executeCommand('undo');
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
   });
 
-  // Skip: This test verifies Phase 3 (diagnostics update after import changes).
-  test.skip('adding a new library import resolves steps correctly', async function () {
+  test('adding a new library import resolves steps correctly', async function () {
     this.timeout(60000);
 
     const wkspUri = getWorkspaceUri(projectName);
@@ -375,7 +374,7 @@ from lib.library_steps import *  # Import all step definitions from library
     // Open feature file to get initial state
     const featureDocument = await vscode.workspace.openTextDocument(featureUri);
     await vscode.window.showTextDocument(featureDocument);
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
 
     const initialDiagnostics = getDiagnosticsForUri(featureUri);
     console.log(`Initial diagnostics count: ${initialDiagnostics.length}`);
@@ -391,7 +390,7 @@ from lib.library_steps import *  # Import all step definitions from library
       edit.insert(new vscode.Position(1, 0), '\n');
     });
 
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
 
     // After adding (essentially the same) import context, diagnostics should remain stable
     const diagnosticsAfterImport = getDiagnosticsForUri(featureUri);
@@ -409,6 +408,6 @@ from lib.library_steps import *  # Import all step definitions from library
     // Clean up
     await vscode.commands.executeCommand('undo');
     await vscode.commands.executeCommand('undo');
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
   });
 });

@@ -2,7 +2,8 @@
 
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { stepFileDecoratorPattern, parseStepsFileContent, getStepFileSteps, deleteStepFileSteps, recordImportedLibraries, getImportedLibrariesByStepFile } from '../../../src/parsers/stepsParser';
+import { stepFileDecoratorPattern, parseStepsFileContent, getStepFileSteps, deleteStepFileSteps, recordImportedLibraries, getImportedLibrariesByStepFile, storeStepFileStep, StepFileStep } from '../../../src/parsers/stepsParser';
+import { uriId, sepr } from '../../../src/common';
 
 suite('stepsParser', () => {
 
@@ -266,6 +267,29 @@ def step_impl(context):
         }
       }
       assert.ok(workspace2Found, 'Workspace2 import tracking should be preserved after workspace1 deletion');
+    });
+
+    test('should actually remove step definitions from the step file steps map', () => {
+      const featuresUri = vscode.Uri.file('c:/workspace-delete-test/features');
+      const stepFileUri = vscode.Uri.file('c:/workspace-delete-test/features/steps/steps.py');
+
+      // Clean up first
+      deleteStepFileSteps(featuresUri);
+
+      // Store a step using the same key format the real code uses
+      const reKey = `${uriId(featuresUri)}${sepr}^given${sepr}there is a calculator$`;
+      const step = new StepFileStep(reKey, stepFileUri, 'steps.py', 'given', 'there is a calculator');
+      storeStepFileStep(featuresUri, step);
+
+      // Verify step is stored
+      const stepsBeforeDelete = getStepFileSteps(featuresUri);
+      assert.strictEqual(stepsBeforeDelete.length, 1, 'Should have 1 step before deletion');
+
+      // Delete and verify it's actually gone
+      deleteStepFileSteps(featuresUri);
+
+      const stepsAfterDelete = getStepFileSteps(featuresUri);
+      assert.strictEqual(stepsAfterDelete.length, 0, 'Should have 0 steps after deletion');
     });
   });
 
