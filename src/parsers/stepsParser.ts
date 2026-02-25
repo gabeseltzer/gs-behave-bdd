@@ -42,7 +42,7 @@ export function getImportedLibrariesByStepFile(): ReadonlyMap<string, ReadonlySe
 
 
 export function deleteStepFileSteps(featuresUri: vscode.Uri) {
-  const wkspStepFileSteps = getStepFileSteps(featuresUri);
+  const wkspStepFileSteps = getStepFileSteps(featuresUri, false);
   for (const [key,] of wkspStepFileSteps) {
     stepFileSteps.delete(key);
   }
