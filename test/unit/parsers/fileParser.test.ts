@@ -13,6 +13,7 @@ import * as adapterModule from '../../../src/parsers/stepsParserBehaveAdapter';
 
 suite('fileParser - reparseFile', () => {
   let fileParser: FileParser;
+  let clock: sinon.SinonFakeTimers;
   let isStepsFileStub: sinon.SinonStub;
   let _isFeatureFileStub: sinon.SinonStub;
   let _couldBePythonStepsFileStub: sinon.SinonStub;
@@ -37,6 +38,7 @@ suite('fileParser - reparseFile', () => {
   } as WorkspaceSettings;
 
   setup(() => {
+    clock = sinon.useFakeTimers();
     fileParser = new FileParser();
 
     // Stub common functions
@@ -54,9 +56,15 @@ suite('fileParser - reparseFile', () => {
 
     // Stub getPythonExecutable
     _getPythonExecutableStub = sinon.stub(configModule.config, 'getPythonExecutable').resolves('python3');
+
+    // Stub logger methods to prevent channel access errors
+    sinon.stub(configModule.config.logger, 'showError');
+    sinon.stub(configModule.config.logger, 'showWarn');
   });
 
   teardown(() => {
+    fileParser.dispose();
+    clock.restore();
     sinon.restore();
   });
 
@@ -68,8 +76,11 @@ suite('fileParser - reparseFile', () => {
       const testData = new WeakMap();
       const ctrlStub = {} as vscode.TestController;
 
-      // Call reparseFile for a step file
+      // Call reparseFile for a step file (now debounced)
       await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+
+      // Advance past debounce interval
+      await clock.tickAsync(500);
 
       // Verify behave loader was called
       assert.ok(_loadStepsFromBehaveStub.called, 'loadStepsFromBehave should be called');
@@ -88,8 +99,11 @@ suite('fileParser - reparseFile', () => {
       const testData = new WeakMap();
       const ctrlStub = {} as vscode.TestController;
 
-      // Call reparseFile for a library file
+      // Call reparseFile for a library file (now debounced)
       await fileParser.reparseFile(libraryFileUri, '', wkspSettings, testData, ctrlStub);
+
+      // Advance past debounce interval
+      await clock.tickAsync(500);
 
       // Verify behave loader was called (even for library files)
       assert.ok(_loadStepsFromBehaveStub.called, 'loadStepsFromBehave should be called for library files');
@@ -108,8 +122,11 @@ suite('fileParser - reparseFile', () => {
       const testData = new WeakMap();
       const ctrlStub = {} as vscode.TestController;
 
-      // Call reparseFile - should not throw
+      // Call reparseFile - should not throw (now debounced)
       await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+
+      // Advance past debounce interval
+      await clock.tickAsync(500);
 
       // Verify rebuildStepMappings was still called (resilience)
       assert.ok(_rebuildStepMappingsStub.called, 'rebuildStepMappings should still be called on error');
