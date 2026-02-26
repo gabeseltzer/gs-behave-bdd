@@ -65,14 +65,14 @@ export function rebuildStepMappings(featuresUri: vscode.Uri): number {
   deleteStepMappings(featuresUri);
 
   // get filtered objects before we loop
-  const { featureFileSteps, exactSteps, paramsSteps } = _getFilteredSteps(featuresUri);
+  const { featureFileSteps, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes } = _getFilteredSteps(featuresUri);
 
   let processed = 0;
   let exactMatchCount = 0;
   let paramsMatchCount = 0;
   const matchLoopStart = performance.now();
   for (const [, featureFileStep] of featureFileSteps) {
-    const stepFileStep = _getStepFileStepMatch(featureFileStep, exactSteps, paramsSteps);
+    const stepFileStep = _getStepFileStepMatch(featureFileStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
     if (stepFileStep) {
       stepMappings.push(new StepMapping(featuresUri, stepFileStep, featureFileStep));
       // Check if this was an exact vs params match by checking if the key contains parseRepWildcard
@@ -101,19 +101,31 @@ function _getFilteredSteps(featuresUri: vscode.Uri) {
   const wkspStepFileSteps = getStepFileSteps(featuresUri);
   const exactSteps = new Map(wkspStepFileSteps.filter(([k,]) => !k.includes(parseRepWildcard)));
   const paramsSteps = new Map(wkspStepFileSteps.filter(([k,]) => k.includes(parseRepWildcard)));
-  return { featureFileSteps, exactSteps, paramsSteps };
+
+  // Pre-compile regexes once instead of creating new RegExp(key) for every feature step
+  const compiledExactRegexes = new Map<string, RegExp>();
+  for (const [key] of exactSteps) {
+    compiledExactRegexes.set(key, new RegExp(key));
+  }
+  const compiledParamsRegexes = new Map<string, RegExp>();
+  for (const [key] of paramsSteps) {
+    compiledParamsRegexes.set(key, new RegExp(key));
+  }
+
+  return { featureFileSteps, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes };
 }
 
 
 // any feature file step MUST map to a single python step function (or none)
 // so this function should return the SINGLE best match
-function _getStepFileStepMatch(featureFileStep: FeatureFileStep,
-  exactSteps: Map<string, StepFileStep>, paramsSteps: Map<string, StepFileStep>): StepFileStep | null {
+export function _getStepFileStepMatch(featureFileStep: FeatureFileStep,
+  exactSteps: Map<string, StepFileStep>, paramsSteps: Map<string, StepFileStep>,
+  compiledExactRegexes: Map<string, RegExp>, compiledParamsRegexes: Map<string, RegExp>): StepFileStep | null {
 
   const findExactMatch = (textWithoutType: string, stepType: string) => {
     const matchText = stepType + sepr + textWithoutType;
     for (const [key, value] of exactSteps) {
-      const rx = new RegExp(key);
+      const rx = compiledExactRegexes.get(key)!;
       const match = rx.exec(matchText);
       if (match && match.length !== 0) {
         return value;
@@ -125,7 +137,7 @@ function _getStepFileStepMatch(featureFileStep: FeatureFileStep,
     const matchText = stepType + sepr + textWithoutType;
     const matches = new Map<string, StepFileStep>();
     for (const [key, value] of paramsSteps) {
-      const rx = new RegExp(key);
+      const rx = compiledParamsRegexes.get(key)!;
       const match = rx.exec(matchText);
       if (match && match.length !== 0) {
         matches.set(key, value);
