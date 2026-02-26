@@ -155,16 +155,18 @@ export class FileParser {
     deleteStepFileSteps(wkspSettings.featuresUri);
     deleteFixtures(wkspSettings.featuresUri);
 
-    // Find environment.py files for fixtures
-    const findEnvFilesStart = performance.now();
-    let potentialEnvFiles: vscode.Uri[] = [];
-    if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
-      potentialEnvFiles = await findFiles(wkspSettings.featuresUri, undefined, ".py", cancelToken);
-    else
-      potentialEnvFiles = await findFiles(wkspSettings.stepsSearchUri, undefined, ".py", cancelToken);
-    diagLog(`${caller}: _parseStepsFiles findFiles (env) took ${Math.round(performance.now() - findEnvFilesStart)}ms, found ${potentialEnvFiles.length} .py files`);
+    // Single findFiles call for all .py files — used for both environment files and step files
+    const findFilesStart = performance.now();
+    const searchInFeatures = wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path);
+    // When stepsSearchUri is inside featuresUri, search from featuresUri to also find environment.py;
+    // otherwise search from stepsSearchUri (the broader path)
+    const searchUri = searchInFeatures ? wkspSettings.featuresUri : wkspSettings.stepsSearchUri;
+    const allPyFiles = await findFiles(searchUri, undefined, ".py", cancelToken);
+    diagLog(`${caller}: _parseStepsFiles findFiles took ${Math.round(performance.now() - findFilesStart)}ms, found ${allPyFiles.length} .py files`);
 
-    const environmentFiles = potentialEnvFiles.filter(uri => uri.path.endsWith("/environment.py"));
+    // Split results: environment files vs step files
+    const environmentFiles = allPyFiles.filter(uri => uri.path.endsWith("/environment.py"));
+    const stepFiles = allPyFiles.filter(uri => isStepsFile(uri));
 
     // Parse environment.py files
     for (const uri of environmentFiles) {
@@ -180,17 +182,6 @@ export class FileParser {
       const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
       diagLog(`${caller}: _parseStepsFiles getPythonExecutable took ${Math.round(performance.now() - getPythonStart)}ms`);
       const startTime = performance.now();
-
-      // Find step files to determine what to pass to behave
-      const findStepFilesStart = performance.now();
-      let stepFiles: vscode.Uri[] = [];
-      if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
-        stepFiles = await findFiles(wkspSettings.stepsSearchUri, "steps", ".py", cancelToken);
-      else
-        stepFiles = await findFiles(wkspSettings.stepsSearchUri, undefined, ".py", cancelToken);
-      diagLog(`${caller}: _parseStepsFiles findFiles (steps) took ${Math.round(performance.now() - findStepFilesStart)}ms, found ${stepFiles.length} .py files`);
-
-      stepFiles = stepFiles.filter(uri => isStepsFile(uri));
 
       // Collect all unique step directories (may be multiple across the workspace)
       // e.g., features/steps/ and features/grouped/steps/
