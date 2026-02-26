@@ -50,7 +50,7 @@ suite('fileParser - reparseFile', () => {
 
     // Stub behave loader functions
     _loadStepsFromBehaveStub = sinon.stub(behaveLoaderModule, 'loadStepsFromBehave').resolves([]);
-    _storeBehaveStepDefinitionsStub = sinon.stub(adapterModule, 'storeBehaveStepDefinitions').returns(0);
+    _storeBehaveStepDefinitionsStub = sinon.stub(adapterModule, 'storeBehaveStepDefinitions').resolves(0);
 
     // Stub getPythonExecutable
     _getPythonExecutableStub = sinon.stub(configModule.config, 'getPythonExecutable').resolves('python3');

@@ -210,7 +210,7 @@ export class FileParser {
 
       // Convert and store all behave definitions
       const storeBehaveStart = performance.now();
-      const storedCount = storeBehaveStepDefinitions(wkspSettings.featuresUri, behaveDefinitions);
+      const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, behaveDefinitions);
       diagLog(`${caller}: _parseStepsFiles storeBehaveStepDefinitions took ${Math.round(performance.now() - storeBehaveStart)}ms`);
 
       // Return count of step files (not step definitions)
@@ -584,7 +584,7 @@ export class FileParser {
             [stepsPath]
           );
 
-          const storedCount = storeBehaveStepDefinitions(wkspSettings.featuresUri, behaveDefinitions);
+          const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, behaveDefinitions);
           const elapsed = Math.round(performance.now() - startTime);
           diagLog(`[reparseFile] Reloaded ${storedCount} steps from behave in ${elapsed}ms`);
 

@@ -15,37 +15,47 @@ import { diagLog } from '../logger';
  * Stores behave step definitions in the stepsParser storage
  * Converts all definitions and stores them so they can be used like AST-parsed steps
  */
-export function storeBehaveStepDefinitions(
+export async function storeBehaveStepDefinitions(
   featuresUri: vscode.Uri,
   behaveDefinitions: BehaveStepDefinition[]
-): number {
+): Promise<number> {
   const totalStart = performance.now();
   let stored = 0;
-  // Cache file contents to avoid re-reading the same file multiple times
+  // Batch-read all unique file paths upfront
   const fileContents = new Map<string, string | undefined>();
   let fileReadTimeMs = 0;
+
+  // Collect unique file paths
+  const uniquePaths = new Set<string>();
+  for (const behavioral of behaveDefinitions) {
+    uniquePaths.add(behavioral.filePath);
+  }
+
+  // Read all unique files in parallel
+  const readStart = performance.now();
+  const readResults = await Promise.all(
+    [...uniquePaths].map(async (filePath) => {
+      try {
+        const content = await fs.promises.readFile(filePath, 'utf8');
+        return { filePath, content } as const;
+      } catch {
+        return { filePath, content: undefined } as const;
+      }
+    })
+  );
+  fileReadTimeMs = performance.now() - readStart;
+
+  // Populate cache from batch results
+  for (const { filePath, content } of readResults) {
+    fileContents.set(filePath, content);
+  }
 
   for (const behavioral of behaveDefinitions) {
     try {
       // Convert behave definition to VSCode URI for the step file
       const stepFileUri = vscode.Uri.file(behavioral.filePath);
 
-      // Load file content if not cached
-      let fileContent: string | undefined;
-      if (!fileContents.has(behavioral.filePath)) {
-        try {
-          const readStart = performance.now();
-          fileContent = fs.readFileSync(behavioral.filePath, 'utf8');
-          fileReadTimeMs += performance.now() - readStart;
-          fileContents.set(behavioral.filePath, fileContent);
-        } catch (e) {
-          // If we can't read the file, store undefined
-          fileContents.set(behavioral.filePath, undefined);
-          fileContent = undefined;
-        }
-      } else {
-        fileContent = fileContents.get(behavioral.filePath);
-      }
+      const fileContent = fileContents.get(behavioral.filePath);
 
       const stepFileStep = createStepFileStepFromBehaveDefinition(
         featuresUri,
