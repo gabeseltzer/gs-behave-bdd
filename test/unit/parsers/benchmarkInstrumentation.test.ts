@@ -47,19 +47,19 @@ suite('benchmarkInstrumentation', () => {
   suite('storeBehaveStepDefinitions', () => {
 
     const featuresUri = vscode.Uri.file('c:/project/features');
-    let readFileSyncStub: sinon.SinonStub;
+    let readFileStub: sinon.SinonStub;
 
     setup(() => {
       deleteStepFileSteps(featuresUri);
-      readFileSyncStub = sinon.stub(fs, 'readFileSync');
+      readFileStub = sinon.stub(fs.promises, 'readFile');
     });
 
     teardown(() => {
-      readFileSyncStub.restore();
+      readFileStub.restore();
       deleteStepFileSteps(featuresUri);
     });
 
-    test('should store definitions and return count', () => {
+    test('should store definitions and return count', async () => {
       const fileContent = `from behave import given, when, then
 
 @given('I have a calculator')
@@ -70,7 +70,7 @@ def step_impl(context):
 def step_add(context, a, b):
     context.result = a + b
 `;
-      readFileSyncStub.returns(fileContent);
+      readFileStub.resolves(fileContent);
 
       const definitions: BehaveStepDefinition[] = [
         {
@@ -89,19 +89,19 @@ def step_add(context, a, b):
         }
       ];
 
-      const count = storeBehaveStepDefinitions(featuresUri, definitions);
+      const count = await storeBehaveStepDefinitions(featuresUri, definitions);
       assert.strictEqual(count, 2);
 
       const steps = getStepFileSteps(featuresUri);
       assert.strictEqual(steps.length, 2);
     });
 
-    test('should return 0 for empty definitions array', () => {
-      const count = storeBehaveStepDefinitions(featuresUri, []);
+    test('should return 0 for empty definitions array', async () => {
+      const count = await storeBehaveStepDefinitions(featuresUri, []);
       assert.strictEqual(count, 0);
     });
 
-    test('should cache file contents and not re-read the same file', () => {
+    test('should batch-read all unique files upfront and only read each file once', async () => {
       const fileContent = `@given('step one')
 def step_one(context):
     pass
@@ -110,7 +110,7 @@ def step_one(context):
 def step_two(context):
     pass
 `;
-      readFileSyncStub.returns(fileContent);
+      readFileStub.resolves(fileContent);
 
       const definitions: BehaveStepDefinition[] = [
         {
@@ -129,14 +129,14 @@ def step_two(context):
         }
       ];
 
-      storeBehaveStepDefinitions(featuresUri, definitions);
+      await storeBehaveStepDefinitions(featuresUri, definitions);
 
-      // readFileSync should be called only once for the same file path
-      assert.strictEqual(readFileSyncStub.callCount, 1, 'readFileSync should be called once due to caching');
+      // fs.promises.readFile should be called only once for the same file path
+      assert.strictEqual(readFileStub.callCount, 1, 'readFile should be called once due to batch dedup');
     });
 
-    test('should handle file read errors gracefully', () => {
-      readFileSyncStub.throws(new Error('ENOENT: no such file'));
+    test('should handle file read errors gracefully', async () => {
+      readFileStub.rejects(new Error('ENOENT: no such file'));
 
       const definitions: BehaveStepDefinition[] = [
         {
@@ -149,12 +149,12 @@ def step_two(context):
       ];
 
       // Should not throw
-      const count = storeBehaveStepDefinitions(featuresUri, definitions);
+      const count = await storeBehaveStepDefinitions(featuresUri, definitions);
       // Step should still be stored (with undefined file content)
       assert.strictEqual(count, 1);
     });
 
-    test('should read different files separately', () => {
+    test('should read different files separately', async () => {
       const fileContentA = `@given('step A')
 def step_a(context):
     pass
@@ -163,8 +163,8 @@ def step_a(context):
 def step_b(context):
     pass
 `;
-      readFileSyncStub.withArgs('c:/project/features/steps/a.py', 'utf8').returns(fileContentA);
-      readFileSyncStub.withArgs('c:/project/features/steps/b.py', 'utf8').returns(fileContentB);
+      readFileStub.withArgs('c:/project/features/steps/a.py', 'utf8').resolves(fileContentA);
+      readFileStub.withArgs('c:/project/features/steps/b.py', 'utf8').resolves(fileContentB);
 
       const definitions: BehaveStepDefinition[] = [
         {
@@ -183,10 +183,10 @@ def step_b(context):
         }
       ];
 
-      storeBehaveStepDefinitions(featuresUri, definitions);
+      await storeBehaveStepDefinitions(featuresUri, definitions);
 
-      // readFileSync should be called twice (once per unique file)
-      assert.strictEqual(readFileSyncStub.callCount, 2, 'readFileSync should be called once per unique file');
+      // readFile should be called twice (once per unique file)
+      assert.strictEqual(readFileStub.callCount, 2, 'readFile should be called once per unique file');
     });
   });
 
