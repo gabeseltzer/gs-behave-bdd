@@ -68,18 +68,29 @@ export function rebuildStepMappings(featuresUri: vscode.Uri): number {
   const { featureFileSteps, exactSteps, paramsSteps } = _getFilteredSteps(featuresUri);
 
   let processed = 0;
+  let exactMatchCount = 0;
+  let paramsMatchCount = 0;
+  const matchLoopStart = performance.now();
   for (const [, featureFileStep] of featureFileSteps) {
     const stepFileStep = _getStepFileStepMatch(featureFileStep, exactSteps, paramsSteps);
-    if (stepFileStep)
+    if (stepFileStep) {
       stepMappings.push(new StepMapping(featuresUri, stepFileStep, featureFileStep));
+      // Check if this was an exact vs params match by checking if the key contains parseRepWildcard
+      if (stepFileStep.textAsRe.includes(parseRepWildcard))
+        paramsMatchCount++;
+      else
+        exactMatchCount++;
+    }
     processed++;
   }
+  const matchLoopTime = Math.round(performance.now() - matchLoopStart);
 
   retriggerSemanticHighlighting();
   refreshStepReferencesView();
   validateAllOpenFeatureDocuments();
 
-  diagLog(`rebuilding step mappings for ${featuresUri.path} took ${performance.now() - start} ms`);
+  diagLog(`rebuilding step mappings for ${featuresUri.path} took ${Math.round(performance.now() - start)}ms ` +
+    `(matching loop: ${matchLoopTime}ms, ${processed} steps processed, ${exactMatchCount} exact matches, ${paramsMatchCount} params matches)`);
 
   return processed;
 }

@@ -121,11 +121,14 @@ export class FileParser {
     // replaced with custom findFiles function for now (see comment in findFiles function)
     //const pattern = new vscode.RelativePattern(wkspSettings.uri, `${wkspSettings.workspaceRelativeFeaturesPath}/**/*.feature`);
     //const featureFiles = await vscode.workspace.findFiles(pattern, null, undefined, cancelToken);
+    const findFilesStart = performance.now();
     const featureFiles = await findFiles(wkspSettings.featuresUri, undefined, ".feature", cancelToken);
+    diagLog(`${caller}: _parseFeatureFiles findFiles took ${Math.round(performance.now() - findFilesStart)}ms, found ${featureFiles.length} feature files`);
 
     if (featureFiles.length < 1 && !cancelToken.isCancellationRequested)
       throw `No feature files found in ${wkspSettings.featuresUri.fsPath}`;
 
+    const parseLoopStart = performance.now();
     let processed = 0;
     for (const uri of featureFiles) {
       if (cancelToken.isCancellationRequested)
@@ -134,6 +137,7 @@ export class FileParser {
       await this._updateTestItemFromFeatureFileContent(wkspSettings, content, testData, controller, uri, caller, firstRun);
       processed++;
     }
+    diagLog(`${caller}: _parseFeatureFiles parsing loop took ${Math.round(performance.now() - parseLoopStart)}ms for ${processed} files`);
 
     if (cancelToken.isCancellationRequested) {
       // either findFiles or loop will have exited early, log it either way
@@ -152,11 +156,13 @@ export class FileParser {
     deleteFixtures(wkspSettings.featuresUri);
 
     // Find environment.py files for fixtures
+    const findEnvFilesStart = performance.now();
     let potentialEnvFiles: vscode.Uri[] = [];
     if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
       potentialEnvFiles = await findFiles(wkspSettings.featuresUri, undefined, ".py", cancelToken);
     else
       potentialEnvFiles = await findFiles(wkspSettings.stepsSearchUri, undefined, ".py", cancelToken);
+    diagLog(`${caller}: _parseStepsFiles findFiles (env) took ${Math.round(performance.now() - findEnvFilesStart)}ms, found ${potentialEnvFiles.length} .py files`);
 
     const environmentFiles = potentialEnvFiles.filter(uri => uri.path.endsWith("/environment.py"));
 
@@ -170,15 +176,19 @@ export class FileParser {
 
     // Load all steps using behave's built-in registry (handles imports automatically)
     try {
+      const getPythonStart = performance.now();
       const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
+      diagLog(`${caller}: _parseStepsFiles getPythonExecutable took ${Math.round(performance.now() - getPythonStart)}ms`);
       const startTime = performance.now();
 
       // Find step files to determine what to pass to behave
+      const findStepFilesStart = performance.now();
       let stepFiles: vscode.Uri[] = [];
       if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
         stepFiles = await findFiles(wkspSettings.stepsSearchUri, "steps", ".py", cancelToken);
       else
         stepFiles = await findFiles(wkspSettings.stepsSearchUri, undefined, ".py", cancelToken);
+      diagLog(`${caller}: _parseStepsFiles findFiles (steps) took ${Math.round(performance.now() - findStepFilesStart)}ms, found ${stepFiles.length} .py files`);
 
       stepFiles = stepFiles.filter(uri => isStepsFile(uri));
 
@@ -194,11 +204,13 @@ export class FileParser {
       // If no step directories found, use the default search path
       const stepsPaths = stepsDirs.length > 0 ? stepsDirs : [wkspSettings.stepsSearchUri.fsPath];
 
+      const loadBehaveStart = performance.now();
       const behaveDefinitions = await loadStepsFromBehave(
         pythonExec,
         wkspSettings.projectUri.fsPath,
         stepsPaths
       );
+      diagLog(`${caller}: _parseStepsFiles loadStepsFromBehave took ${Math.round(performance.now() - loadBehaveStart)}ms, returned ${behaveDefinitions.length} definitions`);
 
       if (cancelToken.isCancellationRequested) {
         diagLog(`${caller}: cancelling, _parseStepsFiles stopped after behave load`);
@@ -206,7 +218,9 @@ export class FileParser {
       }
 
       // Convert and store all behave definitions
+      const storeBehaveStart = performance.now();
       const storedCount = storeBehaveStepDefinitions(wkspSettings.featuresUri, behaveDefinitions);
+      diagLog(`${caller}: _parseStepsFiles storeBehaveStepDefinitions took ${Math.round(performance.now() - storeBehaveStart)}ms`);
 
       // Return count of step files (not step definitions)
       // stepFiles was already filtered to exclude non-step files
