@@ -4,6 +4,7 @@
  */
 
 import * as vscode from 'vscode';
+import { performance } from 'perf_hooks';
 import { uriId, sepr, basename } from '../common';
 import type { BehaveStepDefinition } from './behaveStepLoader';
 import { StepFileStep, parseRepWildcard, storeStepFileStep } from './stepsParser';
@@ -18,9 +19,11 @@ export function storeBehaveStepDefinitions(
   featuresUri: vscode.Uri,
   behaveDefinitions: BehaveStepDefinition[]
 ): number {
+  const totalStart = performance.now();
   let stored = 0;
   // Cache file contents to avoid re-reading the same file multiple times
   const fileContents = new Map<string, string | undefined>();
+  let fileReadTimeMs = 0;
 
   for (const behavioral of behaveDefinitions) {
     try {
@@ -31,7 +34,9 @@ export function storeBehaveStepDefinitions(
       let fileContent: string | undefined;
       if (!fileContents.has(behavioral.filePath)) {
         try {
+          const readStart = performance.now();
           fileContent = fs.readFileSync(behavioral.filePath, 'utf8');
+          fileReadTimeMs += performance.now() - readStart;
           fileContents.set(behavioral.filePath, fileContent);
         } catch (e) {
           // If we can't read the file, store undefined
@@ -56,7 +61,9 @@ export function storeBehaveStepDefinitions(
     }
   }
 
-  diagLog(`storeBehaveStepDefinitions: stored ${stored}/${behaveDefinitions.length} steps`);
+  const totalElapsed = Math.round(performance.now() - totalStart);
+  const processingTime = totalElapsed - Math.round(fileReadTimeMs);
+  diagLog(`storeBehaveStepDefinitions: stored ${stored}/${behaveDefinitions.length} steps in ${totalElapsed}ms (file reading: ${Math.round(fileReadTimeMs)}ms, processing: ${processingTime}ms, files cached: ${fileContents.size})`);
   return stored;
 }
 
