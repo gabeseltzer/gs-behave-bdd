@@ -98,6 +98,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     context.subscriptions.push(
       ctrl,
       treeView,
+      parser,
       config,
       config.diagnostics,
       cleanExtensionTempDirectoryCancelSource,
