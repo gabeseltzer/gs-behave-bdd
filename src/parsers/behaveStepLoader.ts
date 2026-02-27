@@ -33,13 +33,17 @@ export interface BehaveStepDefinition {
 export async function loadStepsFromBehave(
   pythonExec: string,
   projectPath: string,
-  stepsPaths: string[]
+  stepsPaths: string[],
+  bundledLibsPath?: string
 ): Promise<BehaveStepDefinition[]> {
   const startTime = performance.now();
 
   try {
     const scriptPath = getStepsScriptPath();
-    const output = await spawnPython(pythonExec, scriptPath, [projectPath, JSON.stringify(stepsPaths)], projectPath);
+    const args = [projectPath, JSON.stringify(stepsPaths)];
+    if (bundledLibsPath)
+      args.push('--bundled-libs', bundledLibsPath);
+    const output = await spawnPython(pythonExec, scriptPath, args, projectPath);
 
     // Parse JSON output
     interface RawStepInfo {

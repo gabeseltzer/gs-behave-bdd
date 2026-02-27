@@ -15,6 +15,7 @@ import { TestData, TestFile } from './testFile';
 import { diagLog } from '../logger';
 import * as path from 'path';
 import { deleteStepMappings, rebuildStepMappings, getStepMappings } from './stepMappings';
+import { getBundledBehavePath } from '../bundledBehave';
 
 
 // for integration test assertions      
@@ -205,7 +206,8 @@ export class FileParser {
       const behaveDefinitions = await loadStepsFromBehave(
         pythonExec,
         wkspSettings.projectUri.fsPath,
-        stepsPaths
+        stepsPaths,
+        wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined
       );
       diagLog(`${caller}: _parseStepsFiles loadStepsFromBehave took ${Math.round(performance.now() - loadBehaveStart)}ms, returned ${behaveDefinitions.length} definitions`);
 
@@ -616,7 +618,8 @@ export class FileParser {
             const behaveDefinitions = await loadStepsFromBehave(
               pythonExec,
               wkspSettings.projectUri.fsPath,
-              [stepsPath]
+              [stepsPath],
+              wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined
             );
 
             const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, behaveDefinitions);

@@ -1,9 +1,10 @@
 """
 Discovers all step definitions using behave's step registry.
 
-Usage: python get_steps.py <project_path> <steps_paths_json>
+Usage: python get_steps.py <project_path> <steps_paths_json> [--bundled-libs <path>]
   project_path: Absolute path to the project root
   steps_paths_json: JSON array of absolute step directory paths
+  --bundled-libs: Optional path to bundled behave libs directory
 
 Outputs JSON array to stdout:
   [{"step_type": "given", "pattern": "...", "file": "...", "line": 1, "regex_pattern": "..."}, ...]
@@ -17,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from behave import runner_util, step_registry
+# behave imports are deferred to function bodies after sys.path setup
 
 
 def load_environment_files(steps_paths: list[str]) -> None:
@@ -42,6 +43,8 @@ def load_environment_files(steps_paths: list[str]) -> None:
 
 def load_step_directories(steps_paths: list[str]) -> None:
   """Load step modules from all step directories."""
+  from behave import runner_util  # noqa: PLC0415  # deferred until sys.path setup
+
   step_dirs = [
     str(Path(p).resolve()) for p in steps_paths if Path(p).resolve().exists()
   ]
@@ -111,8 +114,21 @@ def main() -> None:
     steps_paths_json = sys.argv[2] if len(sys.argv) > 2 else "[]"
     steps_paths = json.loads(steps_paths_json)
 
+    # Parse optional --bundled-libs argument
+    bundled_libs = None
+    if "--bundled-libs" in sys.argv:
+      idx = sys.argv.index("--bundled-libs")
+      if idx + 1 < len(sys.argv):
+        bundled_libs = sys.argv[idx + 1]
+
+    # Insert bundled libs path before importing behave
+    if bundled_libs:
+      sys.path.insert(0, bundled_libs)
+
     if project_path not in sys.path:
       sys.path.insert(0, project_path)
+
+    from behave import step_registry  # noqa: PLC0415  # deferred until sys.path setup
 
     load_environment_files(steps_paths)
     load_step_directories(steps_paths)
