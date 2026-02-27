@@ -178,6 +178,16 @@ export const window = {
   registerTreeDataProvider: () => ({ dispose: () => { /* mock */ } })
 };
 
+export const debug = {
+  startDebugging: async (_folder: unknown, _config: unknown): Promise<boolean> => true,
+  stopDebugging: async (): Promise<void> => { /* mock */ },
+  onDidTerminateDebugSession: (listener: () => void): { dispose: () => void } => {
+    // Immediately invoke to simulate session termination
+    setTimeout(listener, 0);
+    return { dispose: () => { /* mock */ } };
+  }
+};
+
 export const commands = {
   executeCommand: () => Promise.resolve(undefined),
   registerCommand: () => ({ dispose: () => { /* mock */ } })
