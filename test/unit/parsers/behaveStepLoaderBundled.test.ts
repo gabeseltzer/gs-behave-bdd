@@ -107,4 +107,69 @@ suite('behaveStepLoader bundled libs', () => {
     const args = spawnStub.firstCall.args[1] as string[];
     assert.ok(!args.includes('--bundled-libs'), 'should NOT include --bundled-libs flag for empty string');
   });
+
+  test('falls back to bundled behave when environment behave is not installed', async () => {
+    // First call: simulate "behave is not installed" error (no bundledLibsPath)
+    // Second call (retry with bundled path): succeed
+    let callCount = 0;
+
+    // Replace the spawn stub with one that tracks calls
+    spawnStub.restore();
+    spawnStub = sinon.stub(childProcess, 'spawn').callsFake(() => {
+      callCount++;
+      const proc = new MockChildProcess();
+
+      setImmediate(() => {
+        if (callCount === 1) {
+          // First call fails with "behave not installed"
+          proc.stderr.emit('data', "ModuleNotFoundError: No module named 'behave'");
+          proc.emit('close', 1);
+        } else {
+          // Second call (with bundled path) succeeds
+          proc.stdout.emit('data', '[]');
+          proc.emit('close', 0);
+        }
+      });
+
+      return proc as unknown as childProcess.ChildProcess;
+    });
+
+    const result = await loadStepsFromBehave('python', '/project', ['/project/steps']);
+
+    assert.strictEqual(callCount, 2, 'spawn should be called twice (original + fallback)');
+    assert.deepStrictEqual(result, [], 'should return empty array from fallback');
+
+    // Second call should include --bundled-libs
+    const secondCallArgs = spawnStub.secondCall.args[1] as string[];
+    assert.ok(secondCallArgs.includes('--bundled-libs'), 'fallback call should include --bundled-libs');
+  });
+
+  test('does not fall back when bundledLibsPath was already provided', async () => {
+    // Simulate failure WITH bundledLibsPath — should NOT retry
+    setImmediate(() => {
+      mockProcess.stderr.emit('data', "ModuleNotFoundError: No module named 'behave'");
+      mockProcess.emit('close', 1);
+    });
+
+    await assert.rejects(
+      async () => await loadStepsFromBehave('python', '/project', ['/project/steps'], getBundledBehavePath()),
+      /behave.*not.*installed/i,
+      'should throw without fallback when bundledLibsPath was already set'
+    );
+    assert.ok(spawnStub.calledOnce, 'spawn should only be called once (no retry)');
+  });
+
+  test('does not fall back for non-behave import errors', async () => {
+    setImmediate(() => {
+      mockProcess.stderr.emit('data', "ImportError: cannot import name 'something' from 'mylib'");
+      mockProcess.emit('close', 1);
+    });
+
+    await assert.rejects(
+      async () => await loadStepsFromBehave('python', '/project', ['/project/steps']),
+      /import.*error/i,
+      'should throw without fallback for non-behave import errors'
+    );
+    assert.ok(spawnStub.calledOnce, 'spawn should only be called once (no retry)');
+  });
 });

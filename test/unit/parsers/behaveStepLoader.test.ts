@@ -127,9 +127,15 @@ suite('behaveStepLoader', () => {
     const projectPath = '/path/to/project';
     const stepsPath = ['/path/to/project/steps'];
 
-    setImmediate(() => {
-      mockProcess.stderr.emit('data', 'ModuleNotFoundError: No module named \'behave\'');
-      mockProcess.emit('close', 1);
+    // The fallback logic will retry with bundled path, so we need both calls to fail
+    spawnStub.restore();
+    spawnStub = sinon.stub(childProcess, 'spawn').callsFake(() => {
+      const proc = new MockChildProcess();
+      setImmediate(() => {
+        proc.stderr.emit('data', 'ModuleNotFoundError: No module named \'behave\'');
+        proc.emit('close', 1);
+      });
+      return proc as unknown as childProcess.ChildProcess;
     });
 
     await assert.rejects(

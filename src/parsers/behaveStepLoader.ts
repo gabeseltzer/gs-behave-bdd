@@ -8,6 +8,7 @@ import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { performance } from 'perf_hooks';
+import { getBundledBehavePath } from '../bundledBehave';
 import { diagLog } from '../logger';
 
 /**
@@ -77,7 +78,15 @@ export async function loadStepsFromBehave(
 
   } catch (e) {
     const elapsed = Math.round(performance.now() - startTime);
-    diagLog(`loadStepsFromBehave error (${elapsed}ms): ${e instanceof Error ? e.message : String(e)}`);
+    const errMsg = e instanceof Error ? e.message : String(e);
+    diagLog(`loadStepsFromBehave error (${elapsed}ms): ${errMsg}`);
+
+    // If behave is not installed and we weren't already using bundled, fall back to bundled
+    if (!bundledLibsPath && isBehaveNotInstalledError(errMsg)) {
+      diagLog(`loadStepsFromBehave: behave not found in environment, falling back to bundled behave`);
+      return loadStepsFromBehave(pythonExec, projectPath, stepsPaths, getBundledBehavePath());
+    }
+
     throw e;
   }
 }
@@ -172,6 +181,14 @@ function spawnPython(
       }
     });
   });
+}
+
+/**
+ * Checks if an error message indicates behave is not installed (as opposed to other import errors)
+ */
+function isBehaveNotInstalledError(errMsg: string): boolean {
+  const lower = errMsg.toLowerCase();
+  return lower.includes('behave') && (lower.includes('not installed') || lower.includes('modulenotfounderror') || lower.includes('importerror'));
 }
 
 /**
