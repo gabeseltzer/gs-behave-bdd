@@ -128,6 +128,9 @@ export const workspace = {
       if (key === 'xRay') {
         return false;
       }
+      if (key === 'importStrategy') {
+        return 'useBundled';
+      }
       return undefined;
     },
     has: () => false,

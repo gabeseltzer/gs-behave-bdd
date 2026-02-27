@@ -64,6 +64,16 @@
 					"type": "boolean",
 					"markdownDescription": "Specifies whether extension errors have stack traces and diagnostics are logged in console. The console output is viewable via the vscode command `Developer: Toggle Developer Tools`. Diagnostic logs are noisy, and may have a small performance impact.",
 					"default": false
+				},
+				"behave-vsc.importStrategy": {
+					"scope": "resource",
+					"type": "string",
+					"enum": [
+						"useBundled",
+						"fromEnvironment"
+					],
+					"markdownDescription": "Controls how behave is resolved. `useBundled` (default) uses the version of behave bundled with the extension. `fromEnvironment` uses behave from your Python environment.",
+					"default": "useBundled"
 				}
 			}
 		},
