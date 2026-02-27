@@ -29,7 +29,6 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
 - Extension activation requires at least one `*.feature` file somewhere in the workspace
 - A compatible directory structure
 - [ms-python.python](https://marketplace.visualstudio.com/items?itemName=ms-python.python) extension
-- [behave](https://behave.readthedocs.io)
 - [python](https://www.python.org/)
 
 ### Required project directory structure
@@ -112,6 +111,7 @@ paths=my_tests/behave_features
 ## Extension settings
 
 - This extension has various options to customise your test run via `settings.json`, e.g. `runParallel`, `featuresPath`, and `envVarOverrides`.
+- By default, the extension uses its own bundled copy of behave. If you want to use behave from your Python environment instead (e.g. for a newer version), set `importStrategy` to `"fromEnvironment"` in your `settings.json`.
 - You can also disable/enable `justMyCode` for debug (via `settings.json` not `launch.json`).
 - If you are using a multi-root workspace with multiple projects that contain feature files, you can set up default settings in your `*.code-workspace` file, then optionally override these as required in the `settings.json` in each workspace folder.
 - For more information on available options, go to the extension settings in vscode.

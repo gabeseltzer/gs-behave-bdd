@@ -157,6 +157,7 @@ See `src/runners/behaveRun.ts` and `behaveDebug.ts`:
 - Workspace support: uses workspace-specific `projectPath`, `featuresPath`, Python interpreter
 - Smart `-i` regex to run multiple tests in one behave instance (unless `runParallel`)
 - Always includes `--junit` and `--show-skipped` for result parsing
+- **Bundled behave**: The extension ships behave 1.3.3 in `bundled/libs/`. By default (`importStrategy: "useBundled"`), behave is invoked from the bundle. Set `importStrategy: "fromEnvironment"` to use behave from the user's Python environment instead.
 
 ## Development Workflow
 
@@ -308,3 +309,4 @@ suite('MyModule', () => {
 | Run tests | `src/runners/testRunHandler.ts` | `testRunHandler()` |
 | Validate fixtures | `src/handlers/fixtureDiagnostics.ts` | `validateFixtureTags()` |
 | Validate steps | `src/handlers/stepDiagnostics.ts` | `validateStepDefinitions()` |
+| Bundled behave | `src/bundledBehave.ts` | `getBundledBehavePath()` |

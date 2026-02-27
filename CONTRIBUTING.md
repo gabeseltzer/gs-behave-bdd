@@ -44,10 +44,10 @@
     - `code --install-extension ms-python.python` (if not already installed)
     - `code --install-extension dbaeumer.vscode-eslint`
     - `code --install-extension amodio.tsl-problem-matcher`
-8. Install behave 1.3.3 globally (the extension and integration tests use the system Python interpreter from the ms-python.python extension, not a virtual environment):
-    - `pip install behave==1.2.6`
-    - Change to the root directory: `cd /` (or `cd \` on Windows)
-    - Ensure that this global command works from the root directory: `"python" -m behave --version` (include the quotes)
+8. Bundle behave (required for extension development and integration tests):
+    - `npm run bundle-behave`
+    - This installs behave 1.3.3 into `bundled/libs/` using `uv`. This is run automatically as part of `npm run compile` and the prepublish step.
+    - Note: the extension bundles its own copy of behave, so users do not need to install behave separately. Contributors also don't need behave in their global Python environment.
 9. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and set up the Python dev tooling virtual environment (for mypy and ruff):
     - Install uv: see [uv installation docs](https://docs.astral.sh/uv/getting-started/installation/)
     - Change back to the cloned directory: `cd <mysourcedir>/behave-vsc`
@@ -55,7 +55,7 @@
 10. Check that all tests pass BEFORE opening visual studio code. This will confirm your environment is set up correctly before you start development.
     - `npm run test`
 11. If any of the tests fail, then double-check the steps above. Otherwise, you can debug them - see [Debugging integration tests](#debugging-integration-tests) further down.
-12. Note - if at any point you perform a `git clean`, or pull a new version of the source code, or switch branch, you will need to run `npm install` and `uv sync` again.
+12. Note - if at any point you perform a `git clean`, or pull a new version of the source code, or switch branch, you will need to run `npm install` and `uv sync` again. (`npm run bundle-behave` is also needed, but it is chained from `npm run compile`.)
 
 ---
 
