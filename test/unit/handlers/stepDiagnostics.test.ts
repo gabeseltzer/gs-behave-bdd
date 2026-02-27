@@ -9,11 +9,15 @@ import * as stepMappings from '../../../src/parsers/stepMappings';
 import * as stepsParser from '../../../src/parsers/stepsParser';
 import { config } from '../../../src/configuration';
 import { FeatureFileStep } from '../../../src/parsers/featureParser';
+import { parser } from '../../../src/extension';
 
 suite('stepDiagnostics', () => {
   let sandbox: sinon.SinonSandbox;
 
-  setup(() => sandbox = sinon.createSandbox());
+  setup(() => {
+    sandbox = sinon.createSandbox();
+    sandbox.stub(parser, 'initialStepsParseComplete').get(() => true);
+  });
   teardown(() => sandbox.restore());
 
   // Helper to set up common stubs for validateStepDefinitions tests
@@ -59,6 +63,19 @@ suite('stepDiagnostics', () => {
   }
 
   suite('validateStepDefinitions', () => {
+    test('should skip validation when initial steps parse is not complete', () => {
+      sandbox.restore();
+      sandbox = sinon.createSandbox();
+      sandbox.stub(parser, 'initialStepsParseComplete').get(() => false);
+      const mockUri = vscode.Uri.file('/test/features/test.feature');
+      const mockDocument = { uri: mockUri } as vscode.TextDocument;
+      const setStub = setupValidateStubs({ isFeature: true });
+
+      validateStepDefinitions(mockDocument);
+
+      assert.strictEqual(setStub.callCount, 0);
+    });
+
     test('should skip non-feature files', () => {
       const mockUri = vscode.Uri.file('/test/steps/steps.py');
       const mockDocument = { uri: mockUri } as vscode.TextDocument;
@@ -393,8 +410,7 @@ suite('stepDiagnostics', () => {
 
       sandbox.restore();
       sandbox = sinon.createSandbox();
-
-      // Second validation: step is now matched
+      sandbox.stub(parser, 'initialStepsParseComplete').get(() => true);
       const stepDef = new stepsParser.StepFileStep(
         'skey1', vscode.Uri.file('/test/steps/steps.py'), 'steps.py', 'given',
         'test step'

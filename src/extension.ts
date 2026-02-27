@@ -392,24 +392,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         // We actully need to await this to ensure parsing is done before validation
         await parser.reparseFile(uri, event.document.getText(), wkspSettings, testData, ctrl);
 
-        // Validate fixture tags and step definitions when feature file changes
-        validateFixtureTags(event.document);
-        validateStepDefinitions(event.document);
+        if (initialParsingComplete) {
+          // Validate fixture tags and step definitions when feature file changes
+          validateFixtureTags(event.document);
+          validateStepDefinitions(event.document);
 
-        // If enviroment file changes, re-validate fixtures in all open feature files
-        if (isEnvFile) {
-          for (const document of vscode.workspace.textDocuments) {
-            if (isFeatureFile(document.uri)) {
-              validateFixtureTags(document);
+          // If enviroment file changes, re-validate fixtures in all open feature files
+          if (isEnvFile) {
+            for (const document of vscode.workspace.textDocuments) {
+              if (isFeatureFile(document.uri)) {
+                validateFixtureTags(document);
+              }
             }
           }
-        }
 
-        // If steps file or library file changes, re-validate step definitions in all open feature files
-        if (couldBePythonStepsFile(uri) && !isEnvFile) {
-          for (const document of vscode.workspace.textDocuments) {
-            if (isFeatureFile(document.uri)) {
-              validateStepDefinitions(document);
+          // If steps file or library file changes, re-validate step definitions in all open feature files
+          if (couldBePythonStepsFile(uri) && !isEnvFile) {
+            for (const document of vscode.workspace.textDocuments) {
+              if (isFeatureFile(document.uri)) {
+                validateStepDefinitions(document);
+              }
             }
           }
         }

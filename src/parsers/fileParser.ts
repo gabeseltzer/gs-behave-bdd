@@ -41,6 +41,10 @@ export class FileParser {
   private static readonly PYTHON_REPARSE_DEBOUNCE_MS = 500;
   private _statusChangeHandlers: ((busy: boolean) => void)[] = [];
 
+  get initialStepsParseComplete(): boolean {
+    return this._finishedStepsParseForAllWorkspaces;
+  }
+
   public onStatusChange(handler: (busy: boolean) => void) {
     this._statusChangeHandlers.push(handler);
   }

@@ -11,6 +11,14 @@ import * as configModule from '../../../src/configuration';
 import * as behaveLoaderModule from '../../../src/parsers/behaveStepLoader';
 import * as adapterModule from '../../../src/parsers/stepsParserBehaveAdapter';
 
+suite('fileParser - initialStepsParseComplete', () => {
+  test('should return false initially', () => {
+    const parser = new FileParser();
+    assert.strictEqual(parser.initialStepsParseComplete, false);
+    parser.dispose();
+  });
+});
+
 suite('fileParser - reparseFile', () => {
   let fileParser: FileParser;
   let clock: sinon.SinonFakeTimers;
