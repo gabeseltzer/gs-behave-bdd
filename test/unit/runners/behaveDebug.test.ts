@@ -23,6 +23,8 @@ suite('behaveDebug', () => {
   function createMockWr(overrides?: {
     importStrategy?: string;
     justMyCode?: boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onCancellationRequested?: (cb: () => void) => any;
   }) {
     return {
       pythonExec: 'python',
@@ -38,7 +40,7 @@ suite('behaveDebug', () => {
         name: 'test-run-1',
         token: {
           isCancellationRequested: false,
-          onCancellationRequested: () => ({ dispose: () => { /* mock */ } })
+          onCancellationRequested: overrides?.onCancellationRequested ?? (() => ({ dispose: () => { /* mock */ } }))
         },
         appendOutput: () => { /* mock */ }
       }
@@ -53,7 +55,8 @@ suite('behaveDebug', () => {
     // Mock config.extensionTempFilesUri via global
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (global as any).config = {
-      extensionTempFilesUri: vscode.Uri.file(path.join('/tmp', 'behave-vsc'))
+      extensionTempFilesUri: vscode.Uri.file(path.join('/tmp', 'behave-vsc')),
+      integrationTestRun: false
     };
 
     // Stub vscode.debug.startDebugging to capture the launch config
@@ -159,5 +162,177 @@ suite('behaveDebug', () => {
       'behave features/test.feature'
     );
     assert.strictEqual(capturedConfig.justMyCode, false);
+  });
+
+
+  suite('debug session lifecycle', () => {
+
+    test('should register terminate listener before calling startDebugging', async () => {
+      const callOrder: string[] = [];
+
+      // Stub onDidTerminateDebugSession to track call order and fire immediately
+      const onDidTerminateStub = sinon.stub(vscode.debug, 'onDidTerminateDebugSession').callsFake(
+        (listener: () => void) => {
+          callOrder.push('onDidTerminateDebugSession');
+          setTimeout(listener, 0);
+          return { dispose: () => { /* mock */ } };
+        }
+      );
+      void onDidTerminateStub;
+
+      // Override startDebugging to track call order
+      startDebuggingStub.restore();
+      sinon.stub(vscode.debug, 'startDebugging').callsFake(
+        async (_folder: unknown, config: unknown) => {
+          callOrder.push('startDebugging');
+          capturedConfig = config;
+          return true;
+        }
+      );
+
+      const mockWr = createMockWr();
+      await debugBehaveInstance(
+        mockWr as unknown as Parameters<typeof debugBehaveInstance>[0],
+        ['features/test.feature'],
+        'behave features/test.feature'
+      );
+
+      assert.strictEqual(callOrder[0], 'onDidTerminateDebugSession',
+        'terminate listener should be registered before startDebugging');
+      assert.strictEqual(callOrder[1], 'startDebugging',
+        'startDebugging should be called after listener registration');
+    });
+
+
+    test('should resolve and call stopDebugging on timeout when session does not terminate', async () => {
+      const clock = sinon.useFakeTimers();
+
+      try {
+        // Stub onDidTerminateDebugSession to NOT fire
+        sinon.stub(vscode.debug, 'onDidTerminateDebugSession').callsFake(
+          () => ({ dispose: () => { /* mock */ } })
+        );
+
+        const stopStub = sinon.stub(vscode.debug, 'stopDebugging').resolves();
+
+        startDebuggingStub.restore();
+        sinon.stub(vscode.debug, 'startDebugging').callsFake(
+          async () => true
+        );
+
+        const mockWr = createMockWr();
+        const promise = debugBehaveInstance(
+          mockWr as unknown as Parameters<typeof debugBehaveInstance>[0],
+          ['features/test.feature'],
+          'behave features/test.feature'
+        );
+
+        // Advance past the 120s timeout (non-integration test)
+        await clock.tickAsync(120001);
+
+        await promise;
+
+        assert.ok(stopStub.called, 'stopDebugging should be called on timeout');
+      }
+      finally {
+        clock.restore();
+      }
+    });
+
+
+    test('should resolve and call stopDebugging when cancellation token fires', async () => {
+      const clock = sinon.useFakeTimers();
+
+      try {
+        // Stub onDidTerminateDebugSession to NOT fire
+        sinon.stub(vscode.debug, 'onDidTerminateDebugSession').callsFake(
+          () => ({ dispose: () => { /* mock */ } })
+        );
+
+        const stopStub = sinon.stub(vscode.debug, 'stopDebugging').resolves();
+
+        startDebuggingStub.restore();
+        sinon.stub(vscode.debug, 'startDebugging').callsFake(
+          async () => true
+        );
+
+        // Capture the cancellation callback so we can fire it
+        let cancelCallback: (() => void) | undefined;
+        const mockWr = createMockWr({
+          onCancellationRequested: (cb: () => void) => {
+            cancelCallback = cb;
+            return { dispose: () => { /* mock */ } };
+          }
+        });
+
+        const promise = debugBehaveInstance(
+          mockWr as unknown as Parameters<typeof debugBehaveInstance>[0],
+          ['features/test.feature'],
+          'behave features/test.feature'
+        );
+
+        // Let startDebugging resolve
+        await clock.tickAsync(0);
+
+        // Fire cancellation
+        assert.ok(cancelCallback, 'cancellation callback should have been registered');
+        cancelCallback!();
+
+        // Let microtasks process
+        await clock.tickAsync(0);
+
+        await promise;
+
+        assert.ok(stopStub.called, 'stopDebugging should be called on cancellation');
+      }
+      finally {
+        clock.restore();
+      }
+    });
+
+
+    test('should dispose terminate listener when startDebugging returns false', async () => {
+      let terminateDisposed = false;
+
+      sinon.stub(vscode.debug, 'onDidTerminateDebugSession').callsFake(
+        () => ({ dispose: () => { terminateDisposed = true; } })
+      );
+
+      startDebuggingStub.restore();
+      sinon.stub(vscode.debug, 'startDebugging').callsFake(
+        async () => false
+      );
+
+      const mockWr = createMockWr();
+      await debugBehaveInstance(
+        mockWr as unknown as Parameters<typeof debugBehaveInstance>[0],
+        ['features/test.feature'],
+        'behave features/test.feature'
+      );
+
+      assert.ok(terminateDisposed, 'terminate listener should be disposed when startDebugging returns false');
+    });
+
+
+    test('should not call stopDebugging on normal session termination', async () => {
+      // Stub onDidTerminateDebugSession to fire immediately
+      sinon.stub(vscode.debug, 'onDidTerminateDebugSession').callsFake(
+        (listener: () => void) => {
+          setTimeout(listener, 0);
+          return { dispose: () => { /* mock */ } };
+        }
+      );
+
+      const stopStub = sinon.stub(vscode.debug, 'stopDebugging').resolves();
+
+      const mockWr = createMockWr();
+      await debugBehaveInstance(
+        mockWr as unknown as Parameters<typeof debugBehaveInstance>[0],
+        ['features/test.feature'],
+        'behave features/test.feature'
+      );
+
+      assert.ok(!stopStub.called, 'stopDebugging should NOT be called on normal termination');
+    });
   });
 });
