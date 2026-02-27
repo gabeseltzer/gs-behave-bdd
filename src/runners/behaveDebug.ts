@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { config } from "../configuration";
 import { diagLog } from '../logger';
+import { getBehaveEnv } from './behaveEnv';
 import { WkspRun } from './testRunHandler';
 
 
@@ -16,7 +17,7 @@ export async function debugBehaveInstance(wr: WkspRun, args: string[], friendlyC
     args.push("--no-summary", "--outfile",
       vscode.Uri.joinPath(config.extensionTempFilesUri, `${(wr.run.name ?? "")}-${wr.wkspSettings.name}-debug.log`).fsPath);
 
-    const env = { ...process.env, ...wr.wkspSettings.getEffectiveEnvVars() };
+    const env = getBehaveEnv(wr.wkspSettings);
 
     const debugLaunchConfig = {
       name: `behave-vsc-debug`,

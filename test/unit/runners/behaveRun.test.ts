@@ -35,6 +35,7 @@ suite('behaveRun', () => {
     wkspSettings = {
       uri: { path: '/test/workspace', fsPath: '/test/workspace' },
       projectUri: { path: '/test/project', fsPath: '/test/project' },
+      importStrategy: 'fromEnvironment',
       getEffectiveEnvVars: () => ({})
     };
     run = {
