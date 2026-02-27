@@ -3,10 +3,15 @@ import { getWorkspaceSettingsForFile, isFeatureFile } from "../common";
 import { getFixtureByTag, getFixtures } from "../parsers/fixtureParser";
 import { getFeatureTags } from "../parsers/featureParser";
 import { config } from "../configuration";
+import { parser } from "../extension";
 
 export function validateFixtureTags(document: vscode.TextDocument): void {
   try {
     if (!isFeatureFile(document.uri)) {
+      return;
+    }
+
+    if (!parser.initialStepsParseComplete) {
       return;
     }
 
