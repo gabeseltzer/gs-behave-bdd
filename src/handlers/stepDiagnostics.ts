@@ -4,6 +4,7 @@ import { getFeatureFileSteps } from "../parsers/featureParser";
 import { getStepFileStepForFeatureFileStep } from "../parsers/stepMappings";
 import { getStepFileSteps } from "../parsers/stepsParser";
 import { config } from "../configuration";
+import { parser } from "../extension";
 
 export function validateStepDefinitions(document: vscode.TextDocument): void {
   try {
@@ -13,6 +14,10 @@ export function validateStepDefinitions(document: vscode.TextDocument): void {
 
     const wkspSettings = getWorkspaceSettingsForFile(document.uri);
     if (!wkspSettings) {
+      return;
+    }
+
+    if (!parser.initialStepsParseComplete) {
       return;
     }
 
@@ -68,13 +73,4 @@ export function clearStepDiagnostics(uri: vscode.Uri): void {
   const existingDiagnostics = config.diagnostics.get(uri) || [];
   const nonStepDiagnostics = [...existingDiagnostics].filter(d => d.code !== 'step-not-found');
   config.diagnostics.set(uri, nonStepDiagnostics);
-}
-
-export function validateAllOpenFeatureDocuments(): void {
-  const docs = vscode.workspace.textDocuments;
-  for (const document of docs) {
-    if (isFeatureFile(document.uri)) {
-      validateStepDefinitions(document);
-    }
-  }
 }

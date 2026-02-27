@@ -7,7 +7,6 @@ import { FeatureFileStep, getFeatureFileSteps } from './featureParser';
 import { refreshStepReferencesView } from '../handlers/findStepReferencesHandler';
 import { performance } from 'perf_hooks';
 import { retriggerSemanticHighlighting } from '../handlers/semHighlightProvider';
-import { validateAllOpenFeatureDocuments } from '../handlers/stepDiagnostics';
 
 
 let stepMappings: StepMapping[] = [];
@@ -87,7 +86,6 @@ export function rebuildStepMappings(featuresUri: vscode.Uri): number {
 
   retriggerSemanticHighlighting();
   refreshStepReferencesView();
-  validateAllOpenFeatureDocuments();
 
   diagLog(`rebuilding step mappings for ${featuresUri.path} took ${Math.round(performance.now() - start)}ms ` +
     `(matching loop: ${matchLoopTime}ms, ${processed} steps processed, ${exactMatchCount} exact matches, ${paramsMatchCount} params matches)`);
