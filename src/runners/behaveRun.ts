@@ -1,6 +1,7 @@
 import { ChildProcess, spawn, SpawnOptions } from 'child_process';
 import { cleanBehaveText } from '../common';
 import { diagLog } from '../logger';
+import { getBehaveEnv } from './behaveEnv';
 import { WkspRun } from './testRunHandler';
 
 function toRunOutput(text: string): string {
@@ -20,14 +21,14 @@ export async function runBehaveInstance(wr: WkspRun, parallelMode: boolean,
     const local_args = [...args];
     local_args.unshift("-m", "behave");
     diagLog(`${wr.pythonExec} ${local_args.join(" ")}`, wkspUri);
-    const effectiveEnvVars = wr.wkspSettings.getEffectiveEnvVars();
-    const env = { ...process.env, ...effectiveEnvVars };
+    const env = getBehaveEnv(wr.wkspSettings);
     // Use projectUri as the working directory (this is where behave.ini etc. should be)
     const projectUri = wr.wkspSettings.projectUri;
     const options: SpawnOptions = { cwd: projectUri.fsPath, env: env };
     cp = spawn(wr.pythonExec, local_args, options);
 
     if (!cp.pid) {
+      const effectiveEnvVars = wr.wkspSettings.getEffectiveEnvVars();
       throw `unable to launch python or behave, command: ${wr.pythonExec} ${local_args.join(" ")}\n` +
       `working directory:${projectUri.fsPath}\nenv vars: ${JSON.stringify(effectiveEnvVars)}`;
     }
