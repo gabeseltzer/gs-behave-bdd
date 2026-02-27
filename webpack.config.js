@@ -56,6 +56,7 @@ const extensionConfig = {
     new CopyPlugin({
       patterns: [
         { from: "src/python", to: "python" },
+        { from: "bundled", to: "bundled" },
       ],
     }),
   ],

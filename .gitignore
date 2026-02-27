@@ -1,6 +1,7 @@
 out
 dist
 node_modules
+bundled/libs/
 __pycache__
 .vscode-test
 **/.venv/**
