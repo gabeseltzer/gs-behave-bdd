@@ -3,6 +3,7 @@ import * as assert from 'assert';
 import { TestSupport } from '../../../src/extension';
 import { TestWorkspaceConfig, TestWorkspaceConfigWithWkspUri } from '../../../src/testWorkspaceConfig';
 import { getAllTestItems, getScenarioTests, uriId } from '../../../src/common';
+import { createDebugTracker } from './debugHelpers';
 
 let instances: TestSupport;
 
@@ -78,5 +79,48 @@ suite('debug suite', () => {
 		assert.ok(passResult, 'should find result for passing scenario');
 		assert.ok(passResult.scenario.result, 'result should not be undefined (was the run cancelled?)');
 		assert.strictEqual(passResult.scenario.result, 'passed', 'passing scenario should have result "passed"');
+	});
+
+	test('debug session hits source breakpoint and continues', async function () {
+		this.timeout(300000);
+
+		const { wkspUri, instances } = await setupWorkspace();
+
+		// Find the passing scenario (it hits step_inst which has `pass` on line 7)
+		const passingScenario = findScenarioByName(instances, wkspUri, 'run a successful test');
+
+		// Add a breakpoint at line 7 (0-indexed: line 6) of steps.py — the `pass` statement in step_inst
+		const stepsUri = vscode.Uri.joinPath(wkspUri, 'features', 'steps', 'steps.py');
+		const breakpointLocation = new vscode.Location(stepsUri, new vscode.Position(6, 0));
+		const breakpoint = new vscode.SourceBreakpoint(breakpointLocation, true);
+
+		// Register the debug tracker to intercept stopped events and auto-continue
+		const tracker = createDebugTracker();
+
+		try {
+			vscode.debug.addBreakpoints([breakpoint]);
+
+			const runRequest = new vscode.TestRunRequest([passingScenario]);
+			const results = await instances.runHandler(true, runRequest);
+
+			// Assert the breakpoint was hit
+			assert.ok(tracker.result.breakpointHit, 'breakpoint should have been hit');
+			assert.ok(
+				tracker.result.stoppedEvents.some(e => e.reason === 'breakpoint'),
+				'should have a stopped event with reason "breakpoint"'
+			);
+
+			// Assert the run still completed with correct results
+			assert.ok(results, 'runHandler should return results');
+			assert.ok(results.length > 0, 'should have at least one result');
+			const passResult = results.find(r => r.scenario.scenarioName === 'run a successful test');
+			assert.ok(passResult, 'should find result for passing scenario');
+			assert.ok(passResult.scenario.result, 'result should not be undefined (was the run cancelled?)');
+			assert.strictEqual(passResult.scenario.result, 'passed', 'scenario should still pass after breakpoint continue');
+		}
+		finally {
+			vscode.debug.removeBreakpoints([breakpoint]);
+			tracker.dispose();
+		}
 	});
 }).timeout(900000);
