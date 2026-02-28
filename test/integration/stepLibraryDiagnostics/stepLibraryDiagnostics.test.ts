@@ -25,6 +25,7 @@ async function ensureExtensionReady(): Promise<void> {
   }
   // Always get exports (activate() returns exports immediately if already active)
   testSupport = await extension.activate() as TestSupport;
+  testSupport.config.integrationTestRun = true;
 }
 
 // Helper to get diagnostics for a URI
@@ -253,30 +254,38 @@ suite('Step Library Diagnostics Bug Fix', () => {
     await vscode.window.showTextDocument(featureDocument);
     await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
 
-    // Get initial diagnostics (should have 0 if library is imported correctly)
-    const initialDiagnostics = getDiagnosticsForUri(featureUri);
-    console.log(`Initial diagnostics count: ${initialDiagnostics.length}`);
+    // Get initial step mappings count (should have 6 if library is imported correctly: 3 steps x 2 scenarios)
+    const initialCounts = await testSupport.parser.parseFilesForWorkspace(
+      wkspUri, testSupport.testData, testSupport.ctrl, "test-baseline", false
+    );
+    assert.ok(initialCounts, 'initial parse should return counts');
+    const initialStepMappings = initialCounts.stepMappings;
+    console.log(`Initial step mappings: ${initialStepMappings}`);
+    assert.ok(initialStepMappings > 0, 'should have step mappings initially (library steps imported)');
 
     // Read the original file content for reliable restoration
     const originalContent = await vscode.workspace.fs.readFile(stepsUri);
 
     try {
-      // Delete the step file entirely to ensure no race conditions
+      // Delete the step file entirely
       await vscode.workspace.fs.delete(stepsUri);
 
       // Wait for watcher events to settle, then force a clean reparse
       await new Promise(resolve => setTimeout(resolve, 2000));
-      await testSupport.parser.parseFilesForWorkspace(
+      const removedCounts = await testSupport.parser.parseFilesForWorkspace(
         wkspUri, testSupport.testData, testSupport.ctrl, "test-import-removed", false
       );
-      await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
+      assert.ok(removedCounts, 'removed parse should return counts');
 
-      // After removing step file, diagnostics should increase (library steps no longer recognized)
-      const diagnosticsAfterRemove = getDiagnosticsForUri(featureUri);
-      console.log(`Diagnostics after removing step file: ${diagnosticsAfterRemove.length}`);
-      assert.ok(
-        diagnosticsAfterRemove.length > initialDiagnostics.length,
-        'Diagnostics should increase when step file is removed (library steps no longer recognized)'
+      // After removing step file, step mappings should be 0 (no step definitions)
+      console.log(`After removing step file - step mappings: ${removedCounts.stepMappings}, step defs: ${removedCounts.stepFileStepsExceptCommentedOut}`);
+      assert.strictEqual(
+        removedCounts.stepFileStepsExceptCommentedOut, 0,
+        'Step definitions should be 0 after removing the step file'
+      );
+      assert.strictEqual(
+        removedCounts.stepMappings, 0,
+        'Step mappings should be 0 after removing the step file'
       );
 
       // Restore the step file
@@ -284,18 +293,17 @@ suite('Step Library Diagnostics Bug Fix', () => {
 
       // Wait for watcher events to settle, then force a clean reparse
       await new Promise(resolve => setTimeout(resolve, 2000));
-      await testSupport.parser.parseFilesForWorkspace(
+      const restoredCounts = await testSupport.parser.parseFilesForWorkspace(
         wkspUri, testSupport.testData, testSupport.ctrl, "test-import-restored", false
       );
-      await testSupport.parser.stepsParseComplete(10000, "test-diagnostics-sync");
+      assert.ok(restoredCounts, 'restored parse should return counts');
 
-      // After restoring step file, diagnostics should return to initial level
-      const diagnosticsAfterReAdd = getDiagnosticsForUri(featureUri);
-      console.log(`Diagnostics after restoring step file: ${diagnosticsAfterReAdd.length}`);
-      assert.ok(
-        diagnosticsAfterReAdd.length <= initialDiagnostics.length,
-        'Diagnostics should decrease when step file is restored (library steps should be recognized again). ' +
-        `Initial: ${initialDiagnostics.length}, After remove: ${diagnosticsAfterRemove.length}, After re-add: ${diagnosticsAfterReAdd.length}`
+      // After restoring step file, step mappings should return to initial level
+      console.log(`After restoring step file - step mappings: ${restoredCounts.stepMappings}, step defs: ${restoredCounts.stepFileStepsExceptCommentedOut}`);
+      assert.strictEqual(
+        restoredCounts.stepMappings, initialStepMappings,
+        `Step mappings should return to initial level (${initialStepMappings}) after restoring. ` +
+        `Got: ${restoredCounts.stepMappings}`
       );
     } finally {
       // Always restore original file content

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { config } from "../configuration";
 import { diagLog } from '../logger';
+import { getBundledBehavePath } from '../bundledBehave';
 import { getBehaveEnv } from './behaveEnv';
 import { WkspRun } from './testRunHandler';
 
@@ -15,6 +16,7 @@ export async function debugBehaveInstance(wr: WkspRun, args: string[], friendlyC
     vscode.Uri.joinPath(config.extensionTempFilesUri, `${(wr.run.name ?? "")}-${wr.wkspSettings.name}-debug.log`).fsPath);
 
   const env = getBehaveEnv(wr.wkspSettings);
+  const bundledPath = getBundledBehavePath();
 
   const debugLaunchConfig = {
     name: `behave-vsc-debug`,
@@ -25,7 +27,11 @@ export async function debugBehaveInstance(wr: WkspRun, args: string[], friendlyC
     module: "behave",
     args: args,
     env: env,
-    justMyCode: wr.wkspSettings.justMyCode
+    justMyCode: wr.wkspSettings.justMyCode,
+    rules: [
+      { path: bundledPath, include: false },
+      { module: "behave", include: false }
+    ]
   };
 
   const wkspFolder = vscode.workspace.getWorkspaceFolder(wr.wkspSettings.uri);
