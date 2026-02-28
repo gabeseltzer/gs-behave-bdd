@@ -143,6 +143,34 @@ suite('behaveDebug', () => {
     );
   });
 
+  test('should include rules to exclude bundled behave from debugging', async () => {
+    const mockWr = createMockWr();
+    await debugBehaveInstance(
+      mockWr as unknown as Parameters<typeof debugBehaveInstance>[0],
+      ['features/test.feature'],
+      'behave features/test.feature'
+    );
+
+    assert.ok(capturedConfig.rules, 'rules should be set in debug config');
+    assert.ok(Array.isArray(capturedConfig.rules), 'rules should be an array');
+
+    // Should have a path rule for bundled libs
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pathRule = capturedConfig.rules.find((r: any) => r.path);
+    assert.ok(pathRule, 'should have a path-based rule');
+    assert.strictEqual(pathRule.include, false);
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getBundledBehavePath } = require('../../../src/bundledBehave');
+    assert.strictEqual(pathRule.path, getBundledBehavePath());
+
+    // Should have a module rule for behave
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const moduleRule = capturedConfig.rules.find((r: any) => r.module === 'behave');
+    assert.ok(moduleRule, 'should have a module-based rule for behave');
+    assert.strictEqual(moduleRule.include, false);
+  });
+
   test('should pass justMyCode setting to debug config', async () => {
     // Test with justMyCode = true
     const mockWrTrue = createMockWr({ justMyCode: true });
