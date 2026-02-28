@@ -123,4 +123,43 @@ suite('debug suite', () => {
 			tracker.dispose();
 		}
 	});
+
+	test('debug session pauses on raised exception and continues', async function () {
+		this.timeout(300000);
+
+		const { wkspUri, instances } = await setupWorkspace();
+
+		// Find the failing scenario — it hits `assert successful_or_failing == "successful"` which raises AssertionError
+		const failingScenario = findScenarioByName(instances, wkspUri, 'run a failing test');
+
+		// Register the debug tracker with exception breakpoint interception enabled
+		// This injects 'raised' into the setExceptionBreakpoints DAP request filters
+		const tracker = createDebugTracker({ interceptExceptionBreakpoints: true });
+
+		try {
+			const runRequest = new vscode.TestRunRequest([failingScenario]);
+			const results = await instances.runHandler(true, runRequest);
+
+			// Assert an exception pause was detected
+			assert.ok(tracker.result.exceptionHit, 'should have paused on a raised exception');
+			assert.ok(
+				tracker.result.stoppedEvents.some(e => e.reason === 'exception'),
+				'should have a stopped event with reason "exception"'
+			);
+
+			// Assert the run still completed (the tracker auto-continued)
+			assert.ok(results, 'runHandler should return results');
+			assert.ok(results.length > 0, 'should have at least one result');
+			const failResult = results.find(r => r.scenario.scenarioName === 'run a failing test');
+			assert.ok(failResult, 'should find result for failing scenario');
+			assert.ok(failResult.scenario.result, 'result should not be undefined (was the run cancelled?)');
+			assert.ok(
+				failResult.scenario.result.startsWith('failed'),
+				`failing scenario should have result starting with "failed", got: "${failResult.scenario.result}"`
+			);
+		}
+		finally {
+			tracker.dispose();
+		}
+	});
 }).timeout(900000);
