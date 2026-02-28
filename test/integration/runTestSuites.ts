@@ -139,6 +139,15 @@ async function runTestSuites() {
       launchArgs
     });
 
+    launchArgs = ["example-projects/simple"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './debug suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
     launchArgs = [`"example-projects/step library"`];
     extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './stepLibraryDiagnostics'));
     await runTests({
