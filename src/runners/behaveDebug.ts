@@ -35,6 +35,10 @@ export async function debugBehaveInstance(wr: WkspRun, args: string[], friendlyC
   };
 
   const wkspFolder = vscode.workspace.getWorkspaceFolder(wr.wkspSettings.uri);
+  if (!wkspFolder) {
+    diagLog("cannot start debug session: workspace folder not found for URI", wr.wkspSettings.uri);
+    return;
+  }
 
   // Register all listeners BEFORE startDebugging to avoid race condition
   // where behave exits instantly and the terminate event fires before the listener exists

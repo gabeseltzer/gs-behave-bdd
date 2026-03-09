@@ -222,4 +222,26 @@ suite('behaveRun', () => {
         `Line ${i} should end with \\r before \\n: ${JSON.stringify(lines[i])}`);
     }
   });
+
+  test('spawn receives PYTHONPATH from getBehaveEnv including bundled libs path', async () => {
+    const promise = runBehaveInstance(
+      mockWr as unknown as Parameters<typeof runBehaveInstance>[0], false, ['features/test.feature'], 'behave features/test.feature'
+    );
+
+    mockProcess.emit('close');
+    await promise;
+
+    assert.ok(spawnStub.calledOnce, 'spawn should be called once');
+    const spawnOptions = spawnStub.firstCall.args[2] as { env?: NodeJS.ProcessEnv };
+    assert.ok(spawnOptions.env, 'spawn should be called with an env object');
+    assert.ok(spawnOptions.env['PYTHONPATH'], 'PYTHONPATH should be set in spawn env');
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getBundledBehavePath } = require('../../../src/bundledBehave');
+    const bundledPath = getBundledBehavePath();
+    assert.ok(
+      spawnOptions.env['PYTHONPATH'].includes(bundledPath),
+      `PYTHONPATH should include bundled libs path. Got: ${spawnOptions.env['PYTHONPATH']}`
+    );
+  });
 });

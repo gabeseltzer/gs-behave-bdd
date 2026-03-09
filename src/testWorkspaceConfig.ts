@@ -219,6 +219,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.get("runParallel"));
       case "xRay":
         return <T><unknown>(this.get("xRay"));
+      case "importStrategy":
+        return <T><unknown>(this.importStrategy === undefined ? "useBundled" : this.importStrategy);
 
       default:
         debugger; // eslint-disable-line no-debugger

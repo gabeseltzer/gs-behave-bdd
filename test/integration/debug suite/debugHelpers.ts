@@ -57,6 +57,8 @@ export function createDebugTracker(options?: {
 								() => console.log(`debugTracker: continued after ${reason}`),
 								(err) => console.error(`debugTracker: failed to continue: ${err}`)
 							);
+						} else {
+							console.warn(`debugTracker: cannot continue - threadId is undefined for stopped event (reason=${reason})`);
 						}
 					}
 				}

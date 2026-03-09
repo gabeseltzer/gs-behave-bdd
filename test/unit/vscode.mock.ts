@@ -117,7 +117,7 @@ export const workspace = {
     delete: () => Promise.resolve(),
     readDirectory: () => Promise.resolve([])
   },
-  getWorkspaceFolder: () => undefined,
+  getWorkspaceFolder: (uri: Uri) => ({ uri, name: 'mock-workspace', index: 0 }),
   workspaceFolders: [],
   getConfiguration: () => ({
     get: (key: string) => {

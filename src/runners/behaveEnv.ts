@@ -4,7 +4,9 @@ import { WorkspaceSettings } from '../settings';
 
 /**
  * Builds the environment variables for a behave process.
- * When importStrategy is 'useBundled', prepends the bundled libs path to PYTHONPATH.
+ * The bundled libs path is always included in PYTHONPATH in both strategies:
+ *   - 'useBundled': bundled path is prepended (takes priority over environment behave)
+ *   - 'fromEnvironment': bundled path is appended (environment behave takes priority, bundled acts as fallback)
  */
 export function getBehaveEnv(wkspSettings: Pick<WorkspaceSettings, 'importStrategy' | 'getEffectiveEnvVars'>):
   { [key: string]: string | undefined } {

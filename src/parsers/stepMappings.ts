@@ -123,7 +123,7 @@ export function _getStepFileStepMatch(featureFileStep: FeatureFileStep,
   const findExactMatch = (textWithoutType: string, stepType: string) => {
     const matchText = stepType + sepr + textWithoutType;
     for (const [key, value] of exactSteps) {
-      const rx = compiledExactRegexes.get(key)!;
+      const rx = compiledExactRegexes.get(key) ?? (() => { throw new Error(`missing compiled regex for key: ${key}`); })();
       const match = rx.exec(matchText);
       if (match && match.length !== 0) {
         return value;
@@ -135,7 +135,7 @@ export function _getStepFileStepMatch(featureFileStep: FeatureFileStep,
     const matchText = stepType + sepr + textWithoutType;
     const matches = new Map<string, StepFileStep>();
     for (const [key, value] of paramsSteps) {
-      const rx = compiledParamsRegexes.get(key)!;
+      const rx = compiledParamsRegexes.get(key) ?? (() => { throw new Error(`missing compiled regex for key: ${key}`); })();
       const match = rx.exec(matchText);
       if (match && match.length !== 0) {
         matches.set(key, value);
