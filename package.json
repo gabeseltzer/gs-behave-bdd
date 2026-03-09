@@ -215,7 +215,7 @@
 	"name": "behave-vsc",
 	"displayName": "Behave VSC",
 	"description": "Debug, Run and Navigate Python behave tests. Forked from jimasp",
-	"version": "0.7.5",
+	"version": "0.8.0",
 	"icon": "images/behave-vsc.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",
@@ -267,6 +267,7 @@
 		"lint:python": "uv run ruff check src/python example-projects && uv run ruff format --check src/python example-projects && uv run mypy src/python",
 		"test:unit": "npm run compile-tests && node ./out/test/test/unit/run.js",
 		"test:integration": "npm run compile-tests && node ./out/test/test/integration/runTestSuites.js --stable",
+		"test:debug-suite": "npm run compile-tests && node ./out/test/test/integration/runDebugSuite.js --insiders",
 		"test": "npm run test:unit && npm run test:integration",
 		"pretest": "npm run compile && npm run lint && npm run lint:python",
 		"pretestinsiders": "npm run pretest",
