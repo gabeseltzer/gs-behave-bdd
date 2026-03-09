@@ -284,4 +284,108 @@ suite('fileParser - reparseFile debouncing', () => {
         'loadStepsFromBehave should NOT be called after dispose');
     });
   });
+
+  suite('onStepMappingsRebuilt callback', () => {
+    test('callback is invoked after Python step file debounce fires', async () => {
+      const testData = new WeakMap();
+      const ctrlStub = {} as vscode.TestController;
+      const callbackArgs: vscode.Uri[] = [];
+
+      fileParser.onStepMappingsRebuilt = (uri) => callbackArgs.push(uri);
+
+      await fileParser.reparseFile(stepsFileUri, 'content', wkspSettings, testData, ctrlStub);
+
+      assert.strictEqual(callbackArgs.length, 0, 'callback should NOT fire before debounce');
+
+      await clock.tickAsync(500);
+
+      assert.strictEqual(callbackArgs.length, 1, 'callback should fire once after debounce');
+      assert.ok(callbackArgs[0].path === featuresUri.path,
+        'callback should receive the featuresUri for the changed workspace');
+    });
+
+    test('callback is NOT invoked for feature files (they reparse immediately, not via debounce)', async () => {
+      couldBePythonStepsFileStub.returns(false);
+      isFeatureFileStub.returns(true);
+
+      const featureParserModule = await import('../../../src/parsers/featureParser');
+      const getFeatureNameStub = sinon.stub(featureParserModule, 'getFeatureNameFromContent').resolves(null);
+
+      const testData = new WeakMap();
+      const ctrlStub = {
+        items: { get: () => undefined, add: () => undefined, delete: () => undefined },
+        createTestItem: (_id: string, label: string) => ({
+          id: _id, label, canResolveChildren: false,
+          children: { add: () => undefined, get: () => undefined, delete: () => undefined },
+          uri: featureFileUri,
+        }),
+      } as unknown as vscode.TestController;
+
+      let callbackFired = false;
+      fileParser.onStepMappingsRebuilt = () => { callbackFired = true; };
+
+      await fileParser.reparseFile(featureFileUri, 'Feature: test', wkspSettings, testData, ctrlStub);
+      await clock.tickAsync(500);
+
+      assert.strictEqual(callbackFired, false,
+        'callback should NOT fire for feature file reparses (only for Python debounce path)');
+
+      getFeatureNameStub.restore();
+    });
+
+    test('with rapid Python file changes, callback fires only once per debounce window', async () => {
+      const testData = new WeakMap();
+      const ctrlStub = {} as vscode.TestController;
+      let callbackCount = 0;
+
+      fileParser.onStepMappingsRebuilt = () => { callbackCount++; };
+
+      // Simulate rapid saves (e.g. formatter running on save)
+      await fileParser.reparseFile(stepsFileUri, 'v1', wkspSettings, testData, ctrlStub);
+      await fileParser.reparseFile(stepsFileUri, 'v2', wkspSettings, testData, ctrlStub);
+      await fileParser.reparseFile(stepsFileUri, 'v3', wkspSettings, testData, ctrlStub);
+
+      await clock.tickAsync(500);
+
+      assert.strictEqual(callbackCount, 1,
+        'callback should only fire once despite rapid changes');
+    });
+
+    test('callback fires for environment.py debounce', async () => {
+      couldBePythonStepsFileStub.returns(false);
+      isFeatureFileStub.returns(false);
+
+      const testData = new WeakMap();
+      const ctrlStub = {} as vscode.TestController;
+      let callbackFired = false;
+
+      fileParser.onStepMappingsRebuilt = () => { callbackFired = true; };
+
+      await fileParser.reparseFile(envFileUri, 'content', wkspSettings, testData, ctrlStub);
+      await clock.tickAsync(500);
+
+      assert.strictEqual(callbackFired, true,
+        'callback should fire after environment.py debounce — fixture changes affect step mappings');
+    });
+
+    test('callback receives correct featuresUri for the changed workspace (not a different workspace)', async () => {
+      const testData = new WeakMap();
+      const ctrlStub = {} as vscode.TestController;
+      const callbackUris: string[] = [];
+
+      fileParser.onStepMappingsRebuilt = (uri) => callbackUris.push(uri.path);
+
+      // Trigger reparse for workspace 1
+      await fileParser.reparseFile(stepsFileUri, 'contentA', wkspSettings, testData, ctrlStub);
+
+      // Trigger reparse for workspace 2 before workspace 1 debounce fires
+      await fileParser.reparseFile(stepsFileUri2, 'contentB', wkspSettings2, testData, ctrlStub);
+
+      await clock.tickAsync(500);
+
+      assert.strictEqual(callbackUris.length, 2, 'callback should fire once per workspace');
+      assert.ok(callbackUris.includes(featuresUri.path), 'workspace 1 featuresUri should be in callbacks');
+      assert.ok(callbackUris.includes(featuresUri2.path), 'workspace 2 featuresUri should be in callbacks');
+    });
+  });
 });
