@@ -24,3 +24,10 @@ images/behave-vsc.gif
 **/.ruff_cache/**
 uv.lock
 pyproject.toml
+AI_INSTRUCTIONS.md
+CLAUDE.md
+CONTRIBUTING.md
+.claude/**
+plans/**
+.pylintrc
+.tool-versions
