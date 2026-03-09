@@ -88,6 +88,8 @@ export class WorkspaceSettings {
     const importStrategyCfg: string | undefined = wkspConfig.get("importStrategy");
     if (importStrategyCfg === undefined)
       throw "importStrategy is undefined";
+    if (importStrategyCfg !== 'useBundled' && importStrategyCfg !== 'fromEnvironment')
+      throw `importStrategy value "${importStrategyCfg}" is invalid. Must be "useBundled" or "fromEnvironment"`;
 
 
     this.justMyCode = justMyCodeCfg;
