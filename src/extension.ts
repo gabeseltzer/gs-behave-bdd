@@ -90,6 +90,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       statusItem.text = busy ? "Behave: Parsing..." : "Behave: Ready";
     });
 
+    // After a Python step/env file debounce fires and step mappings are rebuilt, re-validate
+    // diagnostics for all open feature files in the affected workspace. This handles the case
+    // where files change via the disk (e.g. git branch switch) without going through
+    // onDidChangeTextDocument, as well as the case where validateStepDefinitions was called
+    // eagerly (before the debounce fired) and produced stale results.
+    parser.onStepMappingsRebuilt = (featuresUri: vscode.Uri) => {
+      for (const document of vscode.workspace.textDocuments) {
+        if (!isFeatureFile(document.uri)) continue;
+        const wkspSettings = getWorkspaceSettingsForFile(document.uri);
+        if (!wkspSettings || !urisMatch(wkspSettings.featuresUri, featuresUri)) continue;
+        validateFixtureTags(document);
+        validateStepDefinitions(document);
+      }
+    };
+
     // any function contained in a context.subscriptions.push() will execute immediately, 
     // as well as registering the returned disposable object for a dispose() call on extension deactivation
     // i.e. startWatchingWorkspace will execute immediately, as will registerCommand, but gotoStepHandler will not (as it is a parameter 

@@ -42,6 +42,10 @@ export class FileParser {
   private static readonly PYTHON_REPARSE_DEBOUNCE_MS = 500;
   private _statusChangeHandlers: ((busy: boolean) => void)[] = [];
 
+  // Called after a Python file debounce fires and step mappings have been rebuilt.
+  // extension.ts registers this to re-validate diagnostics for all open feature files.
+  public onStepMappingsRebuilt: ((featuresUri: vscode.Uri) => void) | undefined;
+
   get initialStepsParseComplete(): boolean {
     return this._finishedStepsParseForAllWorkspaces;
   }
@@ -636,6 +640,7 @@ export class FileParser {
           await parseEnvironmentFileContent(wkspSettings.featuresUri, content, fileUri, "reparseFile");
 
         rebuildStepMappings(wkspSettings.featuresUri);
+        this.onStepMappingsRebuilt?.(wkspSettings.featuresUri);
       }
       catch (e: unknown) {
         config.logger.showError(e, wkspSettings.uri);
