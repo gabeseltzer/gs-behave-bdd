@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { getContentFromFilesystem } from "../common";
+import { getContentFromFilesystem, isStepsFile, getWorkspaceUriForFile } from "../common";
 import { validateAndGetStepInfo, handleProviderError } from "./providerHelpers";
 import { stepFileDecoratorPattern } from "../parsers/stepsParser";
 
@@ -36,6 +36,16 @@ export class HoverProvider implements vscode.HoverProvider {
       if (functionInfo.docstring) {
         hoverContent.appendMarkdown('\n\n---\n\n');
         hoverContent.appendMarkdown(functionInfo.docstring);
+      }
+
+      // Add library source indicator if step is from a library file (not in /steps/)
+      const isLibraryStep = !isStepsFile(stepFileStep.uri);
+      if (isLibraryStep) {
+        const wkspUri = getWorkspaceUriForFile(document.uri);
+        if (wkspUri && stepFileStep.uri.path.startsWith(wkspUri.path)) {
+          const relativePath = stepFileStep.uri.path.substring(wkspUri.path.length + 1);
+          hoverContent.appendMarkdown(`\n\n*from library:* \`${relativePath}\``);
+        }
       }
 
       return new vscode.Hover(hoverContent, stepRange);

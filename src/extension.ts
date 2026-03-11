@@ -4,7 +4,7 @@ import { BehaveTestData, Scenario, TestData, TestFile } from './parsers/testFile
 import {
   getContentFromFilesystem,
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, isFeatureFile,
-  isStepsFile, logExtensionVersion, cleanExtensionTempDirectory, urisMatch
+  logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile
 } from './common';
 import { StepFileStep } from './parsers/stepsParser';
 import { gotoStepHandler } from './handlers/gotoStepHandler';
@@ -25,6 +25,7 @@ import { HoverProvider } from './handlers/hoverProvider';
 import { FixtureDefinitionProvider, FixtureHoverProvider, FixtureReferenceProvider } from './handlers/fixtureProviders';
 import { StepReferenceProvider } from './handlers/stepReferenceProvider';
 import { validateFixtureTags } from './handlers/fixtureDiagnostics';
+import { validateStepDefinitions } from './handlers/stepDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
 import { JunitWatcher } from './watchers/junitWatcher';
 
@@ -33,6 +34,7 @@ const testData = new WeakMap<vscode.TestItem, BehaveTestData>();
 const wkspWatchers = new Map<vscode.Uri, vscode.FileSystemWatcher[]>();
 export const parser = new FileParser();
 export interface QueueItem { test: vscode.TestItem; scenario: Scenario; }
+let initialParsingComplete = false;
 
 
 export type TestSupport = {
@@ -56,6 +58,8 @@ export type TestSupport = {
 export async function activate(context: vscode.ExtensionContext): Promise<TestSupport | undefined> {
 
   try {
+    // Reset flag on each activation (important for integration tests)
+    initialParsingComplete = false;
 
     const start = performance.now();
     diagLog("activate called, node pid:" + process.pid);
@@ -86,6 +90,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       statusItem.text = busy ? "Behave: Parsing..." : "Behave: Ready";
     });
 
+    // After a Python step/env file debounce fires and step mappings are rebuilt, re-validate
+    // diagnostics for all open feature files in the affected workspace. This handles the case
+    // where files change via the disk (e.g. git branch switch) without going through
+    // onDidChangeTextDocument, as well as the case where validateStepDefinitions was called
+    // eagerly (before the debounce fired) and produced stale results.
+    parser.onStepMappingsRebuilt = (featuresUri: vscode.Uri) => {
+      for (const document of vscode.workspace.textDocuments) {
+        if (!isFeatureFile(document.uri)) continue;
+        const wkspSettings = getWorkspaceSettingsForFile(document.uri);
+        if (!wkspSettings || !urisMatch(wkspSettings.featuresUri, featuresUri)) continue;
+        validateFixtureTags(document);
+        validateStepDefinitions(document);
+      }
+    };
+
     // any function contained in a context.subscriptions.push() will execute immediately, 
     // as well as registering the returned disposable object for a dispose() call on extension deactivation
     // i.e. startWatchingWorkspace will execute immediately, as will registerCommand, but gotoStepHandler will not (as it is a parameter 
@@ -94,6 +113,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     context.subscriptions.push(
       ctrl,
       treeView,
+      parser,
       config,
       config.diagnostics,
       cleanExtensionTempDirectoryCancelSource,
@@ -221,10 +241,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           if (isGlobalSettings) {
             // Open global settings via command, then get the active editor
             await vscode.commands.executeCommand("workbench.action.openSettingsJson");
-            editor = vscode.window.activeTextEditor!;
+            const activeEditor = vscode.window.activeTextEditor;
+            if (!activeEditor) return;
+            editor = activeEditor;
             doc = editor.document;
           } else {
-            doc = await vscode.workspace.openTextDocument(settingsUri!);
+            if (!settingsUri) return;
+            doc = await vscode.workspace.openTextDocument(settingsUri);
             editor = await vscode.window.showTextDocument(doc);
           }
 
@@ -333,9 +356,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(async (document) => {
       try {
         if (isFeatureFile(document.uri)) {
+          // Skip validation during initial startup - the async IIFE below will handle it
+          if (!initialParsingComplete) {
+            return;
+          }
           // Wait for steps/fixtures parsing to complete before validating
           await parser.stepsParseComplete(5000, "onDidOpenTextDocument");
           validateFixtureTags(document);
+          validateStepDefinitions(document);
         }
       }
       catch (e: unknown) {
@@ -348,10 +376,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     (async () => {
       try {
         await parser.stepsParseComplete(10000, "activate-validateOpenDocs");
+        initialParsingComplete = true;
         for (const document of vscode.workspace.textDocuments) {
-          if (isFeatureFile(document.uri)) {
-            validateFixtureTags(document);
-          }
+          validateFixtureTags(document);
+          validateStepDefinitions(document);
         }
       }
       catch (e: unknown) {
@@ -370,7 +398,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         const uri = event.document.uri;
         const isEnvFile = uri.path.endsWith("/environment.py");
 
-        if (!isFeatureFile(uri) && !isStepsFile(uri) && !isEnvFile)
+        if (!isFeatureFile(uri) && !couldBePythonStepsFile(uri) && !isEnvFile)
           return;
 
         const wkspSettings = getWorkspaceSettingsForFile(uri);
@@ -379,16 +407,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         // We actully need to await this to ensure parsing is done before validation
         await parser.reparseFile(uri, event.document.getText(), wkspSettings, testData, ctrl);
 
-        // Validate fixture tags when feature file changes
-        if (isFeatureFile(uri)) {
+        if (initialParsingComplete) {
+          // Validate fixture tags and step definitions when feature file changes
           validateFixtureTags(event.document);
-        }
+          validateStepDefinitions(event.document);
 
-        // If enviroment file changes, re-validate fixtures in all open feature files
-        if (isEnvFile) {
-          for (const document of vscode.workspace.textDocuments) {
-            if (isFeatureFile(document.uri)) {
-              validateFixtureTags(document);
+          // If enviroment file changes, re-validate fixtures in all open feature files
+          if (isEnvFile) {
+            for (const document of vscode.workspace.textDocuments) {
+              if (isFeatureFile(document.uri)) {
+                validateFixtureTags(document);
+              }
+            }
+          }
+
+          // If steps file or library file changes, re-validate step definitions in all open feature files
+          if (couldBePythonStepsFile(uri) && !isEnvFile) {
+            for (const document of vscode.workspace.textDocuments) {
+              if (isFeatureFile(document.uri)) {
+                validateStepDefinitions(document);
+              }
             }
           }
         }

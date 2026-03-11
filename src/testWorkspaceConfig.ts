@@ -18,12 +18,13 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   private multiRootRunWorkspacesInParallel: boolean | undefined;
   private runParallel: boolean | undefined;
   private xRay: boolean | undefined;
+  private importStrategy: string | undefined;
 
   // all user-settable settings in settings.json or *.code-workspace
   constructor({
     envVarOverrides, envVarPresets, activeEnvVarPreset, projectPath, featuresPath: featuresPath, justMyCode,
     multiRootRunWorkspacesInParallel,
-    runParallel, xRay
+    runParallel, xRay, importStrategy
   }: {
     envVarOverrides: { [name: string]: string } | undefined,
     envVarPresets?: { [presetName: string]: { [name: string]: string } } | undefined,
@@ -33,7 +34,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     justMyCode: boolean | undefined,
     multiRootRunWorkspacesInParallel: boolean | undefined,
     runParallel: boolean | undefined,
-    xRay: boolean | undefined
+    xRay: boolean | undefined,
+    importStrategy?: string | undefined
   }) {
     this.envVarOverrides = envVarOverrides;
     this.envVarPresets = envVarPresets;
@@ -44,6 +46,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     this.runParallel = runParallel;
     this.multiRootRunWorkspacesInParallel = multiRootRunWorkspacesInParallel;
     this.xRay = xRay;
+    this.importStrategy = importStrategy;
   }
 
   get<T>(section: string): T {
@@ -74,6 +77,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.runParallel === undefined ? false : this.runParallel);
       case "xRay":
         return <T><unknown>(this.xRay === undefined ? false : this.xRay);
+      case "importStrategy":
+        return <T><unknown>(this.importStrategy === undefined ? "useBundled" : this.importStrategy);
       default:
         debugger; // eslint-disable-line no-debugger
         throw new Error("get() missing case for section: " + section);
@@ -118,6 +123,9 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         break;
       case "xRay":
         response = <T><unknown>this.xRay;
+        break;
+      case "importStrategy":
+        response = <T><unknown>this.importStrategy;
         break;
       default:
         debugger; // eslint-disable-line no-debugger
@@ -211,6 +219,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.get("runParallel"));
       case "xRay":
         return <T><unknown>(this.get("xRay"));
+      case "importStrategy":
+        return <T><unknown>(this.importStrategy === undefined ? "useBundled" : this.importStrategy);
 
       default:
         debugger; // eslint-disable-line no-debugger

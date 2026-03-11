@@ -21,3 +21,13 @@ images/behave-vsc.gif
 **/venv/**
 .specstory/**
 **/.mypy_cache/**
+**/.ruff_cache/**
+uv.lock
+pyproject.toml
+AI_INSTRUCTIONS.md
+CLAUDE.md
+CONTRIBUTING.md
+.claude/**
+plans/**
+.pylintrc
+.tool-versions

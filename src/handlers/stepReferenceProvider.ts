@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { isStepsFile, isFeatureFile, getWorkspaceUriForFile } from '../common';
+import { isStepsFile, isFeatureFile, getWorkspaceUriForFile, couldBePythonStepsFile } from '../common';
 import { getStepMappingsForStepsFileFunction, getStepFileStepForFeatureFileStep } from '../parsers/stepMappings';
 import { config } from '../configuration';
 
@@ -11,10 +11,11 @@ export class StepReferenceProvider implements vscode.ReferenceProvider {
         context: vscode.ReferenceContext
     ): Promise<vscode.Location[] | undefined> {
         try {
-            if (isStepsFile(document.uri)) {
-                return this.getReferencesFromStepsFile(document.uri, position);
-            } else if (isFeatureFile(document.uri)) {
+            if (isFeatureFile(document.uri)) {
                 return this.getReferencesFromFeatureFile(document.uri, position);
+            } else if (isStepsFile(document.uri) || couldBePythonStepsFile(document.uri)) {
+                // Support both regular steps files (/steps/) and library files (imported .py files)
+                return this.getReferencesFromStepsFile(document.uri, position);
             }
             return undefined;
         } catch (e) {

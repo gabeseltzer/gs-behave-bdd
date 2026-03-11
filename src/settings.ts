@@ -40,6 +40,7 @@ export class WorkspaceSettings {
   public readonly activeEnvVarPreset: string;
   public readonly justMyCode: boolean;
   public readonly runParallel: boolean;
+  public readonly importStrategy: string;
   public readonly workspaceRelativeProjectPath: string;
   public readonly projectRelativeFeaturesPath: string;
   // convenience properties
@@ -84,10 +85,16 @@ export class WorkspaceSettings {
     const runParallelCfg: boolean | undefined = wkspConfig.get("runParallel");
     if (runParallelCfg === undefined)
       throw "runParallel is undefined";
+    const importStrategyCfg: string | undefined = wkspConfig.get("importStrategy");
+    if (importStrategyCfg === undefined)
+      throw "importStrategy is undefined";
+    if (importStrategyCfg !== 'useBundled' && importStrategyCfg !== 'fromEnvironment')
+      throw `importStrategy value "${importStrategyCfg}" is invalid. Must be "useBundled" or "fromEnvironment"`;
 
 
     this.justMyCode = justMyCodeCfg;
     this.runParallel = runParallelCfg;
+    this.importStrategy = importStrategyCfg;
     this.activeEnvVarPreset = activeEnvVarPresetCfg;
 
 

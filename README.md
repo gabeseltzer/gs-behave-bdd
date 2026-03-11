@@ -29,7 +29,6 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
 - Extension activation requires at least one `*.feature` file somewhere in the workspace
 - A compatible directory structure
 - [ms-python.python](https://marketplace.visualstudio.com/items?itemName=ms-python.python) extension
-- [behave](https://behave.readthedocs.io)
 - [python](https://www.python.org/)
 
 ### Required project directory structure
@@ -112,6 +111,7 @@ paths=my_tests/behave_features
 ## Extension settings
 
 - This extension has various options to customise your test run via `settings.json`, e.g. `runParallel`, `featuresPath`, and `envVarOverrides`.
+- By default, the extension uses its own bundled copy of behave. If you want to use behave from your Python environment instead (e.g. for a newer version), set `importStrategy` to `"fromEnvironment"` in your `settings.json`.
 - You can also disable/enable `justMyCode` for debug (via `settings.json` not `launch.json`).
 - If you are using a multi-root workspace with multiple projects that contain feature files, you can set up default settings in your `*.code-workspace` file, then optionally override these as required in the `settings.json` in each workspace folder.
 - For more information on available options, go to the extension settings in vscode.
@@ -198,7 +198,6 @@ paths=my_tests/behave_features
 - vscode always adds up test durations. For `runParallel` runs this means the parent test node reports a longer time than the test run actually took.
 - Step navigation limitations ("Go to Step Definition" and "Find All Step References"):
   - Step matching does not always match as per behave. It uses a simple regex match via replacing `{foo}` -> `{.*}`. As such, it does *not* consider typed parameters like `{foo:d}`, or `cfparse` cardinal parameters like `{foo:?}` or `re` regex matching like `(?P<foo>foo)`.
-  - Step navigation only finds steps that are in `.py` files in a folder called `steps` either inside the features folder or project root. If you import steps in python from a steps library folder outside your steps folder it won't find them.
 
 ---
 
