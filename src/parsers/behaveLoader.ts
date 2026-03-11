@@ -1,7 +1,7 @@
 /**
- * Loads step definitions using behave's step registry
- * This module spawns Python to use behave's internal step registry API
- * to discover all step definitions including those from imported libraries
+ * Loads step definitions and fixture definitions using behave's registry
+ * This module spawns Python to use behave's internal APIs
+ * to discover all step definitions and @fixture functions
  */
 
 import { spawn } from 'child_process';
@@ -23,24 +23,43 @@ export interface BehaveStepDefinition {
 }
 
 /**
- * Loads all step definitions from behave's step registry
- * 
+ * Fixture definition returned from Python's inspect of @fixture-decorated functions
+ */
+export interface BehaveFixtureDefinition {
+  functionName: string;    // Python function name (e.g., "browser_setup")
+  filePath: string;        // Absolute path to the source file
+  decoratorLine: number;   // 1-indexed line of @fixture decorator
+  defLine: number;         // 1-indexed line of def function_name(
+}
+
+/**
+ * Combined result from the Python discovery subprocess
+ */
+export interface BehaveDiscoveryResult {
+  steps: BehaveStepDefinition[];
+  fixtures: BehaveFixtureDefinition[];
+}
+
+/**
+ * Loads all step definitions and fixtures from behave
+ *
  * @param pythonExec Path to the Python executable
  * @param projectPath Project root directory (used as cwd for subprocess)
- * @param stepsPaths Array of directories containing step files (e.g., ["features/steps", "features/grouped/steps"])
- * @returns Array of step definitions discovered by behave
+ * @param stepsPaths Array of directories containing step files
+ * @param bundledLibsPath Optional path to bundled behave libs directory
+ * @returns Combined steps and fixtures discovered by behave
  * @throws Error if behave is not installed or if import errors occur
  */
-export async function loadStepsFromBehave(
+export async function loadFromBehave(
   pythonExec: string,
   projectPath: string,
   stepsPaths: string[],
   bundledLibsPath?: string
-): Promise<BehaveStepDefinition[]> {
+): Promise<BehaveDiscoveryResult> {
   const startTime = performance.now();
 
   try {
-    const scriptPath = getStepsScriptPath();
+    const scriptPath = getDiscoveryScriptPath();
     const args = [projectPath, JSON.stringify(stepsPaths)];
     if (bundledLibsPath)
       args.push('--bundled-libs', bundledLibsPath);
@@ -55,7 +74,19 @@ export async function loadStepsFromBehave(
       regex_pattern: string;
     }
 
-    let parsed: RawStepInfo[];
+    interface RawFixtureInfo {
+      function_name: string;
+      file: string;
+      decorator_line: number;
+      def_line: number;
+    }
+
+    interface RawOutput {
+      steps: RawStepInfo[];
+      fixtures: RawFixtureInfo[];
+    }
+
+    let parsed: RawOutput;
     try {
       parsed = JSON.parse(output);
     } catch (err) {
@@ -63,7 +94,7 @@ export async function loadStepsFromBehave(
     }
 
     // Convert to our format
-    const steps: BehaveStepDefinition[] = parsed.map(step => ({
+    const steps: BehaveStepDefinition[] = parsed.steps.map(step => ({
       stepType: step.step_type,
       pattern: step.pattern,
       filePath: step.file,
@@ -71,20 +102,27 @@ export async function loadStepsFromBehave(
       regex: step.regex_pattern
     }));
 
-    const elapsed = Math.round(performance.now() - startTime);
-    diagLog(`loadStepsFromBehave: loaded ${steps.length} steps in ${elapsed}ms`);
+    const fixtures: BehaveFixtureDefinition[] = parsed.fixtures.map(f => ({
+      functionName: f.function_name,
+      filePath: f.file,
+      decoratorLine: f.decorator_line,
+      defLine: f.def_line
+    }));
 
-    return steps;
+    const elapsed = Math.round(performance.now() - startTime);
+    diagLog(`loadFromBehave: loaded ${steps.length} steps and ${fixtures.length} fixtures in ${elapsed}ms`);
+
+    return { steps, fixtures };
 
   } catch (e) {
     const elapsed = Math.round(performance.now() - startTime);
     const errMsg = e instanceof Error ? e.message : String(e);
-    diagLog(`loadStepsFromBehave error (${elapsed}ms): ${errMsg}`);
+    diagLog(`loadFromBehave error (${elapsed}ms): ${errMsg}`);
 
     // If behave is not installed and we weren't already using bundled, fall back to bundled
     if (!bundledLibsPath && isBehaveNotInstalledError(errMsg)) {
-      diagLog(`loadStepsFromBehave: behave not found in environment, falling back to bundled behave`);
-      return loadStepsFromBehave(pythonExec, projectPath, stepsPaths, getBundledBehavePath());
+      diagLog(`loadFromBehave: behave not found in environment, falling back to bundled behave`);
+      return loadFromBehave(pythonExec, projectPath, stepsPaths, getBundledBehavePath());
     }
 
     throw e;
@@ -92,20 +130,20 @@ export async function loadStepsFromBehave(
 }
 
 /**
- * Returns the path to the get_steps.py helper script.
+ * Returns the path to the discover.py helper script.
  * In production (webpack bundle), __dirname points to dist/.
  * In tests (tsc output), __dirname points to out/test/src/parsers/.
  */
-export function getStepsScriptPath(): string {
+export function getDiscoveryScriptPath(): string {
   // When running from webpack bundle, python/ is a sibling of the bundle in dist/
-  const webpackPath = path.join(__dirname, 'python', 'get_steps.py');
+  const webpackPath = path.join(__dirname, 'python', 'discover.py');
   if (fs.existsSync(webpackPath))
     return webpackPath;
 
   // When running from tsc output (tests), walk up to find project root (contains package.json)
   let dir = __dirname;
   for (let i = 0; i < 10; i++) {
-    const candidate = path.join(dir, 'src', 'python', 'get_steps.py');
+    const candidate = path.join(dir, 'src', 'python', 'discover.py');
     if (fs.existsSync(candidate))
       return candidate;
     const parent = path.dirname(dir);
@@ -114,7 +152,7 @@ export function getStepsScriptPath(): string {
     dir = parent;
   }
 
-  throw new Error(`Could not find get_steps.py (searched from ${__dirname})`);
+  throw new Error(`Could not find discover.py (searched from ${__dirname})`);
 }
 
 /**
@@ -196,7 +234,7 @@ function isBehaveNotInstalledError(errMsg: string): boolean {
  */
 export function checkPythonHelperExists(): boolean {
   try {
-    return fs.existsSync(getStepsScriptPath());
+    return fs.existsSync(getDiscoveryScriptPath());
   } catch {
     return false;
   }

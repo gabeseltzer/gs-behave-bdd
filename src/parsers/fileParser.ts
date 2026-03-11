@@ -8,8 +8,8 @@ import {
   getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem, couldBePythonStepsFile
 } from '../common';
 import { getStepFileSteps, deleteStepFileSteps } from './stepsParser';
-import { parseEnvironmentFileContent, deleteFixtures } from './fixtureParser';
-import { loadStepsFromBehave } from './behaveStepLoader';
+import { deleteFixtures, storePythonFixtureDefinitions } from './fixtureParser';
+import { loadFromBehave } from './behaveLoader';
 import { storeBehaveStepDefinitions } from './stepsParserBehaveAdapter';
 import { TestData, TestFile } from './testFile';
 import { diagLog } from '../logger';
@@ -166,28 +166,18 @@ export class FileParser {
     deleteStepFileSteps(wkspSettings.featuresUri);
     deleteFixtures(wkspSettings.featuresUri);
 
-    // Single findFiles call for all .py files — used for both environment files and step files
+    // Single findFiles call for all .py files — used to find step directories
     const findFilesStart = performance.now();
     const searchInFeatures = wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path);
-    // When stepsSearchUri is inside featuresUri, search from featuresUri to also find environment.py;
+    // When stepsSearchUri is inside featuresUri, search from featuresUri;
     // otherwise search from stepsSearchUri (the broader path)
     const searchUri = searchInFeatures ? wkspSettings.featuresUri : wkspSettings.stepsSearchUri;
     const allPyFiles = await findFiles(searchUri, undefined, ".py", cancelToken);
     diagLog(`${caller}: _parseStepsFiles findFiles took ${Math.round(performance.now() - findFilesStart)}ms, found ${allPyFiles.length} .py files`);
 
-    // Split results: environment files vs step files
-    const environmentFiles = allPyFiles.filter(uri => uri.path.endsWith("/environment.py"));
     const stepFiles = allPyFiles.filter(uri => isStepsFile(uri));
 
-    // Parse environment.py files
-    for (const uri of environmentFiles) {
-      if (cancelToken.isCancellationRequested)
-        break;
-      const content = await getContentFromFilesystem(uri);
-      await parseEnvironmentFileContent(wkspSettings.featuresUri, content, uri, caller);
-    }
-
-    // Load all steps using behave's built-in registry (handles imports automatically)
+    // Load all steps and fixtures using behave's built-in registry (handles imports automatically)
     try {
       const getPythonStart = performance.now();
       const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
@@ -207,13 +197,13 @@ export class FileParser {
       const stepsPaths = stepsDirs.length > 0 ? stepsDirs : [wkspSettings.stepsSearchUri.fsPath];
 
       const loadBehaveStart = performance.now();
-      const behaveDefinitions = await loadStepsFromBehave(
+      const result = await loadFromBehave(
         pythonExec,
         wkspSettings.projectUri.fsPath,
         stepsPaths,
         wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined
       );
-      diagLog(`${caller}: _parseStepsFiles loadStepsFromBehave took ${Math.round(performance.now() - loadBehaveStart)}ms, returned ${behaveDefinitions.length} definitions`);
+      diagLog(`${caller}: _parseStepsFiles loadFromBehave took ${Math.round(performance.now() - loadBehaveStart)}ms, returned ${result.steps.length} steps and ${result.fixtures.length} fixtures`);
 
       if (cancelToken.isCancellationRequested) {
         diagLog(`${caller}: cancelling, _parseStepsFiles stopped after behave load`);
@@ -222,7 +212,8 @@ export class FileParser {
 
       // Convert and store all behave definitions
       const storeBehaveStart = performance.now();
-      const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, behaveDefinitions);
+      const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, result.steps);
+      storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
       diagLog(`${caller}: _parseStepsFiles storeBehaveStepDefinitions took ${Math.round(performance.now() - storeBehaveStart)}ms`);
 
       // Return count of step files (not step definitions)
@@ -590,54 +581,47 @@ export class FileParser {
     const timer = setTimeout(async () => {
       this._pythonReparseTimers.delete(wkspKey);
       try {
-        const isEnvFile = fileUri.path.endsWith("/environment.py");
+        diagLog(`[reparseFile] Starting: file=${fileUri.path}`);
 
-        // Handle steps files (in /steps/ folder) and library files (any other Python file)
-        if (couldBePythonStepsFile(fileUri) && !isEnvFile) {
-          const isLibraryFile = !isStepsFile(fileUri);
-          diagLog(`[reparseFile] Starting: file=${fileUri.path}, isLibraryFile=${isLibraryFile}`);
+        try {
+          deleteStepFileSteps(wkspSettings.featuresUri);
+          deleteFixtures(wkspSettings.featuresUri);
 
-          try {
-            deleteStepFileSteps(wkspSettings.featuresUri);
+          const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
+          const startTime = performance.now();
 
-            const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
-            const startTime = performance.now();
+          let stepFiles: vscode.Uri[] = [];
+          const tokenSource = new vscode.CancellationTokenSource();
+          const cancelToken = tokenSource.token;
 
-            let stepFiles: vscode.Uri[] = [];
-            const tokenSource = new vscode.CancellationTokenSource();
-            const cancelToken = tokenSource.token;
+          if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
+            stepFiles = await findFiles(wkspSettings.stepsSearchUri, "steps", ".py", cancelToken);
+          else
+            stepFiles = await findFiles(wkspSettings.stepsSearchUri, undefined, ".py", cancelToken);
 
-            if (wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path))
-              stepFiles = await findFiles(wkspSettings.stepsSearchUri, "steps", ".py", cancelToken);
-            else
-              stepFiles = await findFiles(wkspSettings.stepsSearchUri, undefined, ".py", cancelToken);
+          stepFiles = stepFiles.filter(uri => isStepsFile(uri));
 
-            stepFiles = stepFiles.filter(uri => isStepsFile(uri));
-
-            let stepsPath = wkspSettings.stepsSearchUri.fsPath;
-            if (stepFiles.length > 0) {
-              stepsPath = path.dirname(stepFiles[0].fsPath);
-            }
-
-            const behaveDefinitions = await loadStepsFromBehave(
-              pythonExec,
-              wkspSettings.projectUri.fsPath,
-              [stepsPath],
-              wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined
-            );
-
-            const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, behaveDefinitions);
-            const elapsed = Math.round(performance.now() - startTime);
-            diagLog(`[reparseFile] Reloaded ${storedCount} steps from behave in ${elapsed}ms`);
-
-            tokenSource.dispose();
-          } catch (e) {
-            diagLog(`[reparseFile] Behave step loading error: ${e instanceof Error ? e.message : String(e)}`);
+          let stepsPath = wkspSettings.stepsSearchUri.fsPath;
+          if (stepFiles.length > 0) {
+            stepsPath = path.dirname(stepFiles[0].fsPath);
           }
-        }
 
-        if (isEnvFile)
-          await parseEnvironmentFileContent(wkspSettings.featuresUri, content, fileUri, "reparseFile");
+          const result = await loadFromBehave(
+            pythonExec,
+            wkspSettings.projectUri.fsPath,
+            [stepsPath],
+            wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined
+          );
+
+          const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, result.steps);
+          storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
+          const elapsed = Math.round(performance.now() - startTime);
+          diagLog(`[reparseFile] Reloaded ${storedCount} steps and ${result.fixtures.length} fixtures from behave in ${elapsed}ms`);
+
+          tokenSource.dispose();
+        } catch (e) {
+          diagLog(`[reparseFile] Behave step loading error: ${e instanceof Error ? e.message : String(e)}`);
+        }
 
         rebuildStepMappings(wkspSettings.featuresUri);
         this.onStepMappingsRebuilt?.(wkspSettings.featuresUri);

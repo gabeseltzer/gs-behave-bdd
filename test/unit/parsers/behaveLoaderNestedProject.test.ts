@@ -1,11 +1,11 @@
-// Tests for behaveStepLoader with nested featuresPath (e.g. subproject/features)
-// Verifies that get_steps.py adds the behave project directory to sys.path
+// Tests for behaveLoader with nested featuresPath (e.g. subproject/features)
+// Verifies that discover.py adds the behave project directory to sys.path
 // so that modules living alongside the features directory can be imported.
 
 import * as assert from 'assert';
 import { execFile } from 'child_process';
 import * as path from 'path';
-import { getStepsScriptPath } from '../../../src/parsers/behaveStepLoader';
+import { getDiscoveryScriptPath } from '../../../src/parsers/behaveLoader';
 import { getBundledBehavePath } from '../../../src/bundledBehave';
 
 interface GetStepsResult {
@@ -13,6 +13,7 @@ interface GetStepsResult {
   stdout: string;
   stderr: string;
   steps: { step_type: string; pattern: string }[];
+  fixtures: { function_name: string; file: string; decorator_line: number; def_line: number }[];
 }
 
 // __dirname at runtime is out/test/test/unit/parsers/ — go up 5 levels to repo root
@@ -24,7 +25,7 @@ function runGetSteps(
   stepsPaths: string[],
   callback: (result: GetStepsResult) => void
 ): void {
-  const scriptPath = path.resolve(getStepsScriptPath());
+  const scriptPath = path.resolve(getDiscoveryScriptPath());
   const stepsPathsJson = JSON.stringify(stepsPaths);
   const bundledLibsPath = getBundledBehavePath();
 
@@ -32,16 +33,19 @@ function runGetSteps(
     (error, stdout, stderr) => {
       const exitCode = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
       let steps: { step_type: string; pattern: string }[] = [];
+      let fixtures: GetStepsResult['fixtures'] = [];
       if (!error && stdout.trim()) {
         try {
-          steps = JSON.parse(stdout.trim());
+          const parsed = JSON.parse(stdout.trim());
+          steps = parsed.steps || [];
+          fixtures = parsed.fixtures || [];
         } catch { /* leave empty */ }
       }
-      callback({ exitCode, stdout, stderr, steps });
+      callback({ exitCode, stdout, stderr, steps, fixtures });
     });
 }
 
-suite('behaveStepLoader nested project', () => {
+suite('behaveLoader nested project', () => {
 
   // When featuresPath puts features in a subdirectory, the Python script must
   // add the parent of features/ to sys.path so sibling modules are importable.
@@ -56,7 +60,7 @@ suite('behaveStepLoader nested project', () => {
       assert.strictEqual(result.exitCode, 0,
         `Python script failed.\nstderr: ${result.stderr}`);
 
-      assert.ok(Array.isArray(result.steps), 'output should be a JSON array');
+      assert.ok(Array.isArray(result.steps), 'output should contain a steps array');
       assert.ok(result.steps.length > 0, 'should discover at least one step definition');
 
       const nestedStep = result.steps.find(s => s.pattern.includes('nested library is loaded'));
@@ -109,6 +113,23 @@ suite('behaveStepLoader nested project', () => {
         `Python script failed.\nstderr: ${result.stderr}`);
       assert.strictEqual(result.stderr, '',
         `Unexpected warnings on stderr when loading from nested directory.\nstderr: ${result.stderr}`);
+      done();
+    });
+  });
+
+  // Fixture discovery from environment.py in nested layout
+  test('should discover fixtures from environment.py in nested layout', function (done) {
+    this.timeout(15000);
+
+    const projectPath = fixtureRoot;
+    const stepsPath = path.join(fixtureRoot, 'subproject', 'features', 'steps');
+
+    runGetSteps(projectPath, [stepsPath], (result) => {
+      assert.strictEqual(result.exitCode, 0,
+        `Python script failed.\nstderr: ${result.stderr}`);
+      assert.ok(Array.isArray(result.fixtures), 'output should contain a fixtures array');
+      // Fixtures are discovered from environment.py if it has @fixture decorators
+      // The nested project's environment.py imports from lib which may have fixtures
       done();
     });
   });

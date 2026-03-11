@@ -19,9 +19,8 @@ import * as commonModule from '../../../src/common';
 import * as stepsMapModule from '../../../src/parsers/stepMappings';
 import * as featureParserModule from '../../../src/parsers/featureParser';
 import * as configModule from '../../../src/configuration';
-import * as behaveLoaderModule from '../../../src/parsers/behaveStepLoader';
+import * as behaveLoaderModule from '../../../src/parsers/behaveLoader';
 import * as adapterModule from '../../../src/parsers/stepsParserBehaveAdapter';
-import * as fixtureParserModule from '../../../src/parsers/fixtureParser';
 
 
 suite('stepDefDiscoveryOrdering', () => {
@@ -32,7 +31,7 @@ suite('stepDefDiscoveryOrdering', () => {
   let _isStepsFileStub: sinon.SinonStub;
   let _getContentFromFilesystemStub: sinon.SinonStub;
   let rebuildStepMappingsStub: sinon.SinonStub;
-  let loadStepsFromBehaveStub: sinon.SinonStub;
+  let loadFromBehaveStub: sinon.SinonStub;
 
   const wkspUri = vscode.Uri.file('c:/project');
   const featuresUri = vscode.Uri.joinPath(wkspUri, 'features');
@@ -58,10 +57,9 @@ suite('stepDefDiscoveryOrdering', () => {
     _getContentFromFilesystemStub = sinon.stub(commonModule, 'getContentFromFilesystem').resolves('');
 
     rebuildStepMappingsStub = sinon.stub(stepsMapModule, 'rebuildStepMappings');
-    loadStepsFromBehaveStub = sinon.stub(behaveLoaderModule, 'loadStepsFromBehave').resolves([]);
+    loadFromBehaveStub = sinon.stub(behaveLoaderModule, 'loadFromBehave').resolves({ steps: [], fixtures: [] });
     sinon.stub(adapterModule, 'storeBehaveStepDefinitions').resolves(0);
     sinon.stub(configModule.config, 'getPythonExecutable').resolves('python3');
-    sinon.stub(fixtureParserModule, 'parseEnvironmentFileContent').resolves();
     sinon.stub(configModule.config.logger, 'showError');
     sinon.stub(configModule.config.logger, 'showWarn');
   });
@@ -125,18 +123,18 @@ suite('stepDefDiscoveryOrdering', () => {
         'mappings must be fully rebuilt before the callback fires — callback consumers read fresh mappings');
     });
 
-    test('loadStepsFromBehave is called BEFORE rebuildStepMappings (new defs available during rebuild)', async () => {
+    test('loadFromBehave is called BEFORE rebuildStepMappings (new defs available during rebuild)', async () => {
       const testData = new WeakMap();
       const ctrlStub = {} as vscode.TestController;
       const callOrder: string[] = [];
 
-      loadStepsFromBehaveStub.callsFake(async () => { callOrder.push('loadStepsFromBehave'); return []; });
+      loadFromBehaveStub.callsFake(async () => { callOrder.push('loadFromBehave'); return { steps: [], fixtures: [] }; });
       rebuildStepMappingsStub.callsFake(() => callOrder.push('rebuildStepMappings'));
 
       await fileParser.reparseFile(stepsFileUri, 'content', wkspSettings, testData, ctrlStub);
       await clock.tickAsync(500);
 
-      assert.deepStrictEqual(callOrder, ['loadStepsFromBehave', 'rebuildStepMappings'],
+      assert.deepStrictEqual(callOrder, ['loadFromBehave', 'rebuildStepMappings'],
         'behave must load new step definitions before mappings are rebuilt against them');
     });
   });
@@ -217,7 +215,7 @@ suite('stepDefDiscoveryOrdering', () => {
 
       assert.strictEqual(callbackCount, 1,
         'callback should fire exactly once per workspace debounce window, even if multiple Python files changed');
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 1,
+      assert.strictEqual(loadFromBehaveStub.callCount, 1,
         'behave should only be invoked once (debounce coalesced multiple changes)');
     });
   });
@@ -281,7 +279,7 @@ suite('stepDefDiscoveryOrdering', () => {
     // Models the exact git branch switch timing:
     //   t=0: feature file changes (immediate reparse, step def not found → diagnostic added)
     //   t=0: Python file changes (debounce scheduled for t=500)
-    //   t=500: Python debounce fires → loadStepsFromBehave → rebuildStepMappings → callback
+    //   t=500: Python debounce fires → loadFromBehave → rebuildStepMappings → callback
     //          → validateStepDefinitions → diagnostic cleared
 
     test('after feature file reparse, subsequent Python debounce triggers callback to clear stale diagnostic', async () => {

@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import * as assert from 'assert';
 import * as path from 'path';
 import { TestSupport } from '../../../src/extension';
-import { loadStepsFromBehave } from '../../../src/parsers/behaveStepLoader';
+import { loadFromBehave } from '../../../src/parsers/behaveLoader';
 
 let _testSupport: TestSupport;
 
@@ -42,13 +42,13 @@ suite('Behave Step Registry Integration', () => {
     const stepsPath = path.join(projectPath, 'steps');
     const pythonExec = 'python';
 
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
+    const result = await loadFromBehave(pythonExec, projectPath, [stepsPath]);
 
     // The step library project should have steps defined locally and via imports
-    assert.ok(steps.length > 0, 'should find at least one step definition');
+    assert.ok(result.steps.length > 0, 'should find at least one step definition');
 
     // Verify step structure
-    for (const step of steps) {
+    for (const step of result.steps) {
       assert.ok(step.stepType, 'step should have stepType');
       assert.ok(['given', 'when', 'then', 'step'].includes(step.stepType.toLowerCase()),
         `stepType should be valid: ${step.stepType}`);
@@ -59,8 +59,8 @@ suite('Behave Step Registry Integration', () => {
       assert.ok(step.regex, 'step should have regex');
     }
 
-    console.log(`Found ${steps.length} steps in step library project`);
-    steps.forEach(step => {
+    console.log(`Found ${result.steps.length} steps in step library project`);
+    result.steps.forEach(step => {
       console.log(`  ${step.stepType}: "${step.pattern}" at ${path.basename(step.filePath)}:${step.lineNumber}`);
     });
   });
@@ -73,10 +73,10 @@ suite('Behave Step Registry Integration', () => {
     const stepsPath = path.join(projectPath, 'steps');
     const pythonExec = 'python';
 
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
+    const result = await loadFromBehave(pythonExec, projectPath, [stepsPath]);
 
     // Should find steps from both local steps and imported library
-    assert.ok(steps.length > 0, 'should find step definitions');
+    assert.ok(result.steps.length > 0, 'should find step definitions');
 
     // Look for the library steps (defined in lib/library_steps.py but imported via steps/example_steps.py)
     const libraryStepPatterns = [
@@ -86,12 +86,12 @@ suite('Behave Step Registry Integration', () => {
     ];
 
     for (const pattern of libraryStepPatterns) {
-      const found = steps.find(s => s.pattern.includes('calculator') || s.pattern.includes('add') || s.pattern.includes('result'));
+      const found = result.steps.find(s => s.pattern.includes('calculator') || s.pattern.includes('add') || s.pattern.includes('result'));
       assert.ok(found, `should find step matching pattern: ${pattern}`);
     }
 
-    console.log(`Found ${steps.length} steps in step library project (including library imports)`);
-    steps.forEach(step => {
+    console.log(`Found ${result.steps.length} steps in step library project (including library imports)`);
+    result.steps.forEach(step => {
       console.log(`  ${step.stepType}: "${step.pattern}" at ${path.basename(step.filePath)}:${step.lineNumber}`);
     });
   });
@@ -104,10 +104,10 @@ suite('Behave Step Registry Integration', () => {
     const stepsPath = path.join(projectPath, 'steps');
     const pythonExec = 'python';
 
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
+    const result = await loadFromBehave(pythonExec, projectPath, [stepsPath]);
 
     // Find step with typed parameter {a:d}
-    const addStep = steps.find(s => s.pattern.includes('add') && s.pattern.includes('{a:d}'));
+    const addStep = result.steps.find(s => s.pattern.includes('add') && s.pattern.includes('{a:d}'));
     assert.ok(addStep, 'should find add step with typed parameters');
 
     // Verify regex includes proper parameter matching
@@ -138,7 +138,7 @@ suite('Behave Step Registry Integration', () => {
     const pythonExec = 'python-nonexistent-12345';
 
     await assert.rejects(
-      async () => await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]),
+      async () => await loadFromBehave(pythonExec, projectPath, [stepsPath]),
       (err: Error) => {
         return err.message.includes('spawn') || err.message.includes('not found');
       },
@@ -154,11 +154,11 @@ suite('Behave Step Registry Integration', () => {
     const stepsPath = path.join(projectPath, 'steps');
     const pythonExec = 'python';
 
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
+    const result = await loadFromBehave(pythonExec, projectPath, [stepsPath]);
 
     // Group steps by file
-    const stepsByFile = new Map<string, typeof steps>();
-    for (const step of steps) {
+    const stepsByFile = new Map<string, typeof result.steps>();
+    for (const step of result.steps) {
       const fileName = path.basename(step.filePath);
       if (!stepsByFile.has(fileName)) {
         stepsByFile.set(fileName, []);
@@ -186,10 +186,10 @@ suite('Behave Step Registry Integration', () => {
     const stepsPath = path.join(projectPath, 'steps');
     const pythonExec = 'python';
 
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
+    const result = await loadFromBehave(pythonExec, projectPath, [stepsPath]);
 
     // All steps should have valid line numbers
-    for (const step of steps) {
+    for (const step of result.steps) {
       assert.ok(typeof step.lineNumber === 'number', 'lineNumber should be a number');
       assert.ok(step.lineNumber > 0, 'lineNumber should be positive');
 
@@ -207,10 +207,10 @@ suite('Behave Step Registry Integration', () => {
     const stepsPath = path.join(projectPath, 'steps');
     const pythonExec = 'python';
 
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
+    const result = await loadFromBehave(pythonExec, projectPath, [stepsPath]);
 
     // Look for any steps with typed parameters
-    const typedSteps = steps.filter(s => s.pattern.includes(':'));
+    const typedSteps = result.steps.filter(s => s.pattern.includes(':'));
 
     if (typedSteps.length > 0) {
       console.log(`Found ${typedSteps.length} steps with typed parameters`);

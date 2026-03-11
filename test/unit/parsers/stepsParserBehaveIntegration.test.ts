@@ -1,13 +1,13 @@
-// Tests for integration of behaveStepLoader with stepsParser
+// Tests for integration of behaveLoader with stepsParser
 // Verifies that BehaveStepDefinition can be converted to StepFileStep
 
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { deleteStepFileSteps, parseRepWildcard } from '../../../src/parsers/stepsParser';
 import { createStepFileStepFromBehaveDefinition } from '../../../src/parsers/stepsParserBehaveAdapter';
-import type { BehaveStepDefinition } from '../../../src/parsers/behaveStepLoader';
+import type { BehaveStepDefinition } from '../../../src/parsers/behaveLoader';
 
-suite('stepsParser x behaveStepLoader integration', () => {
+suite('stepsParser x behaveLoader integration', () => {
 
   suite('createStepFileStepFromBehaveDefinition', () => {
 

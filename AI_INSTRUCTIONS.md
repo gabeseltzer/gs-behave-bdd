@@ -87,8 +87,7 @@ src/
     stepsParser.ts          # Python steps file parsing
     stepMappings.ts         # Maps feature steps → step definitions
     junitParser.ts          # Parses behave junit XML output
-    importParser.ts         # Python import analysis
-    behaveStepLoader.ts     # Discovers steps via behave dry-run
+    behaveLoader.ts         # Discovers steps + fixtures via behave subprocess
   runners/                  # Test execution
     testRunHandler.ts       # Orchestrates run/debug
     behaveRun.ts            # Spawns behave process
