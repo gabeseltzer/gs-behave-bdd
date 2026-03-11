@@ -64,6 +64,16 @@
 					"type": "boolean",
 					"markdownDescription": "Specifies whether extension errors have stack traces and diagnostics are logged in console. The console output is viewable via the vscode command `Developer: Toggle Developer Tools`. Diagnostic logs are noisy, and may have a small performance impact.",
 					"default": false
+				},
+				"behave-vsc.importStrategy": {
+					"scope": "resource",
+					"type": "string",
+					"enum": [
+						"useBundled",
+						"fromEnvironment"
+					],
+					"markdownDescription": "Controls how behave is resolved. `useBundled` (default) uses the version of behave bundled with the extension. `fromEnvironment` uses behave from your Python environment.",
+					"default": "useBundled"
 				}
 			}
 		},
@@ -99,7 +109,7 @@
 			{
 				"command": "behave-vsc.findStepReferences",
 				"key": "alt+f12",
-				"when": "!isInEmbeddedEditor && editorTextFocus && resourcePath =~ /steps/ && resourceExtname =~ /\\.py$/"
+				"when": "!isInEmbeddedEditor && editorTextFocus && editorLangId == python && resourceExtname =~ /\\.py$/"
 			},
 			{
 				"command": "behave-vsc.stepReferences.next",
@@ -146,11 +156,6 @@
 		"configurationDefaults": {
 			"[gherkin]": {
 				"editor.stickyScroll.enabled": true
-			},
-			"editor.semanticTokenColorCustomizations": {
-				"rules": {
-					"missing_step": "#cf1036"
-				}
 			}
 		},
 		"menus": {
@@ -210,7 +215,7 @@
 	"name": "behave-vsc",
 	"displayName": "Behave VSC",
 	"description": "Debug, Run and Navigate Python behave tests. Forked from jimasp",
-	"version": "0.7.0",
+	"version": "0.8.0",
 	"icon": "images/behave-vsc.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",
@@ -251,34 +256,35 @@
 	],
 	"main": "./dist/extension.js",
 	"scripts": {
-		"prevscode:prepublish": "npm run test",
-		"vscode:prepublish": "npm run package",
-		"compile": "npm run clean-output && webpack",
+		"vscode:prepublish": "npm run bundle-behave && npm run test && npm run package",
+		"compile": "npm run bundle-behave && npm run clean-output && webpack",
+		"bundle-behave": "uv pip install --target bundled/libs --no-deps behave==1.3.3",
 		"watch": "npm run clean-output && webpack --watch",
-		"package": "webpack --mode production --devtool hidden-source-map",
+		"package": "npm run bundle-behave && webpack --mode production --devtool hidden-source-map",
 		"compile-tests": "tsc -p test/tsconfig.json",
-		"watch-tests": "tsc -p . -w --outDir out",
-		"lint": "eslint src --ext ts",
-		"test": "node ./out/_integrationTests/runTestSuites.js --stable",
-		"pretest": "npm run compitest/tsconfig.json",
 		"watch-tests": "tsc -p test/tsconfig.json -w",
 		"lint": "eslint src --ext ts",
+		"lint:python": "uv run ruff check src/python example-projects && uv run ruff format --check src/python example-projects && uv run mypy src/python",
 		"test:unit": "npm run compile-tests && node ./out/test/test/unit/run.js",
 		"test:integration": "npm run compile-tests && node ./out/test/test/integration/runTestSuites.js --stable",
+		"test:debug-suite": "npm run compile-tests && node ./out/test/test/integration/runDebugSuite.js --insiders",
 		"test": "npm run test:unit && npm run test:integration",
-		"pretest": "npm run compile && npm run lint",
+		"pretest": "npm run compile && npm run lint && npm run lint:python",
 		"pretestinsiders": "npm run pretest",
 		"testinsiders": "npm run compile-tests && node ./out/test/test/integration/runTestSuites.js --insiders",
 		"rimraf": "./node_modules/rimraf/bin.js",
 		"clean-output": "rimraf out/ dist/"
 	},
 	"devDependencies": {
+		"@types/glob": "^8.1.0",
+		"@types/mocha": "^10.0.10",
 		"@types/sinon": "^21.0.0",
 		"@types/vscode": "^1.82.0",
 		"@types/xml2js": "^0.4.11",
 		"@typescript-eslint/eslint-plugin": "^5.9.0",
 		"@typescript-eslint/parser": "^5.9.0",
 		"@vscode/test-electron": "^2.5.2",
+		"copy-webpack-plugin": "^13.0.1",
 		"eslint": "^8.6.0",
 		"glob": "^7.1.7",
 		"mocha": "^9.1.3",

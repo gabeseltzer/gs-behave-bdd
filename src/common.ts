@@ -272,6 +272,10 @@ export const isFeatureFile = (uri: vscode.Uri): boolean => {
   return path.endsWith(".feature");
 }
 
+export const couldBePythonStepsFile = (uri: vscode.Uri): boolean => {
+  const path = uri.path.toLowerCase();
+  return path.endsWith('.py') && !isFeatureFile(uri);
+}
 
 export const getAllTestItems = (wkspId: string | null, collection: vscode.TestItemCollection): vscode.TestItem[] => {
   const items: vscode.TestItem[] = [];
@@ -318,10 +322,37 @@ export function cleanBehaveText(text: string) {
 }
 
 
+// Directories that never contain useful Python/feature files — skipped by findFiles
+export const DEFAULT_EXCLUDE_DIRS = new Set([
+  '__pycache__', '.git', 'node_modules', '.venv', '.tox',
+  '.mypy_cache', '.pytest_cache', '.eggs', '*.egg-info'
+]);
+
+function isDirExcluded(dirName: string, excludeDirs: Set<string>): boolean {
+  if (excludeDirs.has(dirName))
+    return true;
+  // Handle wildcard patterns like *.egg-info
+  for (const pattern of excludeDirs) {
+    if (pattern.startsWith('*') && dirName.endsWith(pattern.substring(1)))
+      return true;
+  }
+  return false;
+}
+
 // custom function to replace vscode.workspace.findFiles() functionality when required
 // due to the glob INTERMITTENTLY not returning results on vscode startup in Windows OS for multiroot workspaces
 export async function findFiles(directory: vscode.Uri, matchSubDirectory: string | undefined,
-  extension: string, cancelToken: vscode.CancellationToken): Promise<vscode.Uri[]> {
+  extension: string, cancelToken: vscode.CancellationToken,
+  excludeDirs?: Set<string>): Promise<vscode.Uri[]> {
+
+  const compiledRegex = matchSubDirectory ? new RegExp(`/${matchSubDirectory}/`, "i") : undefined;
+  const dirs = excludeDirs ?? DEFAULT_EXCLUDE_DIRS;
+  return _findFilesRecursive(directory, compiledRegex, extension, cancelToken, dirs);
+}
+
+async function _findFilesRecursive(directory: vscode.Uri, compiledRegex: RegExp | undefined,
+  extension: string, cancelToken: vscode.CancellationToken,
+  excludeDirs: Set<string>): Promise<vscode.Uri[]> {
 
   const entries = await vwfs.readDirectory(directory);
   const results: vscode.Uri[] = [];
@@ -333,10 +364,12 @@ export async function findFiles(directory: vscode.Uri, matchSubDirectory: string
     const fileType = entry[1];
     const entryUri = vscode.Uri.joinPath(directory, fileName);
     if (fileType === vscode.FileType.Directory) {
-      results.push(...await findFiles(entryUri, matchSubDirectory, extension, cancelToken));
+      if (isDirExcluded(fileName, excludeDirs))
+        continue;
+      results.push(...await _findFilesRecursive(entryUri, compiledRegex, extension, cancelToken, excludeDirs));
     }
     else {
-      if (fileName.endsWith(extension) && (!matchSubDirectory || new RegExp(`/${matchSubDirectory}/`, "i").test(entryUri.path))) {
+      if (fileName.endsWith(extension) && (!compiledRegex || compiledRegex.test(entryUri.path))) {
         results.push(entryUri);
       }
     }

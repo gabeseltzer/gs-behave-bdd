@@ -1,10 +1,9 @@
-import * as cp from 'child_process';
 import * as path from 'path';
 import {
   downloadAndUnzipVSCode,
-  resolveCliArgsFromVSCodeExecutablePath,
   runTests
 } from '@vscode/test-electron';
+import { getShortPathOnWindows, installMsPythonExtension } from './testRunUtils';
 
 
 // this code handles `npm run test` or `npm run testinsiders`
@@ -12,19 +11,6 @@ import {
 // and choose "test" or "testinsiders" from the dropdown
 // (to debug the tests themselves, just launch from the usual debug link in vscode and select the suite to run)
 
-// Helper function to convert Windows long paths with spaces to short (8.3) format
-// This works around a bug in @vscode/test-electron v2.5.2 where paths with spaces
-// are not properly quoted when passed to VS Code with shell:true on Windows
-function getShortPathOnWindows(longPath: string): string {
-  if (process.platform === 'win32' && longPath.includes(' ')) {
-    const result = cp.execSync(`for %I in ("${longPath}") do @echo %~sI`, {
-      encoding: 'utf-8',
-      shell: 'cmd.exe'
-    });
-    return result.trim();
-  }
-  return longPath;
-}
 
 async function runTestSuites() {
   try {
@@ -43,22 +29,7 @@ async function runTestSuites() {
     const vscodeExecutablePath = await downloadAndUnzipVSCode(version);
 
 
-    console.log(`installing ms-python.python extension into ${version} version...`);
-    const [cliPath, ...args] = resolveCliArgsFromVSCodeExecutablePath(vscodeExecutablePath);
-    // On Windows, if cliPath ends with .cmd, we need to use cmd.exe to run it
-    const isWindows = process.platform === 'win32';
-    const isCmdFile = cliPath.endsWith('.cmd');
-    const result = isWindows && isCmdFile
-      ? cp.spawnSync('cmd.exe', ['/c', cliPath, ...args, "--install-extension", "ms-python.python"], {
-        encoding: 'utf-8',
-        stdio: 'inherit',
-      })
-      : cp.spawnSync(cliPath, [...args, "--install-extension", "ms-python.python"], {
-        encoding: 'utf-8',
-        stdio: 'inherit',
-      });
-    if (result.error)
-      throw result.error;
+    await installMsPythonExtension(vscodeExecutablePath);
 
 
     console.log("starting test run...");
@@ -132,6 +103,24 @@ async function runTestSuites() {
 
     launchArgs = ["example-projects/multiroot.code-workspace"];
     extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './multiroot suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = ["example-projects/simple"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './debug suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = [`"example-projects/step library"`];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './stepLibraryDiagnostics'));
     await runTests({
       vscodeExecutablePath,
       extensionDevelopmentPath,

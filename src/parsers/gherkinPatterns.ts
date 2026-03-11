@@ -11,6 +11,10 @@ export const stepRe = /^\s*(Given|When|Then|And|But|\*)(.*)$/i;
 export const featureFileStepRe = /^\s*(Given |When |Then |And |But )(.*)/i;
 export const tagRe = /^\s*@(\S+)/;
 
+// Patterns for text block and table detection
+export const textBlockDelimiterRe = /^\s*("""|''')\s*$/;
+export const tableRowRe = /^\s*\|/;
+
 /**
  * Scans backwards from a line to find where a symbol's range should start,
  * including any preceding tags (@) or comments (#) that belong to it.
