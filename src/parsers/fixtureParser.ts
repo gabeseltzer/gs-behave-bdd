@@ -81,7 +81,7 @@ export async function parseEnvironmentFileContent(featuresUri: vscode.Uri, conte
     }
 
     if (modulePath) {
-      const importedUri = await resolveImportPath(environmentFileUri, modulePath);
+      const importedUri = await resolveImportPath(environmentFileUri, modulePath, featuresUri);
       if (importedUri) {
         try {
           const importedContent = await getContentFromFilesystem(importedUri);
@@ -127,7 +127,7 @@ export async function parseEnvironmentFileContent(featuresUri: vscode.Uri, conte
   diagLog(`${caller}: parsed ${fileFixtures} fixtures from ${environmentFileUri.path}`);
 }
 
-async function resolveImportPath(currentUri: vscode.Uri, modulePath: string): Promise<vscode.Uri | undefined> {
+async function resolveImportPath(currentUri: vscode.Uri, modulePath: string, featuresUri?: vscode.Uri): Promise<vscode.Uri | undefined> {
   const currentDir = vscode.Uri.joinPath(currentUri, '..');
 
   // Handle dots in module path (e.g. from . import or from ..sub import)
@@ -210,7 +210,29 @@ async function resolveImportPath(currentUri: vscode.Uri, modulePath: string): Pr
     // ignore
   }
 
-  // 2. Try relative to workspace root
+  // 2. Try relative to the behave project directory (parent of features).
+  // When featuresPath is a subdirectory like "subdir/features", modules like lib/
+  // that live alongside features/ (e.g. subdir/lib/) need to be resolvable.
+  if (featuresUri) {
+    const behaveProjectDir = vscode.Uri.joinPath(featuresUri, '..');
+    try {
+      const candidate = vscode.Uri.joinPath(behaveProjectDir, searchPath + '.py');
+      await vscode.workspace.fs.stat(candidate);
+      return candidate;
+    } catch {
+      // ignore
+    }
+
+    try {
+      const candidate = vscode.Uri.joinPath(behaveProjectDir, searchPath, '__init__.py');
+      await vscode.workspace.fs.stat(candidate);
+      return candidate;
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Try relative to workspace root
   const wksp = vscode.workspace.getWorkspaceFolder(currentUri);
   if (wksp) {
     try {

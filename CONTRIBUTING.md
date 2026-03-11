@@ -17,7 +17,7 @@
 
 ### Development environment setup for extension development
 
-- It is assumed that you have already installed git and Python 3.x.x
+- It is assumed that you have already installed git and Python 3.x.x (Python must be available as `python` on your PATH)
 - Example commands given for installing external software (nvm, node, python) were correct at the time of writing, but these are likely to go out of date. For external software, you should always check the latest instructions on the official websites.
 
 1. Install node (via nvm) if you don't have it.
@@ -48,6 +48,7 @@
     - `npm run bundle-behave`
     - This installs behave 1.3.3 into `bundled/libs/` using `uv`. This is run automatically as part of `npm run compile` and the prepublish step.
     - Note: the extension bundles its own copy of behave, so users do not need to install behave separately. Contributors also don't need behave in their global Python environment.
+    - Note: some unit tests spawn a real Python process using the bundled behave to verify step discovery. These tests require `python` to be on your PATH (see step 1 above).
 9. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and set up the Python dev tooling virtual environment (for mypy and ruff):
     - Install uv: see [uv installation docs](https://docs.astral.sh/uv/getting-started/installation/)
     - Change back to the cloned directory: `cd <mysourcedir>/behave-vsc`
