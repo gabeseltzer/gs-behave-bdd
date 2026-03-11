@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { deleteStepFileSteps, getStepFileSteps } from '../../../src/parsers/stepsParser';
 import { storeBehaveStepDefinitions, convertPatternToTextAsRe } from '../../../src/parsers/stepsParserBehaveAdapter';
-import type { BehaveStepDefinition } from '../../../src/parsers/behaveStepLoader';
+import type { BehaveStepDefinition } from '../../../src/parsers/behaveLoader';
 
 suite('benchmarkInstrumentation', () => {
 

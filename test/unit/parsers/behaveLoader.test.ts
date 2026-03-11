@@ -1,21 +1,21 @@
-// Unit tests for behaveStepLoader - Python step registry loader
+// Unit tests for behaveLoader - Python step and fixture discovery
 
 import * as assert from 'assert';
 import * as childProcess from 'child_process';
 import { EventEmitter } from 'events';
 import * as sinon from 'sinon';
-import type { BehaveStepDefinition } from '../../../src/parsers/behaveStepLoader';
+import type { BehaveDiscoveryResult } from '../../../src/parsers/behaveLoader';
 
 // Stub diagLog before module loading
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const loggerModule = require('../../../src/logger');
 
-suite('behaveStepLoader', () => {
+suite('behaveLoader', () => {
 
   let spawnStub: sinon.SinonStub;
   let diagLogStub: sinon.SinonStub;
   let mockProcess: MockChildProcess;
-  let loadStepsFromBehave: (pythonExec: string, projectPath: string, stepsPaths: string[]) => Promise<BehaveStepDefinition[]>;
+  let loadFromBehave: (pythonExec: string, projectPath: string, stepsPaths: string[]) => Promise<BehaveDiscoveryResult>;
 
   class MockChildProcess extends EventEmitter {
     pid = 12345;
@@ -33,12 +33,12 @@ suite('behaveStepLoader', () => {
 
     // Clear module cache to get fresh imports with stubs active
     for (const key of Object.keys(require.cache)) {
-      if (key.includes('behaveStepLoader')) {
+      if (key.includes('behaveLoader')) {
         delete require.cache[key];
       }
     }
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    loadStepsFromBehave = require('../../../src/parsers/behaveStepLoader').loadStepsFromBehave;
+    loadFromBehave = require('../../../src/parsers/behaveLoader').loadFromBehave;
   });
 
   teardown(() => {
@@ -52,11 +52,11 @@ suite('behaveStepLoader', () => {
 
     // Mock Python process response
     setImmediate(() => {
-      mockProcess.stdout.emit('data', '[]');
+      mockProcess.stdout.emit('data', '{"steps":[],"fixtures":[]}');
       mockProcess.emit('close', 0);
     });
 
-    await loadStepsFromBehave(pythonExec, projectPath, stepsPaths);
+    await loadFromBehave(pythonExec, projectPath, stepsPaths);
 
     assert.ok(spawnStub.calledOnce, 'spawn should be called once');
     const spawnArgs = spawnStub.firstCall.args;
@@ -67,7 +67,7 @@ suite('behaveStepLoader', () => {
     // Verify args array: [scriptPath, projectPath, stepsPathsJson]
     assert.ok(Array.isArray(spawnArgs[1]), 'spawn args should be an array');
     const scriptPath = spawnArgs[1][0] as string;
-    assert.ok(scriptPath.endsWith('get_steps.py'), 'first arg should be the Python script path');
+    assert.ok(scriptPath.endsWith('discover.py'), 'first arg should be the Python script path');
 
     // Verify project and steps paths are passed as arguments
     assert.ok(spawnArgs[1].includes(projectPath), 'project path should be in arguments');
@@ -83,43 +83,46 @@ suite('behaveStepLoader', () => {
     const projectPath = '/path/to/project';
     const stepsPath = ['/path/to/project/steps'];
 
-    const mockSteps = [
-      {
-        step_type: 'given',
-        pattern: 'there is a calculator',
-        file: '/path/to/project/steps/example_steps.py',
-        line: 5,
-        regex_pattern: '^there is a calculator$'
-      },
-      {
-        step_type: 'when',
-        pattern: 'I add {a:d} and {b:d}',
-        file: '/path/to/project/steps/example_steps.py',
-        line: 10,
-        regex_pattern: '^I add (?P<a>\\d+) and (?P<b>\\d+)$'
-      }
-    ];
+    const mockOutput = {
+      steps: [
+        {
+          step_type: 'given',
+          pattern: 'there is a calculator',
+          file: '/path/to/project/steps/example_steps.py',
+          line: 5,
+          regex_pattern: '^there is a calculator$'
+        },
+        {
+          step_type: 'when',
+          pattern: 'I add {a:d} and {b:d}',
+          file: '/path/to/project/steps/example_steps.py',
+          line: 10,
+          regex_pattern: '^I add (?P<a>\\d+) and (?P<b>\\d+)$'
+        }
+      ],
+      fixtures: []
+    };
 
     setImmediate(() => {
-      mockProcess.stdout.emit('data', JSON.stringify(mockSteps));
+      mockProcess.stdout.emit('data', JSON.stringify(mockOutput));
       mockProcess.emit('close', 0);
     });
 
-    const result = await loadStepsFromBehave(pythonExec, projectPath, stepsPath);
+    const result = await loadFromBehave(pythonExec, projectPath, stepsPath);
 
-    assert.strictEqual(result.length, 2, 'should return 2 steps');
+    assert.strictEqual(result.steps.length, 2, 'should return 2 steps');
 
     // Verify first step
-    assert.strictEqual(result[0].stepType, 'given');
-    assert.strictEqual(result[0].pattern, 'there is a calculator');
-    assert.strictEqual(result[0].filePath, '/path/to/project/steps/example_steps.py');
-    assert.strictEqual(result[0].lineNumber, 5);
-    assert.strictEqual(result[0].regex, '^there is a calculator$');
+    assert.strictEqual(result.steps[0].stepType, 'given');
+    assert.strictEqual(result.steps[0].pattern, 'there is a calculator');
+    assert.strictEqual(result.steps[0].filePath, '/path/to/project/steps/example_steps.py');
+    assert.strictEqual(result.steps[0].lineNumber, 5);
+    assert.strictEqual(result.steps[0].regex, '^there is a calculator$');
 
     // Verify second step with typed parameters
-    assert.strictEqual(result[1].stepType, 'when');
-    assert.strictEqual(result[1].pattern, 'I add {a:d} and {b:d}');
-    assert.strictEqual(result[1].regex, '^I add (?P<a>\\d+) and (?P<b>\\d+)$');
+    assert.strictEqual(result.steps[1].stepType, 'when');
+    assert.strictEqual(result.steps[1].pattern, 'I add {a:d} and {b:d}');
+    assert.strictEqual(result.steps[1].regex, '^I add (?P<a>\\d+) and (?P<b>\\d+)$');
   });
 
   test('should handle Python script errors', async () => {
@@ -139,7 +142,7 @@ suite('behaveStepLoader', () => {
     });
 
     await assert.rejects(
-      async () => await loadStepsFromBehave(pythonExec, projectPath, stepsPath),
+      async () => await loadFromBehave(pythonExec, projectPath, stepsPath),
       /behave.*not.*installed/i,
       'should throw error indicating behave is not installed'
     );
@@ -156,7 +159,7 @@ suite('behaveStepLoader', () => {
     });
 
     await assert.rejects(
-      async () => await loadStepsFromBehave(pythonExec, projectPath, stepsPath),
+      async () => await loadFromBehave(pythonExec, projectPath, stepsPath),
       /JSON/i,
       'should throw error for invalid JSON'
     );
@@ -175,7 +178,7 @@ suite('behaveStepLoader', () => {
     });
 
     await assert.rejects(
-      async () => await loadStepsFromBehave(pythonExec, projectPath, stepsPath),
+      async () => await loadFromBehave(pythonExec, projectPath, stepsPath),
       /Failed to spawn/i,
       'should throw error for spawn failure'
     );
@@ -190,7 +193,7 @@ suite('behaveStepLoader', () => {
     // Note: We use a short timeout in the actual implementation
 
     await assert.rejects(
-      async () => await loadStepsFromBehave(pythonExec, projectPath, stepsPath),
+      async () => await loadFromBehave(pythonExec, projectPath, stepsPath),
       /timeout/i,
       'should throw error on timeout'
     );
@@ -207,7 +210,7 @@ suite('behaveStepLoader', () => {
     });
 
     await assert.rejects(
-      async () => await loadStepsFromBehave(pythonExec, projectPath, stepsPath),
+      async () => await loadFromBehave(pythonExec, projectPath, stepsPath),
       /import.*error/i,
       'should throw error for import errors'
     );
@@ -219,17 +222,17 @@ suite('behaveStepLoader', () => {
     const stepsPaths = ['/path/to/project/steps'];
 
     setImmediate(() => {
-      mockProcess.stdout.emit('data', '[]');
+      mockProcess.stdout.emit('data', '{"steps":[],"fixtures":[]}');
       mockProcess.emit('close', 0);
     });
 
-    await loadStepsFromBehave(pythonExec, projectPath, stepsPaths);
+    await loadFromBehave(pythonExec, projectPath, stepsPaths);
 
     const spawnArgs = spawnStub.firstCall.args;
     const scriptPath = spawnArgs[1][0] as string;
 
-    // Verify script path points to get_steps.py
-    assert.ok(scriptPath.endsWith('get_steps.py'),
-      `script path should end with get_steps.py, got: ${scriptPath}`);
+    // Verify script path points to discover.py
+    assert.ok(scriptPath.endsWith('discover.py'),
+      `script path should end with discover.py, got: ${scriptPath}`);
   });
 });

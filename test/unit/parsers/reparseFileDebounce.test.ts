@@ -8,9 +8,8 @@ import { WorkspaceSettings } from '../../../src/settings';
 import * as commonModule from '../../../src/common';
 import * as stepsMapModule from '../../../src/parsers/stepMappings';
 import * as configModule from '../../../src/configuration';
-import * as behaveLoaderModule from '../../../src/parsers/behaveStepLoader';
+import * as behaveLoaderModule from '../../../src/parsers/behaveLoader';
 import * as adapterModule from '../../../src/parsers/stepsParserBehaveAdapter';
-import * as fixtureParserModule from '../../../src/parsers/fixtureParser';
 
 suite('fileParser - reparseFile debouncing', () => {
   let fileParser: FileParser;
@@ -20,10 +19,9 @@ suite('fileParser - reparseFile debouncing', () => {
   let couldBePythonStepsFileStub: sinon.SinonStub;
   let _getContentFromFilesystemStub: sinon.SinonStub;
   let rebuildStepMappingsStub: sinon.SinonStub;
-  let loadStepsFromBehaveStub: sinon.SinonStub;
+  let loadFromBehaveStub: sinon.SinonStub;
   let _storeBehaveStepDefinitionsStub: sinon.SinonStub;
   let _getPythonExecutableStub: sinon.SinonStub;
-  let parseEnvironmentFileContentStub: sinon.SinonStub;
 
   const wkspUri = vscode.Uri.file('c:/test-workspace');
   const featuresUri = vscode.Uri.joinPath(wkspUri, 'features');
@@ -68,14 +66,11 @@ suite('fileParser - reparseFile debouncing', () => {
     rebuildStepMappingsStub = sinon.stub(stepsMapModule, 'rebuildStepMappings');
 
     // Stub behave loader functions
-    loadStepsFromBehaveStub = sinon.stub(behaveLoaderModule, 'loadStepsFromBehave').resolves([]);
+    loadFromBehaveStub = sinon.stub(behaveLoaderModule, 'loadFromBehave').resolves({ steps: [], fixtures: [] });
     _storeBehaveStepDefinitionsStub = sinon.stub(adapterModule, 'storeBehaveStepDefinitions').resolves(0);
 
     // Stub getPythonExecutable
     _getPythonExecutableStub = sinon.stub(configModule.config, 'getPythonExecutable').resolves('python3');
-
-    // Stub parseEnvironmentFileContent
-    parseEnvironmentFileContentStub = sinon.stub(fixtureParserModule, 'parseEnvironmentFileContent').resolves();
 
     // Stub logger methods to prevent channel access errors
     sinon.stub(configModule.config.logger, 'showError');
@@ -89,29 +84,29 @@ suite('fileParser - reparseFile debouncing', () => {
   });
 
   suite('Python step files are debounced', () => {
-    test('should not call loadStepsFromBehave immediately for Python step files', async () => {
+    test('should not call loadFromBehave immediately for Python step files', async () => {
       const testData = new WeakMap();
       const ctrlStub = {} as vscode.TestController;
 
       await fileParser.reparseFile(stepsFileUri, 'content', wkspSettings, testData, ctrlStub);
 
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 0,
-        'loadStepsFromBehave should NOT be called immediately');
+      assert.strictEqual(loadFromBehaveStub.callCount, 0,
+        'loadFromBehave should NOT be called immediately');
     });
 
-    test('should call loadStepsFromBehave after debounce interval (500ms)', async () => {
+    test('should call loadFromBehave after debounce interval (500ms)', async () => {
       const testData = new WeakMap();
       const ctrlStub = {} as vscode.TestController;
 
       await fileParser.reparseFile(stepsFileUri, 'content', wkspSettings, testData, ctrlStub);
 
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 0, 'should not be called yet');
+      assert.strictEqual(loadFromBehaveStub.callCount, 0, 'should not be called yet');
 
       // Advance time past the debounce interval
       await clock.tickAsync(500);
 
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 1,
-        'loadStepsFromBehave should be called once after 500ms');
+      assert.strictEqual(loadFromBehaveStub.callCount, 1,
+        'loadFromBehave should be called once after 500ms');
       assert.ok(rebuildStepMappingsStub.called, 'rebuildStepMappings should be called');
     });
 
@@ -129,8 +124,8 @@ suite('fileParser - reparseFile debouncing', () => {
       // Advance past debounce
       await clock.tickAsync(500);
 
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 1,
-        'loadStepsFromBehave should only be called once despite 5 rapid calls');
+      assert.strictEqual(loadFromBehaveStub.callCount, 1,
+        'loadFromBehave should only be called once despite 5 rapid calls');
     });
 
     test('debounce timer resets on each call', async () => {
@@ -142,23 +137,23 @@ suite('fileParser - reparseFile debouncing', () => {
 
       // Advance 400ms (less than debounce interval)
       await clock.tickAsync(400);
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 0, 'should not fire yet at 400ms');
+      assert.strictEqual(loadFromBehaveStub.callCount, 0, 'should not fire yet at 400ms');
 
       // Second call resets timer
       await fileParser.reparseFile(stepsFileUri, 'content2', wkspSettings, testData, ctrlStub);
 
       // Advance another 400ms (800ms total, but only 400ms since last call)
       await clock.tickAsync(400);
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 0, 'should not fire yet — timer was reset');
+      assert.strictEqual(loadFromBehaveStub.callCount, 0, 'should not fire yet — timer was reset');
 
       // Advance final 100ms (500ms since last call)
       await clock.tickAsync(100);
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 1, 'should fire now — 500ms since last call');
+      assert.strictEqual(loadFromBehaveStub.callCount, 1, 'should fire now — 500ms since last call');
     });
   });
 
   suite('environment.py files are debounced', () => {
-    test('should debounce environment.py reparse', async () => {
+    test('should debounce environment.py reparse via unified Python path', async () => {
       // Configure stubs for environment.py
       couldBePythonStepsFileStub.returns(false);
       isFeatureFileStub.returns(false);
@@ -168,14 +163,13 @@ suite('fileParser - reparseFile debouncing', () => {
 
       await fileParser.reparseFile(envFileUri, 'content', wkspSettings, testData, ctrlStub);
 
-      assert.strictEqual(parseEnvironmentFileContentStub.callCount, 0,
-        'parseEnvironmentFileContent should NOT be called immediately');
+      // env.py now goes through the unified debounce path — rebuildStepMappings should not fire yet
+      assert.ok(!rebuildStepMappingsStub.called,
+        'rebuildStepMappings should NOT be called immediately for env.py');
 
       await clock.tickAsync(500);
 
-      assert.strictEqual(parseEnvironmentFileContentStub.callCount, 1,
-        'parseEnvironmentFileContent should be called after debounce');
-      assert.ok(rebuildStepMappingsStub.called, 'rebuildStepMappings should be called');
+      assert.ok(rebuildStepMappingsStub.called, 'rebuildStepMappings should be called after debounce');
     });
   });
 
@@ -214,9 +208,9 @@ suite('fileParser - reparseFile debouncing', () => {
       assert.ok(rebuildStepMappingsStub.called,
         'rebuildStepMappings should be called immediately for feature files');
 
-      // loadStepsFromBehave should NOT be called for feature files
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 0,
-        'loadStepsFromBehave should not be called for feature files');
+      // loadFromBehave should NOT be called for feature files
+      assert.strictEqual(loadFromBehaveStub.callCount, 0,
+        'loadFromBehave should not be called for feature files');
 
       getFeatureNameStub.restore();
     });
@@ -238,12 +232,12 @@ suite('fileParser - reparseFile debouncing', () => {
 
       // Advance 200ms — workspace A should fire (500ms total), workspace B should not (200ms)
       await clock.tickAsync(200);
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 1,
+      assert.strictEqual(loadFromBehaveStub.callCount, 1,
         'only workspace A should have fired after 500ms');
 
       // Advance another 300ms — workspace B should now fire (500ms total)
       await clock.tickAsync(300);
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 2,
+      assert.strictEqual(loadFromBehaveStub.callCount, 2,
         'workspace B should have fired after its own 500ms');
     });
   });
@@ -262,7 +256,7 @@ suite('fileParser - reparseFile debouncing', () => {
       // Instead, let's just verify the debounce fires correctly and the flag is reset after
       await clock.tickAsync(500);
 
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 1,
+      assert.strictEqual(loadFromBehaveStub.callCount, 1,
         'debounced work should have fired');
     });
   });
@@ -280,8 +274,8 @@ suite('fileParser - reparseFile debouncing', () => {
       // Advance past debounce
       await clock.tickAsync(500);
 
-      assert.strictEqual(loadStepsFromBehaveStub.callCount, 0,
-        'loadStepsFromBehave should NOT be called after dispose');
+      assert.strictEqual(loadFromBehaveStub.callCount, 0,
+        'loadFromBehave should NOT be called after dispose');
     });
   });
 

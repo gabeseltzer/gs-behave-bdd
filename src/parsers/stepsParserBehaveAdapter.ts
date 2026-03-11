@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { performance } from 'perf_hooks';
 import { uriId, sepr, basename } from '../common';
-import type { BehaveStepDefinition } from './behaveStepLoader';
+import type { BehaveStepDefinition } from './behaveLoader';
 import { StepFileStep, parseRepWildcard, storeStepFileStep } from './stepsParser';
 import * as fs from 'fs';
 import { diagLog } from '../logger';

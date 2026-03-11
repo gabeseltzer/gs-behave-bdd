@@ -1,8 +1,8 @@
 /**
- * Manual test for behaveStepLoader to debug why it returns 0 steps
+ * Manual test for behaveLoader to debug discovery issues
  */
 
-import { loadStepsFromBehave } from '../src/parsers/behaveStepLoader';
+import { loadFromBehave } from '../src/parsers/behaveLoader';
 import * as path from 'path';
 
 async function main() {
@@ -18,11 +18,15 @@ async function main() {
   console.log('');
 
   try {
-    const steps = await loadStepsFromBehave(pythonExec, projectPath, [stepsPath]);
-    console.log(`\nLoaded ${steps.length} steps:`);
-    steps.forEach((step, idx) => {
+    const result = await loadFromBehave(pythonExec, projectPath, [stepsPath]);
+    console.log(`\nLoaded ${result.steps.length} steps:`);
+    result.steps.forEach((step, idx) => {
       console.log(`${idx + 1}. ${step.stepType} "${step.pattern}" (${step.filePath}:${step.lineNumber})`);
       console.log(`   Regex: ${step.regex}`);
+    });
+    console.log(`\nLoaded ${result.fixtures.length} fixtures:`);
+    result.fixtures.forEach((fixture, idx) => {
+      console.log(`${idx + 1}. ${fixture.functionName} (${fixture.filePath}:${fixture.defLine})`);
     });
   } catch (error) {
     console.error('ERROR:', error instanceof Error ? error.message : String(error));

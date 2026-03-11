@@ -1,29 +1,32 @@
 """
-Discovers all step definitions using behave's step registry.
+Discovers step definitions and fixture functions using behave's registry.
 
-Usage: python get_steps.py <project_path> <steps_paths_json> [--bundled-libs <path>]
+Usage: python discover.py <project_path> <steps_paths_json> [--bundled-libs <path>]
   project_path: Absolute path to the project root
   steps_paths_json: JSON array of absolute step directory paths
   --bundled-libs: Optional path to bundled behave libs directory
 
-Outputs JSON array to stdout:
-  [{"step_type": "given", "pattern": "...", "file": "...", "line": 1, "regex_pattern": "..."}, ...]
+Outputs JSON object to stdout:
+  {"steps": [...], "fixtures": [...]}
 """
 
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 import sys
+import types
 from pathlib import Path
 from typing import Any
 
 # behave imports are deferred to function bodies after sys.path setup
 
 
-def load_environment_files(steps_paths: list[str]) -> None:
-  """Load environment.py files from step directory parents."""
-  loaded_env_files = set()
+def load_environment_files(steps_paths: list[str]) -> list[types.ModuleType]:
+  """Load environment.py files from step directory parents. Returns loaded modules."""
+  loaded_env_files: set[str] = set()
+  loaded_modules: list[types.ModuleType] = []
   for sp in steps_paths:
     env_dir = Path(sp).resolve().parent
     env_file = env_dir / "environment.py"
@@ -34,11 +37,13 @@ def load_environment_files(steps_paths: list[str]) -> None:
         if spec and spec.loader:
           env_module = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(env_module)
+          loaded_modules.append(env_module)
       except (ImportError, AttributeError, OSError) as env_err:
         print(
           json.dumps({"warning": f"Failed to load environment.py: {env_err!s}"}),
           file=sys.stderr,
         )
+  return loaded_modules
 
 
 def load_step_directories(steps_paths: list[str]) -> None:
@@ -85,6 +90,52 @@ def collect_steps_from_registry(registry: Any) -> list[dict[str, Any]]:
   return steps
 
 
+def collect_fixtures_from_modules(
+  env_modules: list[types.ModuleType],
+) -> list[dict[str, Any]]:
+  """Collect all @fixture-decorated functions from loaded environment modules."""
+  fixtures: list[dict[str, Any]] = []
+  seen: set[int] = set()  # Track by id() to avoid duplicates from re-exports
+
+  for module in env_modules:
+    for _name, obj in inspect.getmembers(module, callable):
+      if id(obj) in seen:
+        continue
+      if not getattr(obj, "behave_fixture", False):
+        continue
+      seen.add(id(obj))
+
+      try:
+        source_file = str(Path(inspect.getfile(obj)).resolve())
+      except (TypeError, OSError):
+        continue
+
+      decorator_line = 0
+      def_line = 0
+      try:
+        source_lines, start_line = inspect.getsourcelines(obj)
+        decorator_line = start_line
+        def_line = start_line
+        for i, line in enumerate(source_lines):
+          stripped = line.strip()
+          if stripped.startswith("def ") and "(" in stripped:
+            def_line = start_line + i
+            break
+      except (OSError, TypeError):
+        pass
+
+      fixtures.append(
+        {
+          "function_name": obj.__name__,
+          "file": source_file,
+          "decorator_line": decorator_line,
+          "def_line": def_line,
+        }
+      )
+
+  return fixtures
+
+
 def _get_regex_pattern(matcher: Any) -> str:
   """Extract regex pattern from matcher."""
   regex_pat = getattr(matcher, "regex_pattern", None)
@@ -108,7 +159,7 @@ def _get_file_path(matcher: Any) -> str:
 
 
 def main() -> None:
-  """Main entry point for step discovery."""
+  """Main entry point for step and fixture discovery."""
   try:
     project_path = sys.argv[1] if len(sys.argv) > 1 else "."
     steps_paths_json = sys.argv[2] if len(sys.argv) > 2 else "[]"
@@ -130,23 +181,24 @@ def main() -> None:
 
     # Add parent directories of step paths to sys.path so that modules living
     # alongside the features directory (e.g. lib/) can be imported.
-    # Step paths are like ".../autotest/features/steps", so grandparent is
-    # ".../autotest" which is typically where behave.ini and importable modules live.
+    # Step paths are like ".../subproject/features/steps", so grandparent is
+    # ".../subproject" which is typically where behave.ini and importable modules live.
     for sp in steps_paths:
-      features_dir = str(Path(sp).resolve().parent)  # e.g. .../autotest/features
-      behave_project_dir = str(Path(features_dir).parent)  # e.g. .../autotest
+      features_dir = str(Path(sp).resolve().parent)
+      behave_project_dir = str(Path(features_dir).parent)
       if behave_project_dir not in sys.path:
         sys.path.insert(0, behave_project_dir)
 
     from behave import step_registry  # noqa: PLC0415  # deferred until sys.path setup
 
-    load_environment_files(steps_paths)
+    env_modules = load_environment_files(steps_paths)
     load_step_directories(steps_paths)
 
     registry = step_registry.registry
     steps = collect_steps_from_registry(registry)
+    fixtures = collect_fixtures_from_modules(env_modules)
 
-    print(json.dumps(steps))
+    print(json.dumps({"steps": steps, "fixtures": fixtures}))
     sys.exit(0)
 
   except ImportError as e:

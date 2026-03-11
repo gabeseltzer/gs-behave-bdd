@@ -1,144 +1,169 @@
-// Tests for fixtureParser with nested featuresPath (e.g. subproject/features)
-// Verifies that parseEnvironmentFileContent can follow imports to modules
-// that live alongside the features directory (e.g. subproject/lib/).
+// Tests for fixtureParser with storePythonFixtureDefinitions
+// Verifies that fixture definitions from the Python subprocess are correctly
+// stored and retrievable by the fixture parser.
 
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import * as sinon from 'sinon';
-import { parseEnvironmentFileContent, getFixtures, deleteFixtures } from '../../../src/parsers/fixtureParser';
-
-// Simulates:
-//   workspace_root/
-//     subproject/                  (behave project dir, has behave.ini)
-//       lib/
-//         __init__.py              (has @fixture decorator)
-//       features/                  (featuresPath = "subproject/features")
-//         environment.py           (imports from lib)
-//         steps/
+import { storePythonFixtureDefinitions, getFixtures, deleteFixtures, getFixtureByTag } from '../../../src/parsers/fixtureParser';
+import type { BehaveFixtureDefinition } from '../../../src/parsers/behaveLoader';
 
 const featuresUri = vscode.Uri.file('/workspace_root/subproject/features');
 
-suite('fixtureParser nested project', () => {
-  let sandbox: sinon.SinonSandbox;
+suite('fixtureParser storePythonFixtureDefinitions', () => {
 
   setup(() => {
-    sandbox = sinon.createSandbox();
     deleteFixtures(featuresUri);
   });
 
   teardown(() => {
-    sandbox.restore();
     deleteFixtures(featuresUri);
   });
 
-  /**
-   * Mock workspace.fs.stat to simulate which files exist on disk.
-   * resolveImportPath calls stat() to check if candidate paths exist.
-   */
-  function mockStat(existingPaths: string[]) {
-    const normalizedPaths = existingPaths.map(p => p.replace(/\\/g, '/').toLowerCase());
-    sandbox.stub(vscode.workspace.fs, 'stat').callsFake((uri: vscode.Uri) => {
-      const normalized = uri.fsPath.replace(/\\/g, '/').toLowerCase();
-      if (normalizedPaths.some(p => normalized.endsWith(p) || normalized === p)) {
-        return Promise.resolve({ type: vscode.FileType.File, ctime: 0, mtime: 0, size: 0 });
+  test('should store fixtures from Python subprocess output', () => {
+    const pythonFixtures: BehaveFixtureDefinition[] = [
+      {
+        functionName: 'browser_setup',
+        filePath: '/workspace_root/subproject/lib/__init__.py',
+        decoratorLine: 3,
+        defLine: 4,
       }
-      return Promise.reject(new Error(`File not found: ${uri.fsPath}`));
-    });
-  }
+    ];
 
-  /**
-   * Mock getContentFromFilesystem for files that parseEnvironmentFileContent reads
-   * when following imports.
-   */
-  function mockFileContent(fileContentMap: Map<string, string>) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const commonModule = require('../../../src/common');
-    sandbox.stub(commonModule, 'getContentFromFilesystem').callsFake(async (uri: vscode.Uri) => {
-      const normalized = uri.fsPath.replace(/\\/g, '/').toLowerCase();
-      for (const [filePath, content] of fileContentMap) {
-        const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase();
-        if (normalized.endsWith(normalizedPath) || normalized === normalizedPath) {
-          return content;
-        }
-      }
-      throw new Error(`File not found: ${uri.fsPath}`);
-    });
-  }
+    const stored = storePythonFixtureDefinitions(featuresUri, pythonFixtures);
 
-  test('should discover fixtures from lib/ imported by environment.py in nested layout', async () => {
-    const envUri = vscode.Uri.file('/workspace_root/subproject/features/environment.py');
-    const libInitUri = vscode.Uri.file('/workspace_root/subproject/lib/__init__.py');
-
-    mockStat(['/workspace_root/subproject/lib/__init__.py']);
-
-    const libContent = [
-      'from behave import fixture',
-      '',
-      '@fixture',
-      'def browser_setup(context):',
-      '    context.browser = "chrome"',
-    ].join('\n');
-
-    mockFileContent(new Map([[libInitUri.fsPath, libContent]]));
-
-    const envContent = [
-      'from lib import browser_setup  # noqa',
-      '',
-      'def before_all(context):',
-      '    pass',
-    ].join('\n');
-
-    await parseEnvironmentFileContent(featuresUri, envContent, envUri, 'test');
-
+    assert.strictEqual(stored, 1, 'Should store 1 fixture');
     const fixtures = getFixtures(featuresUri);
-    assert.ok(fixtures.length > 0,
-      'Should discover fixtures from lib/ in the behave project directory (parent of features). ' +
-      'resolveImportPath needs to also search relative to the parent of the features directory.');
+    assert.strictEqual(fixtures.length, 1, 'Should retrieve 1 fixture');
 
     const browserFixture = fixtures.find(f => f.name === 'browser_setup');
-    assert.ok(browserFixture, 'Should find browser_setup fixture from lib/__init__.py');
+    assert.ok(browserFixture, 'Should find browser_setup fixture');
+    assert.ok(browserFixture.uri.fsPath.includes('__init__.py'),
+      'Fixture URI should point to the source file');
   });
 
-  test('should discover fixtures defined directly in environment.py', async () => {
-    const envUri = vscode.Uri.file('/workspace_root/subproject/features/environment.py');
+  test('should convert 1-indexed Python lines to 0-indexed VS Code ranges', () => {
+    const pythonFixtures: BehaveFixtureDefinition[] = [
+      {
+        functionName: 'my_fixture',
+        filePath: '/workspace_root/subproject/features/environment.py',
+        decoratorLine: 10,
+        defLine: 11,
+      }
+    ];
 
-    const envContent = [
-      'from behave import fixture',
-      '',
-      '@fixture',
-      'def direct_fixture(context):',
-      '    pass',
-    ].join('\n');
-
-    await parseEnvironmentFileContent(featuresUri, envContent, envUri, 'test');
-
+    storePythonFixtureDefinitions(featuresUri, pythonFixtures);
     const fixtures = getFixtures(featuresUri);
-    assert.ok(fixtures.length > 0, 'Should discover fixtures defined directly in environment.py');
-    assert.ok(fixtures.find(f => f.name === 'direct_fixture'), 'Should find direct_fixture');
+    const fixture = fixtures[0];
+
+    // Python lines are 1-indexed, VS Code ranges are 0-indexed
+    assert.strictEqual(fixture.decoratorRange.start.line, 9, 'Decorator line should be 0-indexed (10 -> 9)');
+    assert.strictEqual(fixture.functionDefinitionRange.start.line, 10, 'Def line should be 0-indexed (11 -> 10)');
   });
 
-  test('should discover fixtures from files relative to the features directory', async () => {
-    const envUri = vscode.Uri.file('/workspace_root/subproject/features/environment.py');
-    const helperUri = vscode.Uri.file('/workspace_root/subproject/features/helpers.py');
+  test('should store multiple fixtures', () => {
+    const pythonFixtures: BehaveFixtureDefinition[] = [
+      {
+        functionName: 'browser_setup',
+        filePath: '/workspace_root/subproject/lib/__init__.py',
+        decoratorLine: 3,
+        defLine: 4,
+      },
+      {
+        functionName: 'database_connection',
+        filePath: '/workspace_root/subproject/lib/__init__.py',
+        decoratorLine: 8,
+        defLine: 9,
+      },
+      {
+        functionName: 'direct_fixture',
+        filePath: '/workspace_root/subproject/features/environment.py',
+        decoratorLine: 5,
+        defLine: 6,
+      },
+    ];
 
-    mockStat(['/workspace_root/subproject/features/helpers.py']);
-
-    const helperContent = [
-      'from behave import fixture',
-      '',
-      '@fixture',
-      'def helper_fixture(context):',
-      '    pass',
-    ].join('\n');
-
-    mockFileContent(new Map([[helperUri.fsPath, helperContent]]));
-
-    const envContent = 'from helpers import helper_fixture  # noqa\n';
-
-    await parseEnvironmentFileContent(featuresUri, envContent, envUri, 'test');
+    const stored = storePythonFixtureDefinitions(featuresUri, pythonFixtures);
+    assert.strictEqual(stored, 3, 'Should store 3 fixtures');
 
     const fixtures = getFixtures(featuresUri);
-    assert.ok(fixtures.find(f => f.name === 'helper_fixture'),
-      'Should find fixtures from files in the same directory as environment.py');
+    assert.strictEqual(fixtures.length, 3, 'Should retrieve 3 fixtures');
+    assert.ok(fixtures.find(f => f.name === 'browser_setup'));
+    assert.ok(fixtures.find(f => f.name === 'database_connection'));
+    assert.ok(fixtures.find(f => f.name === 'direct_fixture'));
+  });
+
+  test('should be retrievable via getFixtureByTag', () => {
+    const pythonFixtures: BehaveFixtureDefinition[] = [
+      {
+        functionName: 'browser_setup',
+        filePath: '/workspace_root/subproject/lib/__init__.py',
+        decoratorLine: 3,
+        defLine: 4,
+      }
+    ];
+
+    storePythonFixtureDefinitions(featuresUri, pythonFixtures);
+
+    const fixture = getFixtureByTag(featuresUri, 'fixture.browser_setup');
+    assert.ok(fixture, 'Should find fixture by tag "fixture.browser_setup"');
+    assert.strictEqual(fixture.name, 'browser_setup');
+  });
+
+  test('should handle empty fixture list', () => {
+    const stored = storePythonFixtureDefinitions(featuresUri, []);
+    assert.strictEqual(stored, 0, 'Should store 0 fixtures');
+
+    const fixtures = getFixtures(featuresUri);
+    assert.strictEqual(fixtures.length, 0, 'Should retrieve 0 fixtures');
+  });
+
+  test('deleteFixtures should clear stored fixtures', () => {
+    const pythonFixtures: BehaveFixtureDefinition[] = [
+      {
+        functionName: 'browser_setup',
+        filePath: '/workspace_root/subproject/lib/__init__.py',
+        decoratorLine: 3,
+        defLine: 4,
+      }
+    ];
+
+    storePythonFixtureDefinitions(featuresUri, pythonFixtures);
+    assert.strictEqual(getFixtures(featuresUri).length, 1);
+
+    deleteFixtures(featuresUri);
+    assert.strictEqual(getFixtures(featuresUri).length, 0, 'Fixtures should be cleared after delete');
+  });
+
+  test('should handle fixtures from nested project structure', () => {
+    // Simulates the scenario where fixtures live in subproject/lib/
+    // and are discovered by Python's inspect module via environment.py imports
+    const pythonFixtures: BehaveFixtureDefinition[] = [
+      {
+        functionName: 'browser_setup',
+        filePath: '/workspace_root/subproject/lib/__init__.py',
+        decoratorLine: 3,
+        defLine: 4,
+      },
+      {
+        functionName: 'helper_fixture',
+        filePath: '/workspace_root/subproject/features/helpers.py',
+        decoratorLine: 5,
+        defLine: 6,
+      },
+    ];
+
+    storePythonFixtureDefinitions(featuresUri, pythonFixtures);
+
+    const fixtures = getFixtures(featuresUri);
+    assert.strictEqual(fixtures.length, 2);
+
+    // Verify the file URIs point to the correct locations
+    const browserFixture = fixtures.find(f => f.name === 'browser_setup');
+    assert.ok(browserFixture);
+    assert.ok(browserFixture.uri.fsPath.includes('lib'), 'browser_setup should reference lib/ directory');
+
+    const helperFixture = fixtures.find(f => f.name === 'helper_fixture');
+    assert.ok(helperFixture);
+    assert.ok(helperFixture.uri.fsPath.includes('helpers.py'), 'helper_fixture should reference helpers.py');
   });
 });

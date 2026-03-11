@@ -8,7 +8,7 @@ import { WorkspaceSettings } from '../../../src/settings';
 import * as commonModule from '../../../src/common';
 import * as stepsMapModule from '../../../src/parsers/stepMappings';
 import * as configModule from '../../../src/configuration';
-import * as behaveLoaderModule from '../../../src/parsers/behaveStepLoader';
+import * as behaveLoaderModule from '../../../src/parsers/behaveLoader';
 import * as adapterModule from '../../../src/parsers/stepsParserBehaveAdapter';
 
 suite('fileParser - initialStepsParseComplete', () => {
@@ -27,7 +27,7 @@ suite('fileParser - reparseFile', () => {
   let _couldBePythonStepsFileStub: sinon.SinonStub;
   let _getContentFromFilesystemStub: sinon.SinonStub;
   let _rebuildStepMappingsStub: sinon.SinonStub;
-  let _loadStepsFromBehaveStub: sinon.SinonStub;
+  let _loadFromBehaveStub: sinon.SinonStub;
   let _storeBehaveStepDefinitionsStub: sinon.SinonStub;
   let _getPythonExecutableStub: sinon.SinonStub;
 
@@ -59,7 +59,7 @@ suite('fileParser - reparseFile', () => {
     _rebuildStepMappingsStub = sinon.stub(stepsMapModule, 'rebuildStepMappings');
 
     // Stub behave loader functions
-    _loadStepsFromBehaveStub = sinon.stub(behaveLoaderModule, 'loadStepsFromBehave').resolves([]);
+    _loadFromBehaveStub = sinon.stub(behaveLoaderModule, 'loadFromBehave').resolves({ steps: [], fixtures: [] });
     _storeBehaveStepDefinitionsStub = sinon.stub(adapterModule, 'storeBehaveStepDefinitions').resolves(0);
 
     // Stub getPythonExecutable
@@ -91,7 +91,7 @@ suite('fileParser - reparseFile', () => {
       await clock.tickAsync(500);
 
       // Verify behave loader was called
-      assert.ok(_loadStepsFromBehaveStub.called, 'loadStepsFromBehave should be called');
+      assert.ok(_loadFromBehaveStub.called, 'loadFromBehave should be called');
 
       // Verify that behave definitions were stored
       assert.ok(_storeBehaveStepDefinitionsStub.called, 'storeBehaveStepDefinitions should be called');
@@ -114,7 +114,7 @@ suite('fileParser - reparseFile', () => {
       await clock.tickAsync(500);
 
       // Verify behave loader was called (even for library files)
-      assert.ok(_loadStepsFromBehaveStub.called, 'loadStepsFromBehave should be called for library files');
+      assert.ok(_loadFromBehaveStub.called, 'loadFromBehave should be called for library files');
 
       // Verify that step mappings were rebuilt
       assert.ok(_rebuildStepMappingsStub.called, 'rebuildStepMappings should be called');
@@ -125,7 +125,7 @@ suite('fileParser - reparseFile', () => {
       isStepsFileStub.withArgs(stepsFileUri).returns(true);
 
       // Make behave loader throw an error
-      _loadStepsFromBehaveStub.rejects(new Error('behave is not installed'));
+      _loadFromBehaveStub.rejects(new Error('behave is not installed'));
 
       const testData = new WeakMap();
       const ctrlStub = {} as vscode.TestController;
