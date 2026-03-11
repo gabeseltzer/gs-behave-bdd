@@ -119,7 +119,8 @@ export const workspace = {
     readFile: () => Promise.resolve(Buffer.from('')),
     writeFile: () => Promise.resolve(),
     delete: () => Promise.resolve(),
-    readDirectory: () => Promise.resolve([])
+    readDirectory: () => Promise.resolve([]),
+    stat: () => Promise.reject(new Error('File not found'))
   },
   getWorkspaceFolder: (uri: Uri) => ({ uri, name: 'mock-workspace', index: 0 }),
   workspaceFolders: [],

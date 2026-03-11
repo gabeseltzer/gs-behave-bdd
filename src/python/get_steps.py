@@ -128,6 +128,16 @@ def main() -> None:
     if project_path not in sys.path:
       sys.path.insert(0, project_path)
 
+    # Add parent directories of step paths to sys.path so that modules living
+    # alongside the features directory (e.g. lib/) can be imported.
+    # Step paths are like ".../autotest/features/steps", so grandparent is
+    # ".../autotest" which is typically where behave.ini and importable modules live.
+    for sp in steps_paths:
+      features_dir = str(Path(sp).resolve().parent)  # e.g. .../autotest/features
+      behave_project_dir = str(Path(features_dir).parent)  # e.g. .../autotest
+      if behave_project_dir not in sys.path:
+        sys.path.insert(0, behave_project_dir)
+
     from behave import step_registry  # noqa: PLC0415  # deferred until sys.path setup
 
     load_environment_files(steps_paths)
