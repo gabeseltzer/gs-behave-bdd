@@ -210,28 +210,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         const presetName = e.item.presetName;
         quickPick.hide();
 
-        // Determine where the setting is stored
+        // Determine which scope contains this specific preset (most specific first)
         const inspection = wkspConfig.inspect<{ [name: string]: { [key: string]: string } }>("envVarPresets");
         let settingsUri: vscode.Uri | undefined;
         let isGlobalSettings = false;
 
-        if (inspection?.workspaceFolderValue !== undefined) {
-          // Setting is in .vscode/settings.json of the workspace folder
+        if (inspection?.workspaceFolderValue?.[presetName] !== undefined) {
+          // Preset is in .vscode/settings.json of the workspace folder
           settingsUri = vscode.Uri.joinPath(targetWkspUri, ".vscode", "settings.json");
-        } else if (inspection?.workspaceValue !== undefined) {
-          // Setting is in the .code-workspace file (multi-root workspace)
+        } else if (inspection?.workspaceValue?.[presetName] !== undefined) {
+          // Preset is in the .code-workspace file (multi-root workspace)
           const workspaceFile = vscode.workspace.workspaceFile;
           if (workspaceFile && workspaceFile.scheme === "file") {
             settingsUri = workspaceFile;
           }
-        } else if (inspection?.globalValue !== undefined) {
-          // Setting is in user settings
+        } else if (inspection?.globalValue?.[presetName] !== undefined) {
+          // Preset is in user settings
           isGlobalSettings = true;
         }
 
         if (!settingsUri && !isGlobalSettings) {
-          // Fallback: try workspace folder settings.json first
-          settingsUri = vscode.Uri.joinPath(targetWkspUri, ".vscode", "settings.json");
+          // Preset not found at any specific scope — open settings UI as fallback
+          await vscode.commands.executeCommand("workbench.action.openSettings", "@id:behave-vsc.envVarPresets");
+          return;
         }
 
         try {
@@ -253,18 +254,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
 
           const text = doc.getText();
 
-          // Find envVarPresets section first, then find the specific preset key within it
-          const envVarPresetsMatch = text.indexOf("behave-vsc.envVarPresets");
+          // Find envVarPresets section — check both flat-key and nested-key JSON formats
+          let envVarPresetsMatch = text.indexOf('"behave-vsc.envVarPresets"');
+          if (envVarPresetsMatch === -1)
+            envVarPresetsMatch = text.indexOf('"envVarPresets"');
           const searchString = `"${presetName}":`;
-          const presetIndex = text.indexOf(searchString, envVarPresetsMatch);
+          const presetIndex = envVarPresetsMatch !== -1
+            ? text.indexOf(searchString, envVarPresetsMatch)
+            : -1;
 
-          if (envVarPresetsMatch !== -1 && presetIndex !== -1) {
+          if (presetIndex !== -1) {
             const position = doc.positionAt(presetIndex);
             editor.selection = new vscode.Selection(position, position);
             editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
           }
         } catch {
-          // If file doesn't exist, open the settings UI instead
+          // If file doesn't exist or can't be read, open the settings UI instead
           await vscode.commands.executeCommand(
             "workbench.action.openSettings",
             `@id:behave-vsc.envVarPresets`
