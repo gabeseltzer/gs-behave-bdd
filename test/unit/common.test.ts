@@ -2,7 +2,9 @@
 // Note: This tests only isolated utility functions that don't require VS Code extension context
 
 import * as assert from 'assert';
-import { sepr, beforeFirstSepr, afterFirstSepr, cleanBehaveText, getLines } from '../../src/common';
+import * as sinon from 'sinon';
+import * as vscode from 'vscode';
+import { sepr, beforeFirstSepr, afterFirstSepr, cleanBehaveText, getLines, getWorkspaceUriForFile } from '../../src/common';
 
 suite('common utilities', () => {
 
@@ -131,6 +133,57 @@ suite('common utilities', () => {
       const text = 'line1\nline2\n';
       const result = getLines(text);
       assert.deepStrictEqual(result, ['line1', 'line2', '']);
+    });
+  });
+
+  suite('getWorkspaceUriForFile', () => {
+    let getWorkspaceFolderStub: sinon.SinonStub;
+
+    setup(() => {
+      getWorkspaceFolderStub = sinon.stub(vscode.workspace, 'getWorkspaceFolder');
+    });
+
+    teardown(() => {
+      sinon.restore();
+    });
+
+    test('should return undefined for undefined input', () => {
+      const result = getWorkspaceUriForFile(undefined);
+      assert.strictEqual(result, undefined);
+    });
+
+    test('should return undefined for non-file scheme URIs', () => {
+      // git: scheme from diff views
+      const gitUri = { scheme: 'git', fsPath: '/some/path', path: '/some/path' } as vscode.Uri;
+      const result = getWorkspaceUriForFile(gitUri);
+      assert.strictEqual(result, undefined);
+    });
+
+    test('should return workspace URI when file is in workspace', () => {
+      const fileUri = vscode.Uri.file('/workspaces/repo/subfolder/test.py');
+      const wkspUri = vscode.Uri.file('/workspaces/repo/subfolder');
+      getWorkspaceFolderStub.returns({ uri: wkspUri, name: 'subfolder', index: 0 });
+
+      const result = getWorkspaceUriForFile(fileUri);
+      assert.strictEqual(result, wkspUri);
+    });
+
+    test('should return undefined (not throw) for files outside workspace (e.g. git worktree paths)', () => {
+      const externalUri = vscode.Uri.file('/workspaces/mordor.worktrees/copilot-worktree/autotest/client.py');
+      getWorkspaceFolderStub.returns(undefined);
+
+      // Before the fix this would throw "No workspace folder found for file ..."
+      const result = getWorkspaceUriForFile(externalUri);
+      assert.strictEqual(result, undefined);
+    });
+
+    test('should not throw for any file URI even when not in workspace', () => {
+      const externalUri = vscode.Uri.file('/completely/different/path/file.feature');
+      getWorkspaceFolderStub.returns(undefined);
+
+      assert.doesNotThrow(() => {
+        getWorkspaceUriForFile(externalUri);
+      });
     });
   });
 });

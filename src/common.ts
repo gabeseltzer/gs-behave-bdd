@@ -226,10 +226,13 @@ export const getWorkspaceUriForFile = (fileorFolderUri: vscode.Uri | undefined):
   if (!fileorFolderUri) // handling this here for caller convenience
     return undefined;
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileorFolderUri);
-  const wkspUri = workspaceFolder ? workspaceFolder.uri : undefined;
-  if (!wkspUri)
-    throw "No workspace folder found for file " + fileorFolderUri.fsPath;
-  return wkspUri;
+  if (!workspaceFolder) {
+    // Return undefined instead of throwing for files outside workspace (e.g. git worktree paths).
+    // Callers already handle undefined return gracefully.
+    console.warn(`[behave-vsc] No workspace folder found for file ${fileorFolderUri.fsPath}, skipping workspace-specific features`);
+    return undefined;
+  }
+  return workspaceFolder.uri;
 }
 
 
