@@ -29,7 +29,8 @@ export async function validateAndGetStepInfo(
   }
 
   const lineNo = position.line;
-  const lineText = document.lineAt(lineNo).text.trim();
+  const line = document.lineAt(lineNo);
+  const lineText = line.text.trim();
   const stExec = featureFileStepRe.exec(lineText);
   if (!stExec) {
     return undefined;
@@ -45,8 +46,10 @@ export async function validateAndGetStepInfo(
   }
 
   // Calculate the step range (the step text after the Given/When/Then/And/But keyword)
-  const line = document.lineAt(lineNo);
   const trimmedStart = line.text.indexOf(lineText);
+  if (trimmedStart < 0) {
+    return undefined;
+  }
   const stepRange = new vscode.Range(
     new vscode.Position(lineNo, trimmedStart),
     new vscode.Position(lineNo, line.text.length)
