@@ -5,7 +5,7 @@ suite('importStrategy setting', () => {
   test('vscode mock returns useBundled as default importStrategy', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const vscode = require('vscode');
-    const config = vscode.workspace.getConfiguration('behave-vsc');
+    const config = vscode.workspace.getConfiguration('behave-vsc-gs');
     assert.strictEqual(config.get('importStrategy'), 'useBundled');
   });
 

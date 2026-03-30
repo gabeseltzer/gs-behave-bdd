@@ -65,7 +65,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     diagLog("activate called, node pid:" + process.pid);
     config.logger.syncChannelsToWorkspaceFolders();
     logExtensionVersion(context);
-    const ctrl = vscode.tests.createTestController(`behave-vsc.TestController`, 'Feature Tests');
+    const ctrl = vscode.tests.createTestController(`behave-vsc-gs.TestController`, 'Feature Tests');
     parser.clearTestItemsAndParseFilesForAllWorkspaces(testData, ctrl, "activate", true);
 
     const cleanExtensionTempDirectoryCancelSource = new vscode.CancellationTokenSource();
@@ -119,10 +119,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       cleanExtensionTempDirectoryCancelSource,
       junitWatcher,
       statusItem,
-      vscode.commands.registerTextEditorCommand(`behave-vsc.gotoStep`, gotoStepHandler),
-      vscode.commands.registerTextEditorCommand(`behave-vsc.findStepReferences`, findStepReferencesHandler),
-      vscode.commands.registerCommand(`behave-vsc.stepReferences.prev`, prevStepReferenceHandler),
-      vscode.commands.registerCommand(`behave-vsc.stepReferences.next`, nextStepReferenceHandler),
+      vscode.commands.registerTextEditorCommand(`behave-vsc-gs.gotoStep`, gotoStepHandler),
+      vscode.commands.registerTextEditorCommand(`behave-vsc-gs.findStepReferences`, findStepReferencesHandler),
+      vscode.commands.registerCommand(`behave-vsc-gs.stepReferences.prev`, prevStepReferenceHandler),
+      vscode.commands.registerCommand(`behave-vsc-gs.stepReferences.next`, nextStepReferenceHandler),
       vscode.languages.registerCompletionItemProvider("gherkin", autoCompleteProvider, ...["  "]),
       vscode.languages.registerDocumentRangeFormattingEditProvider("gherkin", formatFeatureProvider),
       vscode.languages.registerDocumentSemanticTokensProvider({ language: "gherkin" }, new SemHighlightProvider(), semLegend),
@@ -145,7 +145,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       tooltip: "Edit this preset in settings"
     };
 
-    const selectEnvPresetCommand = vscode.commands.registerCommand("behave-vsc.selectEnvPreset", async () => {
+    const selectEnvPresetCommand = vscode.commands.registerCommand("behave-vsc-gs.selectEnvPreset", async () => {
       const wkspUris = getUrisOfWkspFoldersWithFeatures();
       if (wkspUris.length === 0) {
         vscode.window.showWarningMessage("No workspace folders with features found.");
@@ -169,18 +169,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       }
 
       // Get current presets for the workspace
-      const wkspConfig = vscode.workspace.getConfiguration("behave-vsc", targetWkspUri);
+      const wkspConfig = vscode.workspace.getConfiguration("behave-vsc-gs", targetWkspUri);
       const presets = wkspConfig.get<{ [name: string]: { [key: string]: string } }>("envVarPresets") ?? {};
       const currentPreset = wkspConfig.get<string>("activeEnvVarPreset") ?? "";
 
       const presetNames = Object.keys(presets);
       if (presetNames.length === 0) {
         const openSettings = await vscode.window.showWarningMessage(
-          "No environment presets configured. Add presets in settings (behave-vsc.envVarPresets).",
+          "No environment presets configured. Add presets in settings (behave-vsc-gs.envVarPresets).",
           "Open Settings"
         );
         if (openSettings === "Open Settings") {
-          await vscode.commands.executeCommand("workbench.action.openSettings", "behave-vsc.envVarPresets");
+          await vscode.commands.executeCommand("workbench.action.openSettings", "behave-vsc-gs.envVarPresets");
         }
         return;
       }
@@ -231,7 +231,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
 
         if (!settingsUri && !isGlobalSettings) {
           // Preset not found at any specific scope — open settings UI as fallback
-          await vscode.commands.executeCommand("workbench.action.openSettings", "@id:behave-vsc.envVarPresets");
+          await vscode.commands.executeCommand("workbench.action.openSettings", "@id:behave-vsc-gs.envVarPresets");
           return;
         }
 
@@ -461,7 +461,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         // that behaviour because we want to distinguish between some properties being set vs being absent from 
         // settings.json (via inspect not get), so we don't include the uri in the affectsConfiguration() call
         // (separately, just note that the settings change could be a global window setting from *.code-workspace file, rather than from settings.json)
-        const affected = event && event.affectsConfiguration("behave-vsc");
+        const affected = event && event.affectsConfiguration("behave-vsc-gs");
         if (!affected && !forceFullRefresh && !testCfg)
           return;
 

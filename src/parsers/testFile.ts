@@ -28,7 +28,7 @@ export class TestFile {
             vscode.DiagnosticSeverity.Error
           );
           diagnostic.code = "duplicate-scenario";
-          diagnostic.source = "behave-vsc";
+          diagnostic.source = "behave-vsc-gs";
           newDiagnostics.push(diagnostic);
         }
       }

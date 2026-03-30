@@ -21,7 +21,7 @@ wheels = [
 ]
 
 [[package]]
-name = "behave-vsc-python"
+name = "behave-vsc-gs-python"
 version = "0.1.0"
 source = { virtual = "." }
 

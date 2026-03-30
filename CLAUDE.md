@@ -1,4 +1,4 @@
-# Claude Instructions for behave-vsc
+# Claude Instructions for behave-vsc-gs
 
 ## Shared Instructions
 

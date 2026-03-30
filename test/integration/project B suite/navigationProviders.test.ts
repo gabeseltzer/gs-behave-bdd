@@ -20,7 +20,7 @@ function getWorkspaceUri(wkspName: string): vscode.Uri {
 
 // Helper function to wait for extension to be ready
 async function ensureExtensionReady(): Promise<void> {
-  const extension = vscode.extensions.getExtension('gabeseltzer.behave-vsc');
+  const extension = vscode.extensions.getExtension('gabeseltzer.behave-vsc-gs');
   if (!extension) {
     throw new Error('Behave VSC extension not found');
   }
@@ -66,7 +66,7 @@ suite('Navigation Providers - Library Steps Integration', () => {
 
       // Call goto step definition handler
       try {
-        await vscode.commands.executeCommand('behave-vsc.gotoStep');
+        await vscode.commands.executeCommand('behave-vsc-gs.gotoStep');
 
         // Verify that a new editor was opened (the one should be the steps file)
         const activeEditor = vscode.window.activeTextEditor;

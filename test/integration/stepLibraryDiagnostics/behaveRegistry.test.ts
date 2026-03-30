@@ -20,7 +20,7 @@ function getWorkspaceUri(wkspName: string): vscode.Uri {
 
 // Helper function to wait for extension to be ready
 async function ensureExtensionReady(): Promise<void> {
-  const extension = vscode.extensions.getExtension('gabeseltzer.behave-vsc');
+  const extension = vscode.extensions.getExtension('gabeseltzer.behave-vsc-gs');
   if (!extension) {
     throw new Error('Behave VSC extension not found');
   }

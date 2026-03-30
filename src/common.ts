@@ -133,7 +133,7 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
 
     // check if projectPath and/or featuresPath specified in settings.json
     // NOTE: this will return package.json defaults (or failing that, type defaults) if no settings.json found
-    const wkspConfig = vscode.workspace.getConfiguration("behave-vsc", folder.uri);
+    const wkspConfig = vscode.workspace.getConfiguration("behave-vsc-gs", folder.uri);
     const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath");
     const featuresPath = getActualWorkspaceSetting<string>(wkspConfig, "featuresPath");
 
@@ -207,12 +207,12 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     `workspaceFoldersWithFeatures: ${workspaceFoldersWithFeatures.length}`);
 
   if (workspaceFoldersWithFeatures.length === 0) {
-    if (folders.length === 1 && folders[0].name === "behave-vsc")
+    if (folders.length === 1 && folders[0].name === "behave-vsc-gs")
       throw `Please disable the marketplace Behave VSC extension before beginning development!`;
     else
       throw `Extension was activated because a '*.feature' file was found in a workspace folder, but ` +
-      `none of the workspace folders contain either a root 'features' folder or a settings.json that specifies a valid 'behave-vsc.featuresPath'.\n` +
-      `Please add a valid 'behave-vsc.featuresPath' property to your workspace settings.json file and then restart vscode.`;
+      `none of the workspace folders contain either a root 'features' folder or a settings.json that specifies a valid 'behave-vsc-gs.featuresPath'.\n` +
+      `Please add a valid 'behave-vsc-gs.featuresPath' property to your workspace settings.json file and then restart vscode.`;
   }
 
   return workspaceFoldersWithFeatures;
@@ -229,7 +229,7 @@ export const getWorkspaceUriForFile = (fileorFolderUri: vscode.Uri | undefined):
   if (!workspaceFolder) {
     // Return undefined instead of throwing for files outside workspace (e.g. git worktree paths).
     // Callers already handle undefined return gracefully.
-    console.warn(`[behave-vsc] No workspace folder found for file ${fileorFolderUri.fsPath}, skipping workspace-specific features`);
+    console.warn(`[behave-vsc-gs] No workspace folder found for file ${fileorFolderUri.fsPath}, skipping workspace-specific features`);
     return undefined;
   }
   return workspaceFolder.uri;

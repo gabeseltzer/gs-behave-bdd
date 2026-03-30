@@ -366,7 +366,7 @@ async function getTestSupportFromExtension(): Promise<TestSupport> {
 	if (extInstances)
 		return extInstances;
 
-	const extension = vscode.extensions.getExtension("gabeseltzer.behave-vsc");
+	const extension = vscode.extensions.getExtension("gabeseltzer.behave-vsc-gs");
 	assert(extension);
 	assert(extension.isActive);
 

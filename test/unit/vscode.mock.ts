@@ -127,7 +127,7 @@ export const workspace = {
   getConfiguration: (section?: string) => ({
     get: (key: string) => {
       // Return default values for known configuration keys
-      if (section === 'behave-vsc' || !section) {
+      if (section === 'behave-vsc-gs' || !section) {
         if (key === 'multiRootRunWorkspacesInParallel') return false;
       }
       if (key === 'xRay') {
