@@ -112,9 +112,11 @@ export async function cleanExtensionTempDirectory(cancelToken: vscode.Cancellati
 
 // get the actual value in the file or return undefined, this is
 // for cases where we need to distinguish between an unset value and the default value
-export const getActualWorkspaceSetting = <T>(wkspConfig: vscode.WorkspaceConfiguration, name: string): T => {
+export const getActualWorkspaceSetting = <T>(wkspConfig: vscode.WorkspaceConfiguration, name: string, legacyConfig?: vscode.WorkspaceConfiguration): T => {
   const value = wkspConfig.inspect(name)?.workspaceFolderValue;
-  return (value as T);
+  if (value !== undefined) return value as T;
+  if (legacyConfig) return legacyConfig.inspect(name)?.workspaceFolderValue as T;
+  return undefined as unknown as T;
 }
 
 
@@ -134,8 +136,9 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     // check if projectPath and/or featuresPath specified in settings.json
     // NOTE: this will return package.json defaults (or failing that, type defaults) if no settings.json found
     const wkspConfig = vscode.workspace.getConfiguration("behave-vsc-gs", folder.uri);
-    const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath");
-    const featuresPath = getActualWorkspaceSetting<string>(wkspConfig, "featuresPath");
+    const legacyWkspConfig = vscode.workspace.getConfiguration("behave-vsc", folder.uri);
+    const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath", legacyWkspConfig);
+    const featuresPath = getActualWorkspaceSetting<string>(wkspConfig, "featuresPath", legacyWkspConfig);
 
     // Determine the project root (either custom projectPath or workspace root)
     let projectUri = folder.uri;
