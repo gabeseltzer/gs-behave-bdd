@@ -57,24 +57,30 @@ class ExtensionConfiguration implements Configuration {
       this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri, testConfig, this._windowSettings, this.logger);
     }
     else {
-      this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("behave-vsc-gs"));
+      const legacyWinConfig = vscode.workspace.getConfiguration("behave-vsc");
+      const legacyWkspConfig = vscode.workspace.getConfiguration("behave-vsc", wkspUri);
+      this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("behave-vsc-gs"), legacyWinConfig);
       this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
-        vscode.workspace.getConfiguration("behave-vsc-gs", wkspUri), this._windowSettings, this.logger);
+        vscode.workspace.getConfiguration("behave-vsc-gs", wkspUri), this._windowSettings, this.logger, legacyWkspConfig);
     }
   }
 
   public get globalSettings(): WindowSettings {
     return this._windowSettings
       ? this._windowSettings
-      : this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("behave-vsc-gs"));
+      : this._windowSettings = new WindowSettings(
+        vscode.workspace.getConfiguration("behave-vsc-gs"),
+        vscode.workspace.getConfiguration("behave-vsc")
+      );
   }
 
   public get workspaceSettings(): { [wkspUriPath: string]: WorkspaceSettings } {
     const winSettings = this.globalSettings;
     getUrisOfWkspFoldersWithFeatures().forEach(wkspUri => {
       if (!this._resourceSettings[wkspUri.path]) {
-        this._resourceSettings[wkspUri.path] =
-          new WorkspaceSettings(wkspUri, vscode.workspace.getConfiguration("behave-vsc-gs", wkspUri), winSettings, this.logger);
+        this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
+          vscode.workspace.getConfiguration("behave-vsc-gs", wkspUri), winSettings, this.logger,
+          vscode.workspace.getConfiguration("behave-vsc", wkspUri));
       }
     });
     return this._resourceSettings;

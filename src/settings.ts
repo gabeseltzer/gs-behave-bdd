@@ -8,20 +8,40 @@ import { config } from './configuration';
 import { Logger } from './logger';
 
 
+// Returns the new config value if explicitly set at any scope; otherwise falls back to the legacy
+// config value (to support users migrating from behave-vsc); finally falls back to the new default.
+function getWithLegacyFallback<T>(
+  newConfig: vscode.WorkspaceConfiguration,
+  legacyConfig: vscode.WorkspaceConfiguration,
+  key: string
+): T | undefined {
+  const insp = newConfig.inspect<T>(key);
+  const isExplicit = insp !== undefined && (
+    insp.globalValue !== undefined ||
+    insp.workspaceValue !== undefined ||
+    insp.workspaceFolderValue !== undefined
+  );
+  if (isExplicit) return newConfig.get<T>(key);
+  const legacyValue = legacyConfig.get<T>(key);
+  return legacyValue !== undefined ? legacyValue : newConfig.get<T>(key);
+}
+
 export class WindowSettings {
-  // class for package.json "window" settings 
-  // these apply to the whole vscode instance, but may be set in settings.json or *.code-workspace 
+  // class for package.json "window" settings
+  // these apply to the whole vscode instance, but may be set in settings.json or *.code-workspace
   // (in a multi-root workspace they will be read from *.code-workspace, and greyed-out and disabled in settings.json)
   public readonly multiRootRunWorkspacesInParallel: boolean;
   public readonly xRay: boolean;
 
-  constructor(winConfig: vscode.WorkspaceConfiguration) {
+  constructor(winConfig: vscode.WorkspaceConfiguration, legacyConfig?: vscode.WorkspaceConfiguration) {
+    const get = <T>(key: string): T | undefined =>
+      legacyConfig ? getWithLegacyFallback<T>(winConfig, legacyConfig, key) : winConfig.get<T>(key);
 
     // note: undefined should never happen (or packages.json is wrong) as get will return a default value for packages.json settings
-    const multiRootRunWorkspacesInParallelCfg: boolean | undefined = winConfig.get("multiRootRunWorkspacesInParallel");
+    const multiRootRunWorkspacesInParallelCfg: boolean | undefined = get("multiRootRunWorkspacesInParallel");
     if (multiRootRunWorkspacesInParallelCfg === undefined)
       throw "multiRootRunWorkspacesInParallel is undefined";
-    const xRayCfg: boolean | undefined = winConfig.get("xRay");
+    const xRayCfg: boolean | undefined = get("xRay");
     if (xRayCfg === undefined)
       throw "xRay is undefined";
 
@@ -56,7 +76,9 @@ export class WorkspaceSettings {
   private readonly _fatalErrors: string[] = [];
 
 
-  constructor(wkspUri: vscode.Uri, wkspConfig: vscode.WorkspaceConfiguration, winSettings: WindowSettings, logger: Logger) {
+  constructor(wkspUri: vscode.Uri, wkspConfig: vscode.WorkspaceConfiguration, winSettings: WindowSettings, logger: Logger, legacyConfig?: vscode.WorkspaceConfiguration) {
+    const get = <T>(key: string): T | undefined =>
+      legacyConfig ? getWithLegacyFallback<T>(wkspConfig, legacyConfig, key) : wkspConfig.get<T>(key);
 
     this.uri = wkspUri;
     this.id = uriId(wkspUri);
@@ -64,28 +86,28 @@ export class WorkspaceSettings {
     this.name = wsFolder.name;
 
     // note: undefined should never happen (or packages.json is wrong) as get will return a default value for packages.json settings
-    const envVarOverridesCfg: { [name: string]: string } | undefined = wkspConfig.get("envVarOverrides");
+    const envVarOverridesCfg: { [name: string]: string } | undefined = get("envVarOverrides");
     if (envVarOverridesCfg === undefined)
       throw "envVarOverrides is undefined";
-    const envVarPresetsCfg: { [presetName: string]: { [name: string]: string } } | undefined = wkspConfig.get("envVarPresets");
+    const envVarPresetsCfg: { [presetName: string]: { [name: string]: string } } | undefined = get("envVarPresets");
     if (envVarPresetsCfg === undefined)
       throw "envVarPresets is undefined";
-    const activeEnvVarPresetCfg: string | undefined = wkspConfig.get("activeEnvVarPreset");
+    const activeEnvVarPresetCfg: string | undefined = get("activeEnvVarPreset");
     if (activeEnvVarPresetCfg === undefined)
       throw "activeEnvVarPreset is undefined";
-    const projectPathCfg: string | undefined = wkspConfig.get("projectPath");
+    const projectPathCfg: string | undefined = get("projectPath");
     if (projectPathCfg === undefined)
       throw "projectPath is undefined";
-    const featuresPathCfg: string | undefined = wkspConfig.get("featuresPath");
+    const featuresPathCfg: string | undefined = get("featuresPath");
     if (featuresPathCfg === undefined)
       throw "featuresPath is undefined";
-    const justMyCodeCfg: boolean | undefined = wkspConfig.get("justMyCode");
+    const justMyCodeCfg: boolean | undefined = get("justMyCode");
     if (justMyCodeCfg === undefined)
       throw "justMyCode is undefined";
-    const runParallelCfg: boolean | undefined = wkspConfig.get("runParallel");
+    const runParallelCfg: boolean | undefined = get("runParallel");
     if (runParallelCfg === undefined)
       throw "runParallel is undefined";
-    const importStrategyCfg: string | undefined = wkspConfig.get("importStrategy");
+    const importStrategyCfg: string | undefined = get("importStrategy");
     if (importStrategyCfg === undefined)
       throw "importStrategy is undefined";
     if (importStrategyCfg !== 'useBundled' && importStrategyCfg !== 'fromEnvironment')
