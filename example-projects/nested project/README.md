@@ -20,5 +20,5 @@ nested project/          <- workspace root
 
 See `.vscode/settings.json` for the configuration that makes this work:
 
-- `behave-vsc.projectPath`: "backend"
-- `behave-vsc.featuresPath`: "features"
+- `behave-vsc-gs.projectPath`: "backend"
+- `behave-vsc-gs.featuresPath`: "features"

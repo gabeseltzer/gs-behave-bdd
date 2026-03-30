@@ -31,10 +31,10 @@ class ExtensionConfiguration implements Configuration {
   private constructor() {
     ExtensionConfiguration._configuration = this;
     this.logger = new Logger();
-    this.diagnostics = vscode.languages.createDiagnosticCollection("behave-vsc");
-    this.extensionTempFilesUri = vscode.Uri.joinPath(vscode.Uri.file(os.tmpdir()), "behave-vsc");
+    this.diagnostics = vscode.languages.createDiagnosticCollection("behave-vsc-gs");
+    this.extensionTempFilesUri = vscode.Uri.joinPath(vscode.Uri.file(os.tmpdir()), "behave-vsc-gs");
     this.exampleProject = (vscode.workspace.workspaceFolders?.find(f =>
-      f.uri.path.includes("/behave-vsc/example-projects/")) !== undefined);
+      f.uri.path.includes("/behave-vsc-gs/example-projects/")) !== undefined);
     diagLog("Configuration singleton constructed (this should only fire once)");
   }
 
@@ -57,16 +57,16 @@ class ExtensionConfiguration implements Configuration {
       this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri, testConfig, this._windowSettings, this.logger);
     }
     else {
-      this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("behave-vsc"));
+      this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("behave-vsc-gs"));
       this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
-        vscode.workspace.getConfiguration("behave-vsc", wkspUri), this._windowSettings, this.logger);
+        vscode.workspace.getConfiguration("behave-vsc-gs", wkspUri), this._windowSettings, this.logger);
     }
   }
 
   public get globalSettings(): WindowSettings {
     return this._windowSettings
       ? this._windowSettings
-      : this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("behave-vsc"));
+      : this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("behave-vsc-gs"));
   }
 
   public get workspaceSettings(): { [wkspUriPath: string]: WorkspaceSettings } {
@@ -74,7 +74,7 @@ class ExtensionConfiguration implements Configuration {
     getUrisOfWkspFoldersWithFeatures().forEach(wkspUri => {
       if (!this._resourceSettings[wkspUri.path]) {
         this._resourceSettings[wkspUri.path] =
-          new WorkspaceSettings(wkspUri, vscode.workspace.getConfiguration("behave-vsc", wkspUri), winSettings, this.logger);
+          new WorkspaceSettings(wkspUri, vscode.workspace.getConfiguration("behave-vsc-gs", wkspUri), winSettings, this.logger);
       }
     });
     return this._resourceSettings;

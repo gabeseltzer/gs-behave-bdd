@@ -1,5 +1,5 @@
 {
-    "behave-vsc.projectPath": "backend",
-    "behave-vsc.featuresPath": "features",
-    "behave-vsc.xRay": true
+    "behave-vsc-gs.projectPath": "backend",
+    "behave-vsc-gs.featuresPath": "features",
+    "behave-vsc-gs.xRay": true
 }

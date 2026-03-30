@@ -55,7 +55,7 @@ suite('behaveDebug', () => {
     // Mock config.extensionTempFilesUri via global
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (global as any).config = {
-      extensionTempFilesUri: vscode.Uri.file(path.join('/tmp', 'behave-vsc')),
+      extensionTempFilesUri: vscode.Uri.file(path.join('/tmp', 'behave-vsc-gs')),
       integrationTestRun: false
     };
 

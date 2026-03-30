@@ -19,7 +19,7 @@ export async function debugBehaveInstance(wr: WkspRun, args: string[], friendlyC
   const bundledPath = getBundledBehavePath();
 
   const debugLaunchConfig = {
-    name: `behave-vsc-debug`,
+    name: `behave-vsc-gs-debug`,
     console: "internalConsole",
     type: "python",
     cwd: wr.wkspSettings.projectUri.fsPath,

@@ -36,9 +36,9 @@
 4. Close visual studio code
 5. Open a command line window, go to your source folder, and clone the extension source code, example:
     - `cd <mysourcedir>`
-    - `git clone https://github.com/jimasp/behave-vsc.git`
+    - `git clone https://github.com/gabeseltzer/behave-vsc-gs.git`
 6. Change to the cloned directory, and install required node packages:
-    - `cd <mysourcedir>/behave-vsc`
+    - `cd <mysourcedir>/behave-vsc-gs`
     - `npm install`
 7. Install required extensions for developing the extension:  
     - `code --install-extension ms-python.python` (if not already installed)
@@ -51,7 +51,7 @@
     - Note: some unit tests spawn a real Python process using the bundled behave to verify step discovery. These tests require `python` to be on your PATH (see step 1 above).
 9. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and set up the Python dev tooling virtual environment (for mypy and ruff):
     - Install uv: see [uv installation docs](https://docs.astral.sh/uv/getting-started/installation/)
-    - Change back to the cloned directory: `cd <mysourcedir>/behave-vsc`
+    - Change back to the cloned directory: `cd <mysourcedir>/behave-vsc-gs`
     - `uv sync`
 10. Check that all tests pass BEFORE opening visual studio code. This will confirm your environment is set up correctly before you start development.
     - `npm run test`
@@ -71,7 +71,7 @@
 
 1. Set up your development environment as above.
 2. Make sure you have disabled the marketplace version of the extension.
-3. Open vscode, and open the behave-vsc source folder (close any other folders you have open).
+3. Open vscode, and open the behave-vsc-gs source folder (close any other folders you have open).
 4. If you are using windows, and vscode is set to use powershell for terminal scripts, then you may need to enable powershell scripts to run, e.g. `Set-ExecutionPolicy RemoteSigned`. (You will know if this is an issue because vscode will pop up a powershell error message when you try to debug the extension when it tries to run `npm.ps1`.)
 5. (`Ctrl+Shift+B`) to build and kick off a watch (this is optional as it will happen anyway, but you should do it if it's your first-ever debug).
 6. (Optional) set breakpoints in the extension code, e.g. start with a breakpoint in `src/extension.ts activate` function.
@@ -88,7 +88,7 @@
 - Remember to disable the extension.
 - Open `.vscode/launch.json` in the extension repo project and change the `args` setting that contains `"${workspaceFolder}/../my-project"` to repoint it at your project path.
 - Then it's the same steps as above, just click "Debug - MY workspace".
-- You probably want to enable `behave-vsc.xRay` in your settings.json so you get diagnostic logs in debug console in the source environment.
+- You probably want to enable `behave-vsc-gs.xRay` in your settings.json so you get diagnostic logs in debug console in the source environment.
 - See the [Troubleshooting](#troubleshooting) section if you are having trouble debugging
 
 ---
@@ -161,7 +161,7 @@ feature file formatting is provided by:
 
 ### Diagnostics
 
-- Diagnostic logs are controlled via the extension setting `behave-vsc.xRay` (this is enabled by default in the example projects and for most integration tests).
+- Diagnostic logs are controlled via the extension setting `behave-vsc-gs.xRay` (this is enabled by default in the example projects and for most integration tests).
 - Diagnostics logs are written automatically if you call `config.logger.logInfo` etc., but if you want to write something *only* to diagnostic logs, then use `diagLog()`. These logs can be viewed in the debug console if debugging the extension itself, or otherwise via the vscode command `Developer: Toggle developer tools`.
 - Diagnostics inside integration tests should simply use `console.log`.
 
@@ -169,7 +169,7 @@ feature file formatting is provided by:
 
 - Here we are talking about extension exceptions, not behave execution errors (which are just logged in the output window).
 - These are general guidelines. If you are adding a `throw` (or `showError`), then ALWAYS test that error handling works as expected by deliberately throwing the error, i.e. check it gets gets logged correctly, only gets shown once, creates an error dialog box to alert the user and has the full expected stack if `xRay` is enabled. Think about the user experience.
-- Note that stack traces will only appear if `behave-vsc.xRay` is enabled.
+- Note that stack traces will only appear if `behave-vsc-gs.xRay` is enabled.
 - `showError` will show the error in a dialog box to alert the user.
 - The most common error handling stack is: `throw "an error message"` -> `throw new WkspError` -> `config.showError`.
 - *Unless you are in a top-level function, i.e. an entry point function, handler or unawaited async function, then errors should be thrown (i.e. do not call showError except in these cases)*. This is so that (a) all parent catches know about the error and can act on it, for example to cancel a test run if required, and (b) the error only gets shown once (at the top of the stack).
