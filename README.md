@@ -1,9 +1,31 @@
 # Behave VSC
 
+Forked from [jimasp's](https://github.com/jimasp) excellent [behave-vsc](https://github.com/jimasp/behave-vsc) extension, this one adds features!
+
 Debug and run Python [behave](https://behave.readthedocs.io/) BDD tests using the native Visual Studio Code Test API.  
 Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, autocompletion, and a few basic snippets.
 
 ## Features
+
+### New in this fork
+
+1. Added support for lots of VSCode language features:
+  - [Ctrl + Click go to definition](https://code.visualstudio.com/docs/editing/editingevolved#_go-to-definition) in feature files
+  - [Find All References](https://code.visualstudio.com/api/language-extensions/programmatic-language-features#find-all-references-to-a-symbol) for steps in feature files
+  - [Outline View](https://code.visualstudio.com/docs/getstarted/userinterface#_outline-view) in feature files
+  - [Sticky Scrolling](https://code.visualstudio.com/docs/getstarted/userinterface#_sticky-scroll) for steps and fixtures in feature files
+  - [Hover Definitions](https://code.visualstudio.com/api/language-extensions/programmatic-language-features#show-hovers) for steps and fixtures in feature files
+  - [Selection Ranges](https://code.visualstudio.com/api/references/vscode-api#SelectionRangeProvider) in feature files
+2. Added two-way navigation for **fixtures** in feature files and python definitions
+3. Slightly better formatting for VSCode Test Results pane (when you run tests with the little "play" buttons or via the Testing tab).
+4. Use prettier diagnostics for missing step definitions, especially while still parsing the workspace
+5. Added the ability to save presets for environment variables to use when running tests.
+6. Package Behave in with the extension (with the option to use a pre-installed version of behave)
+7. Support for tests that aren't in the root workspace directory (ie for monorepos).
+8. Support for [step libraries](https://github.com/behave/behave/blob/main/features/step.use_step_library.feature).
+9. Fix issues with step parsing that was inconsistent with Behave (case sensitivity and colons).
+
+### Old from the original extension
 
 - Run or Debug behave tests, either from the test side bar or from inside a feature file.
 - Select to run/debug all tests, a nested folder, or just a single feature or scenario.
@@ -33,7 +55,6 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
 
 ### Required project directory structure
 
-- A single `features` folder (lowercase by default), which either contains a `steps` folder or has a sibling `steps` folder at the same level. You don't have to call it "features" - read on, but behave requires you have a folder called "steps". (Multiple features folders are allowed in a multi-root workspace, but only one per project.)
 - A [behave-conformant](https://behave.readthedocs.io/en/stable/gherkin.html) directory structure. Note however that the features and steps folders must be somewhere *inside* the project folder (not above it).
 
 Example 1:
@@ -196,8 +217,6 @@ paths=my_tests/behave_features
 - There is currently a [bug](https://github.com/microsoft/vscode-extension-samples/issues/728) in vscode itself where a test will no longer play from within the editor window when you add spaces or autoformat a feature file. A workaround is to close the feature file and reopen it.
 - Test durations are taken from behave junit xml files, not an actual execution time.
 - vscode always adds up test durations. For `runParallel` runs this means the parent test node reports a longer time than the test run actually took.
-- Step navigation limitations ("Go to Step Definition" and "Find All Step References"):
-  - Step matching does not always match as per behave. It uses a simple regex match via replacing `{foo}` -> `{.*}`. As such, it does *not* consider typed parameters like `{foo:d}`, or `cfparse` cardinal parameters like `{foo:?}` or `re` regex matching like `(?P<foo>foo)`.
 
 ---
 
