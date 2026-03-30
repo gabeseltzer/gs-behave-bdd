@@ -212,8 +212,8 @@
 			}
 		]
 	},
-	"name": "behave-vsc",
-	"displayName": "Behave VSC",
+	"name": "behave-vsc-gs",
+	"displayName": "Behave VSC GS",
 	"description": "Debug, Run and Navigate Python behave tests. Forked from jimasp",
 	"version": "0.8.3",
 	"icon": "images/behave-vsc.png",
