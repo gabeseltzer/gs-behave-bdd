@@ -123,6 +123,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.commands.registerTextEditorCommand(`behave-vsc-gs.findStepReferences`, findStepReferencesHandler),
       vscode.commands.registerCommand(`behave-vsc-gs.stepReferences.prev`, prevStepReferenceHandler),
       vscode.commands.registerCommand(`behave-vsc-gs.stepReferences.next`, nextStepReferenceHandler),
+      // Legacy command aliases for users migrating from behave-vsc — preserves custom keybindings
+      vscode.commands.registerTextEditorCommand(`behave-vsc.gotoStep`, gotoStepHandler),
+      vscode.commands.registerTextEditorCommand(`behave-vsc.findStepReferences`, findStepReferencesHandler),
+      vscode.commands.registerCommand(`behave-vsc.stepReferences.prev`, prevStepReferenceHandler),
+      vscode.commands.registerCommand(`behave-vsc.stepReferences.next`, nextStepReferenceHandler),
       vscode.languages.registerCompletionItemProvider("gherkin", autoCompleteProvider, ...["  "]),
       vscode.languages.registerDocumentRangeFormattingEditProvider("gherkin", formatFeatureProvider),
       vscode.languages.registerDocumentSemanticTokensProvider({ language: "gherkin" }, new SemHighlightProvider(), semLegend),
@@ -254,8 +259,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
 
           const text = doc.getText();
 
-          // Find envVarPresets section — check both flat-key and nested-key JSON formats
-          let envVarPresetsMatch = text.indexOf('"behave-vsc.envVarPresets"');
+          // Find envVarPresets section — check new key, old key (backwards compat), and nested-key JSON formats
+          let envVarPresetsMatch = text.indexOf('"behave-vsc-gs.envVarPresets"');
+          if (envVarPresetsMatch === -1)
+            envVarPresetsMatch = text.indexOf('"behave-vsc.envVarPresets"');
           if (envVarPresetsMatch === -1)
             envVarPresetsMatch = text.indexOf('"envVarPresets"');
           const searchString = `"${presetName}":`;
@@ -272,7 +279,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           // If file doesn't exist or can't be read, open the settings UI instead
           await vscode.commands.executeCommand(
             "workbench.action.openSettings",
-            `@id:behave-vsc.envVarPresets`
+            `@id:behave-vsc-gs.envVarPresets`
           );
         }
       });
@@ -290,7 +297,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       quickPick.show();
     });
 
-    context.subscriptions.push(selectEnvPresetCommand);
+    // Legacy alias — preserves custom keybindings from behave-vsc
+    const legacySelectEnvPresetCommand = vscode.commands.registerCommand("behave-vsc.selectEnvPreset",
+      () => vscode.commands.executeCommand("behave-vsc-gs.selectEnvPreset"));
+
+    context.subscriptions.push(selectEnvPresetCommand, legacySelectEnvPresetCommand);
 
     ctrl.createRunProfile("Run Tests", vscode.TestRunProfileKind.Run,
       async (request: vscode.TestRunRequest) => {
