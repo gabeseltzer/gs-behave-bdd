@@ -1,3 +1,3 @@
 # Changelog
 
-See [github releases](https://github.com/jimasp/behave-vsc/releases)
+See [github releases](https://github.com/gabeseltzer/behave-vsc-gs/releases)

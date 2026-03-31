@@ -3,16 +3,22 @@ import { WorkspaceSettings } from "../settings";
 import { uriId, sepr, basename, getLines, getWorkspaceUriForFile } from '../common';
 import { diagLog } from '../logger';
 import { config } from '../configuration';
+import { featureRe, featureMultiLineRe, scenarioRe, scenarioOutlineRe, featureFileStepRe, tagRe, textBlockDelimiterRe, tableRowRe } from './gherkinPatterns';
 
-
-const featureRe = /^\s*Feature:(.*)$/i;
-const featureMultiLineRe = /^\s*Feature:(.*)$/im;
 const commentedFeatureMultilineReStr = /^\s*#.*Feature:(.*)$/im;
-const scenarioRe = /^\s*(Scenario|Scenario Outline):(.*)$/i;
-const scenarioOutlineRe = /^\s*Scenario Outline:(.*)$/i;
-export const featureFileStepRe = /^\s*(Given |When |Then |And |But )(.*)/i;
 
 const featureFileSteps = new Map<string, FeatureFileStep>();
+const featureTags = new Map<string, FeatureTag>();
+
+export class FeatureTag {
+  constructor(
+    public readonly key: string,
+    public readonly uri: vscode.Uri,
+    public readonly fileName: string,
+    public readonly range: vscode.Range,
+    public readonly tag: string,
+  ) { }
+}
 
 export class FeatureFileStep {
   constructor(
@@ -31,10 +37,34 @@ export const getFeatureFileSteps = (featuresUri: vscode.Uri) => {
   return [...featureFileSteps].filter(([k,]) => k.startsWith(featuresUriMatchString));
 }
 
+export const getFeatureTags = (featuresUri: vscode.Uri) => {
+  const featuresUriMatchString = uriId(featuresUri);
+  return [...featureTags.values()].filter(t => t.key.startsWith(featuresUriMatchString));
+}
+
+export const getFeatureTagByPosition = (uri: vscode.Uri, position: vscode.Position): FeatureTag | undefined => {
+  const key = `${uriId(uri)}${sepr}${position.line}`;
+  const tag = featureTags.get(key);
+
+  // Check if the position is within the tag's range
+  if (tag && tag.range.contains(position)) {
+    return tag;
+  }
+
+  return undefined;
+}
+
 export const deleteFeatureFileSteps = (featuresUri: vscode.Uri) => {
   const wkspFeatureFileSteps = getFeatureFileSteps(featuresUri);
   for (const [key,] of wkspFeatureFileSteps) {
     featureFileSteps.delete(key);
+  }
+
+  const featuresUriMatchString = uriId(featuresUri);
+  for (const [key,] of featureTags) {
+    if (key.startsWith(featuresUriMatchString)) {
+      featureTags.delete(key);
+    }
   }
 }
 
@@ -50,8 +80,11 @@ export const getFeatureNameFromContent = async (content: string, uri: vscode.Uri
   const featureName = featureText[1].trim();
   if (featureName === '') {
     if (firstRun) {
-      config.logger.showWarn(`No feature name found in file: ${uri.fsPath}. This feature will be ignored until it has a name.`,
-        getWorkspaceUriForFile(uri));
+      const wkspUri = getWorkspaceUriForFile(uri);
+      if (wkspUri) {
+        config.logger.showWarn(`No feature name found in file: ${uri.fsPath}. This feature will be ignored until it has a name.`,
+          wkspUri);
+      }
     }
     return null;
   }
@@ -70,6 +103,7 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
   let fileScenarios = 0;
   let fileSteps = 0;
   let lastStepType = "given";
+  let insideStepTextBlock = false;
 
   const fileUriMatchString = uriId(uri);
 
@@ -77,6 +111,12 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
   for (const [key, featureFileStep] of featureFileSteps) {
     if (uriId(featureFileStep.uri) === fileUriMatchString)
       featureFileSteps.delete(key);
+  }
+
+  // clear all existing tags for this feature file
+  for (const [key, featureTag] of featureTags) {
+    if (uriId(featureTag.uri) === fileUriMatchString)
+      featureTags.delete(key);
   }
 
 
@@ -88,6 +128,39 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
 
     const line = lines[lineNo].trim();
     if (line === '' || line.startsWith("#")) {
+      continue;
+    }
+
+    // Check for text block delimiters (""" or ''')
+    const textBlockMatch = textBlockDelimiterRe.exec(line);
+    if (textBlockMatch) {
+      insideStepTextBlock = !insideStepTextBlock;
+      continue;
+    }
+
+    // Skip lines inside text blocks
+    if (insideStepTextBlock) {
+      continue;
+    }
+
+    // Skip table rows (lines starting with |)
+    const tableRowMatch = tableRowRe.exec(line);
+    if (tableRowMatch) {
+      continue;
+    }
+
+    // Check for tags (e.g., @fixture.disable_sensors)
+    const tagMatch = tagRe.exec(line);
+    if (tagMatch) {
+      const tag = tagMatch[1];
+      const tagStartCol = indentSize + line.indexOf('@');
+      const tagEndCol = tagStartCol + 1 + tag.length; // +1 for the @ symbol
+      const range = new vscode.Range(
+        new vscode.Position(lineNo, tagStartCol),
+        new vscode.Position(lineNo, tagEndCol)
+      );
+      const key = `${uriId(uri)}${sepr}${lineNo}`;
+      featureTags.set(key, new FeatureTag(key, uri, fileName, range, tag));
       continue;
     }
 
@@ -113,7 +186,7 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
     if (scenario) {
       const scenarioName = scenario[2].trim();
       const isOutline = scenarioOutlineRe.exec(line) !== null;
-      const range = new vscode.Range(new vscode.Position(lineNo, 0), new vscode.Position(lineNo, scenario[0].length));
+      const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + scenario[0].length));
       onScenarioLine(range, scenarioName, isOutline);
       fileScenarios++;
       continue;

@@ -2,6 +2,7 @@
 .vscode-test/**
 .github/**
 out/**
+test/**
 node_modules/**
 **/__pycache__/**
 src/**
@@ -18,3 +19,15 @@ example-projects/**
 images/behave-vsc.gif
 **/.venv/**
 **/venv/**
+.specstory/**
+**/.mypy_cache/**
+**/.ruff_cache/**
+uv.lock
+pyproject.toml
+AI_INSTRUCTIONS.md
+CLAUDE.md
+CONTRIBUTING.md
+.claude/**
+plans/**
+.pylintrc
+.tool-versions

@@ -8,6 +8,7 @@ export interface Configuration {
   integrationTestRun: boolean;
   readonly extensionTempFilesUri: vscode.Uri;
   readonly logger: Logger;
+  readonly diagnostics: vscode.DiagnosticCollection;
   readonly workspaceSettings: { [wkspUriPath: string]: WorkspaceSettings };
   readonly globalSettings: WindowSettings;
   reloadSettings(wkspUri: vscode.Uri, testConfig?: vscode.WorkspaceConfiguration): void;
@@ -22,6 +23,7 @@ class ExtensionConfiguration implements Configuration {
   public exampleProject = false;
   public readonly extensionTempFilesUri;
   public readonly logger: Logger;
+  public readonly diagnostics: vscode.DiagnosticCollection;
   private static _configuration?: ExtensionConfiguration;
   private _windowSettings: WindowSettings | undefined = undefined;
   private _resourceSettings: { [wkspUriPath: string]: WorkspaceSettings } = {};
@@ -29,14 +31,16 @@ class ExtensionConfiguration implements Configuration {
   private constructor() {
     ExtensionConfiguration._configuration = this;
     this.logger = new Logger();
-    this.extensionTempFilesUri = vscode.Uri.joinPath(vscode.Uri.file(os.tmpdir()), "behave-vsc");
+    this.diagnostics = vscode.languages.createDiagnosticCollection("behave-vsc-gs");
+    this.extensionTempFilesUri = vscode.Uri.joinPath(vscode.Uri.file(os.tmpdir()), "behave-vsc-gs");
     this.exampleProject = (vscode.workspace.workspaceFolders?.find(f =>
-      f.uri.path.includes("/behave-vsc/example-projects/")) !== undefined);
+      f.uri.path.includes("/behave-vsc-gs/example-projects/")) !== undefined);
     diagLog("Configuration singleton constructed (this should only fire once)");
   }
 
   public dispose() {
     this.logger.dispose();
+    this.diagnostics.dispose();
   }
 
   static get configuration() {
@@ -53,24 +57,30 @@ class ExtensionConfiguration implements Configuration {
       this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri, testConfig, this._windowSettings, this.logger);
     }
     else {
-      this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("behave-vsc"));
+      const legacyWinConfig = vscode.workspace.getConfiguration("behave-vsc");
+      const legacyWkspConfig = vscode.workspace.getConfiguration("behave-vsc", wkspUri);
+      this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("behave-vsc-gs"), legacyWinConfig);
       this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
-        vscode.workspace.getConfiguration("behave-vsc", wkspUri), this._windowSettings, this.logger);
+        vscode.workspace.getConfiguration("behave-vsc-gs", wkspUri), this._windowSettings, this.logger, legacyWkspConfig);
     }
   }
 
   public get globalSettings(): WindowSettings {
     return this._windowSettings
       ? this._windowSettings
-      : this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("behave-vsc"));
+      : this._windowSettings = new WindowSettings(
+        vscode.workspace.getConfiguration("behave-vsc-gs"),
+        vscode.workspace.getConfiguration("behave-vsc")
+      );
   }
 
   public get workspaceSettings(): { [wkspUriPath: string]: WorkspaceSettings } {
     const winSettings = this.globalSettings;
     getUrisOfWkspFoldersWithFeatures().forEach(wkspUri => {
       if (!this._resourceSettings[wkspUri.path]) {
-        this._resourceSettings[wkspUri.path] =
-          new WorkspaceSettings(wkspUri, vscode.workspace.getConfiguration("behave-vsc", wkspUri), winSettings, this.logger);
+        this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
+          vscode.workspace.getConfiguration("behave-vsc-gs", wkspUri), winSettings, this.logger,
+          vscode.workspace.getConfiguration("behave-vsc", wkspUri));
       }
     });
     return this._resourceSettings;

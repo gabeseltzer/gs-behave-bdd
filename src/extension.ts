@@ -4,20 +4,28 @@ import { BehaveTestData, Scenario, TestData, TestFile } from './parsers/testFile
 import {
   getContentFromFilesystem,
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, isFeatureFile,
-  isStepsFile, logExtensionVersion, cleanExtensionTempDirectory, urisMatch
+  logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile
 } from './common';
 import { StepFileStep } from './parsers/stepsParser';
 import { gotoStepHandler } from './handlers/gotoStepHandler';
 import { findStepReferencesHandler, nextStepReferenceHandler as nextStepReferenceHandler, prevStepReferenceHandler, treeView } from './handlers/findStepReferencesHandler';
 import { FileParser } from './parsers/fileParser';
 import { testRunHandler } from './runners/testRunHandler';
-import { TestWorkspaceConfigWithWkspUri } from './_integrationTests/suite-shared/testWorkspaceConfig';
+import { TestWorkspaceConfigWithWkspUri } from './testWorkspaceConfig';
 import { diagLog } from './logger';
 import { performance } from 'perf_hooks';
 import { StepMapping, getStepFileStepForFeatureFileStep, getStepMappingsForStepsFileFunction } from './parsers/stepMappings';
 import { autoCompleteProvider } from './handlers/autoCompleteProvider';
 import { formatFeatureProvider } from './handlers/formatFeatureProvider';
 import { SemHighlightProvider, semLegend } from './handlers/semHighlightProvider';
+import { DocumentSymbolProvider } from './handlers/documentSymbolProvider';
+import { DefinitionProvider } from './handlers/definitionProvider';
+import { SelectionRangeProvider } from './handlers/selectionRangeProvider';
+import { HoverProvider } from './handlers/hoverProvider';
+import { FixtureDefinitionProvider, FixtureHoverProvider, FixtureReferenceProvider } from './handlers/fixtureProviders';
+import { StepReferenceProvider } from './handlers/stepReferenceProvider';
+import { validateFixtureTags } from './handlers/fixtureDiagnostics';
+import { validateStepDefinitions } from './handlers/stepDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
 import { JunitWatcher } from './watchers/junitWatcher';
 
@@ -26,6 +34,7 @@ const testData = new WeakMap<vscode.TestItem, BehaveTestData>();
 const wkspWatchers = new Map<vscode.Uri, vscode.FileSystemWatcher[]>();
 export const parser = new FileParser();
 export interface QueueItem { test: vscode.TestItem; scenario: Scenario; }
+let initialParsingComplete = false;
 
 
 export type TestSupport = {
@@ -49,12 +58,14 @@ export type TestSupport = {
 export async function activate(context: vscode.ExtensionContext): Promise<TestSupport | undefined> {
 
   try {
+    // Reset flag on each activation (important for integration tests)
+    initialParsingComplete = false;
 
     const start = performance.now();
     diagLog("activate called, node pid:" + process.pid);
     config.logger.syncChannelsToWorkspaceFolders();
     logExtensionVersion(context);
-    const ctrl = vscode.tests.createTestController(`behave-vsc.TestController`, 'Feature Tests');
+    const ctrl = vscode.tests.createTestController(`behave-vsc-gs.TestController`, 'Feature Tests');
     parser.clearTestItemsAndParseFilesForAllWorkspaces(testData, ctrl, "activate", true);
 
     const cleanExtensionTempDirectoryCancelSource = new vscode.CancellationTokenSource();
@@ -69,6 +80,31 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     const junitWatcher = new JunitWatcher();
     junitWatcher.startWatchingJunitFolder();
 
+    const statusItem = vscode.languages.createLanguageStatusItem('behave.status', { language: 'gherkin' });
+    statusItem.name = "Behave VSC Status";
+    statusItem.text = "Behave: Parsing...";
+    statusItem.busy = true;
+
+    parser.onStatusChange((busy: boolean) => {
+      statusItem.busy = busy;
+      statusItem.text = busy ? "Behave: Parsing..." : "Behave: Ready";
+    });
+
+    // After a Python step/env file debounce fires and step mappings are rebuilt, re-validate
+    // diagnostics for all open feature files in the affected workspace. This handles the case
+    // where files change via the disk (e.g. git branch switch) without going through
+    // onDidChangeTextDocument, as well as the case where validateStepDefinitions was called
+    // eagerly (before the debounce fired) and produced stale results.
+    parser.onStepMappingsRebuilt = (featuresUri: vscode.Uri) => {
+      for (const document of vscode.workspace.textDocuments) {
+        if (!isFeatureFile(document.uri)) continue;
+        const wkspSettings = getWorkspaceSettingsForFile(document.uri);
+        if (!wkspSettings || !urisMatch(wkspSettings.featuresUri, featuresUri)) continue;
+        validateFixtureTags(document);
+        validateStepDefinitions(document);
+      }
+    };
+
     // any function contained in a context.subscriptions.push() will execute immediately, 
     // as well as registering the returned disposable object for a dispose() call on extension deactivation
     // i.e. startWatchingWorkspace will execute immediately, as will registerCommand, but gotoStepHandler will not (as it is a parameter 
@@ -77,29 +113,204 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     context.subscriptions.push(
       ctrl,
       treeView,
+      parser,
       config,
+      config.diagnostics,
       cleanExtensionTempDirectoryCancelSource,
       junitWatcher,
+      statusItem,
+      vscode.commands.registerTextEditorCommand(`behave-vsc-gs.gotoStep`, gotoStepHandler),
+      vscode.commands.registerTextEditorCommand(`behave-vsc-gs.findStepReferences`, findStepReferencesHandler),
+      vscode.commands.registerCommand(`behave-vsc-gs.stepReferences.prev`, prevStepReferenceHandler),
+      vscode.commands.registerCommand(`behave-vsc-gs.stepReferences.next`, nextStepReferenceHandler),
+      // Legacy command aliases for users migrating from behave-vsc — preserves custom keybindings
       vscode.commands.registerTextEditorCommand(`behave-vsc.gotoStep`, gotoStepHandler),
       vscode.commands.registerTextEditorCommand(`behave-vsc.findStepReferences`, findStepReferencesHandler),
       vscode.commands.registerCommand(`behave-vsc.stepReferences.prev`, prevStepReferenceHandler),
       vscode.commands.registerCommand(`behave-vsc.stepReferences.next`, nextStepReferenceHandler),
-      vscode.languages.registerCompletionItemProvider('gherkin', autoCompleteProvider, ...[" "]),
-      vscode.languages.registerDocumentRangeFormattingEditProvider('gherkin', formatFeatureProvider),
-      vscode.languages.registerDocumentSemanticTokensProvider({ language: 'gherkin' }, new SemHighlightProvider(), semLegend)
+      vscode.languages.registerCompletionItemProvider("gherkin", autoCompleteProvider, ...["  "]),
+      vscode.languages.registerDocumentRangeFormattingEditProvider("gherkin", formatFeatureProvider),
+      vscode.languages.registerDocumentSemanticTokensProvider({ language: "gherkin" }, new SemHighlightProvider(), semLegend),
+      vscode.languages.registerDocumentSymbolProvider("gherkin", new DocumentSymbolProvider()),
+      vscode.languages.registerSelectionRangeProvider("gherkin", new SelectionRangeProvider()),
+      vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new DefinitionProvider()),
+      vscode.languages.registerHoverProvider({ language: "gherkin" }, new HoverProvider()),
+      vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new FixtureDefinitionProvider()),
+      vscode.languages.registerHoverProvider({ language: "gherkin" }, new FixtureHoverProvider()),
+      vscode.languages.registerReferenceProvider(["gherkin", "python"], new StepReferenceProvider()),
+      vscode.languages.registerReferenceProvider(["gherkin", "python"], new FixtureReferenceProvider())
     );
 
 
     const runHandler = testRunHandler(testData, ctrl, parser, junitWatcher, cleanExtensionTempDirectoryCancelSource);
 
-    ctrl.createRunProfile('Run Tests', vscode.TestRunProfileKind.Run,
+    // Environment preset selector command (shown in Testing view title bar)
+    const editPresetButton: vscode.QuickInputButton = {
+      iconPath: new vscode.ThemeIcon("gear"),
+      tooltip: "Edit this preset in settings"
+    };
+
+    const selectEnvPresetCommand = vscode.commands.registerCommand("behave-vsc-gs.selectEnvPreset", async () => {
+      const wkspUris = getUrisOfWkspFoldersWithFeatures();
+      if (wkspUris.length === 0) {
+        vscode.window.showWarningMessage("No workspace folders with features found.");
+        return;
+      }
+
+      // If multiple workspaces, let user select which one to configure
+      let targetWkspUri: vscode.Uri;
+      if (wkspUris.length === 1) {
+        targetWkspUri = wkspUris[0];
+      } else {
+        const wkspItems = wkspUris.map(uri => ({
+          label: vscode.workspace.getWorkspaceFolder(uri)?.name ?? uri.fsPath,
+          uri: uri
+        }));
+        const selected = await vscode.window.showQuickPick(wkspItems, {
+          placeHolder: "Select workspace to configure environment preset"
+        });
+        if (!selected) return;
+        targetWkspUri = selected.uri;
+      }
+
+      // Get current presets for the workspace
+      const wkspConfig = vscode.workspace.getConfiguration("behave-vsc-gs", targetWkspUri);
+      const presets = wkspConfig.get<{ [name: string]: { [key: string]: string } }>("envVarPresets") ?? {};
+      const currentPreset = wkspConfig.get<string>("activeEnvVarPreset") ?? "";
+
+      const presetNames = Object.keys(presets);
+      if (presetNames.length === 0) {
+        const openSettings = await vscode.window.showWarningMessage(
+          "No environment presets configured. Add presets in settings (behave-vsc-gs.envVarPresets).",
+          "Open Settings"
+        );
+        if (openSettings === "Open Settings") {
+          await vscode.commands.executeCommand("workbench.action.openSettings", "behave-vsc-gs.envVarPresets");
+        }
+        return;
+      }
+
+      // Build quick pick items with gear buttons for editing
+      interface PresetQuickPickItem extends vscode.QuickPickItem {
+        presetName: string;
+      }
+
+      const items: PresetQuickPickItem[] = [
+        { label: "(none)", description: currentPreset === "" ? "✓ active" : "", presetName: "" },
+        ...presetNames.map(name => ({
+          label: name,
+          description: name === currentPreset ? "✓ active" : "",
+          detail: Object.entries(presets[name]).map(([k, v]) => `${k}=${v}`).join(", "),
+          presetName: name,
+          buttons: [editPresetButton]
+        }))
+      ];
+
+      // Use createQuickPick for button support
+      const quickPick = vscode.window.createQuickPick<PresetQuickPickItem>();
+      quickPick.items = items;
+      quickPick.placeholder = `Select environment preset (current: ${currentPreset || "(none)"})`;
+
+      quickPick.onDidTriggerItemButton(async e => {
+        const presetName = e.item.presetName;
+        quickPick.hide();
+
+        // Determine which scope contains this specific preset (most specific first)
+        const inspection = wkspConfig.inspect<{ [name: string]: { [key: string]: string } }>("envVarPresets");
+        let settingsUri: vscode.Uri | undefined;
+        let isGlobalSettings = false;
+
+        if (inspection?.workspaceFolderValue?.[presetName] !== undefined) {
+          // Preset is in .vscode/settings.json of the workspace folder
+          settingsUri = vscode.Uri.joinPath(targetWkspUri, ".vscode", "settings.json");
+        } else if (inspection?.workspaceValue?.[presetName] !== undefined) {
+          // Preset is in the .code-workspace file (multi-root workspace)
+          const workspaceFile = vscode.workspace.workspaceFile;
+          if (workspaceFile && workspaceFile.scheme === "file") {
+            settingsUri = workspaceFile;
+          }
+        } else if (inspection?.globalValue?.[presetName] !== undefined) {
+          // Preset is in user settings
+          isGlobalSettings = true;
+        }
+
+        if (!settingsUri && !isGlobalSettings) {
+          // Preset not found at any specific scope — open settings UI as fallback
+          await vscode.commands.executeCommand("workbench.action.openSettings", "@id:behave-vsc-gs.envVarPresets");
+          return;
+        }
+
+        try {
+          let doc: vscode.TextDocument;
+          let editor: vscode.TextEditor;
+
+          if (isGlobalSettings) {
+            // Open global settings via command, then get the active editor
+            await vscode.commands.executeCommand("workbench.action.openSettingsJson");
+            const activeEditor = vscode.window.activeTextEditor;
+            if (!activeEditor) return;
+            editor = activeEditor;
+            doc = editor.document;
+          } else {
+            if (!settingsUri) return;
+            doc = await vscode.workspace.openTextDocument(settingsUri);
+            editor = await vscode.window.showTextDocument(doc);
+          }
+
+          const text = doc.getText();
+
+          // Find envVarPresets section — check new key, old key (backwards compat), and nested-key JSON formats
+          let envVarPresetsMatch = text.indexOf('"behave-vsc-gs.envVarPresets"');
+          if (envVarPresetsMatch === -1)
+            envVarPresetsMatch = text.indexOf('"behave-vsc.envVarPresets"');
+          if (envVarPresetsMatch === -1)
+            envVarPresetsMatch = text.indexOf('"envVarPresets"');
+          const searchString = `"${presetName}":`;
+          const presetIndex = envVarPresetsMatch !== -1
+            ? text.indexOf(searchString, envVarPresetsMatch)
+            : -1;
+
+          if (presetIndex !== -1) {
+            const position = doc.positionAt(presetIndex);
+            editor.selection = new vscode.Selection(position, position);
+            editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+          }
+        } catch {
+          // If file doesn't exist or can't be read, open the settings UI instead
+          await vscode.commands.executeCommand(
+            "workbench.action.openSettings",
+            `@id:behave-vsc-gs.envVarPresets`
+          );
+        }
+      });
+
+      quickPick.onDidAccept(async () => {
+        const selected = quickPick.selectedItems[0];
+        quickPick.hide();
+        if (selected && selected.presetName !== currentPreset) {
+          await wkspConfig.update("activeEnvVarPreset", selected.presetName, vscode.ConfigurationTarget.WorkspaceFolder);
+          vscode.window.showInformationMessage(`Environment preset set to: ${selected.presetName || "(none)"}`);
+        }
+      });
+
+      quickPick.onDidHide(() => quickPick.dispose());
+      quickPick.show();
+    });
+
+    // Legacy alias — preserves custom keybindings from behave-vsc
+    const legacySelectEnvPresetCommand = vscode.commands.registerCommand("behave-vsc.selectEnvPreset",
+      () => vscode.commands.executeCommand("behave-vsc-gs.selectEnvPreset"));
+
+    context.subscriptions.push(selectEnvPresetCommand, legacySelectEnvPresetCommand);
+
+    ctrl.createRunProfile("Run Tests", vscode.TestRunProfileKind.Run,
       async (request: vscode.TestRunRequest) => {
         await runHandler(false, request);
       }
       , true);
 
 
-    ctrl.createRunProfile('Debug Tests', vscode.TestRunProfileKind.Debug,
+    ctrl.createRunProfile("Debug Tests", vscode.TestRunProfileKind.Debug,
       async (request: vscode.TestRunRequest) => {
         await runHandler(true, request);
       }
@@ -118,6 +329,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           return;
 
         wkspSettings = getWorkspaceSettingsForFile(item.uri);
+        if (!wkspSettings)
+          return;
         const content = await getContentFromFilesystem(item.uri);
         await data.createScenarioTestItemsFromFeatureFileContent(wkspSettings, content, testData, ctrl, item, "resolveHandler");
       }
@@ -155,6 +368,41 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     }));
 
 
+    // Validate fixture tags when document is opened
+    context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(async (document) => {
+      try {
+        if (isFeatureFile(document.uri)) {
+          // Skip validation during initial startup - the async IIFE below will handle it
+          if (!initialParsingComplete) {
+            return;
+          }
+          // Wait for steps/fixtures parsing to complete before validating
+          await parser.stepsParseComplete(5000, "onDidOpenTextDocument");
+          validateFixtureTags(document);
+          validateStepDefinitions(document);
+        }
+      }
+      catch (e: unknown) {
+        // entry point function (handler) - show error
+        config.logger.showError(e, undefined);
+      }
+    }));
+
+    // Validate all currently open feature files after parsing completes
+    (async () => {
+      try {
+        await parser.stepsParseComplete(10000, "activate-validateOpenDocs");
+        initialParsingComplete = true;
+        for (const document of vscode.workspace.textDocuments) {
+          validateFixtureTags(document);
+          validateStepDefinitions(document);
+        }
+      }
+      catch (e: unknown) {
+        config.logger.showError(e, undefined);
+      }
+    })();
+
     // called when a user edits a file.
     // we want to reparse on edit (not just on disk changes) because:
     // a. the user may run a file they just edited without saving,
@@ -164,10 +412,40 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(async (event) => {
       try {
         const uri = event.document.uri;
-        if (!isFeatureFile(uri) && !isStepsFile(uri))
+        const isEnvFile = uri.path.endsWith("/environment.py");
+
+        if (!isFeatureFile(uri) && !couldBePythonStepsFile(uri) && !isEnvFile)
           return;
+
         const wkspSettings = getWorkspaceSettingsForFile(uri);
-        parser.reparseFile(uri, event.document.getText(), wkspSettings, testData, ctrl);
+        if (!wkspSettings)
+          return;
+        // We actully need to await this to ensure parsing is done before validation
+        await parser.reparseFile(uri, event.document.getText(), wkspSettings, testData, ctrl);
+
+        if (initialParsingComplete) {
+          // Validate fixture tags and step definitions when feature file changes
+          validateFixtureTags(event.document);
+          validateStepDefinitions(event.document);
+
+          // If enviroment file changes, re-validate fixtures in all open feature files
+          if (isEnvFile) {
+            for (const document of vscode.workspace.textDocuments) {
+              if (isFeatureFile(document.uri)) {
+                validateFixtureTags(document);
+              }
+            }
+          }
+
+          // If steps file or library file changes, re-validate step definitions in all open feature files
+          if (couldBePythonStepsFile(uri) && !isEnvFile) {
+            for (const document of vscode.workspace.textDocuments) {
+              if (isFeatureFile(document.uri)) {
+                validateStepDefinitions(document);
+              }
+            }
+          }
+        }
       }
       catch (e: unknown) {
         // entry point function (handler) - show error        
@@ -194,7 +472,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         // that behaviour because we want to distinguish between some properties being set vs being absent from 
         // settings.json (via inspect not get), so we don't include the uri in the affectsConfiguration() call
         // (separately, just note that the settings change could be a global window setting from *.code-workspace file, rather than from settings.json)
-        const affected = event && event.affectsConfiguration("behave-vsc");
+        const affected = event && event.affectsConfiguration("behave-vsc-gs");
         if (!affected && !forceFullRefresh && !testCfg)
           return;
 

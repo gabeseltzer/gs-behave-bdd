@@ -40,6 +40,23 @@
 			"preLaunchTask": "${defaultBuildTask}",
 		},
 		{
+			"name": "Debug: nested project workspace",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"${workspaceFolder}/example-projects/nested project",
+				"--extensionDevelopmentPath=${workspaceFolder}",
+			],
+			"outFiles": [
+				"${workspaceFolder}/dist/**/*.js"
+			],
+			"skipFiles": [
+				"<node_internals>/**",
+				"**/app/out/vs/**"
+			],
+			"preLaunchTask": "${defaultBuildTask}",
+		},
+		{
 			"name": "Debug: multiroot workspace",
 			"type": "extensionHost",
 			"request": "launch",
@@ -174,6 +191,21 @@
 			"preLaunchTask": "tasks: watch-tests",
 		},
 		{
+			"name": "Run Test Suite: nested project workspace",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"${workspaceFolder}/example-projects/nested project",
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--extensionTestsPath=${workspaceFolder}/out/_integrationTests/nested project suite/index"
+			],
+			"outFiles": [
+				"${workspaceFolder}/out/**/*.js",
+				"${workspaceFolder}/dist/**/*.js"
+			],
+			"preLaunchTask": "tasks: watch-tests",
+		},
+		{
 			"name": "Run Test Suite: multiroot workspace",
 			"type": "extensionHost",
 			"request": "launch",
@@ -263,5 +295,20 @@
 			],
 			"preLaunchTask": "tasks: watch-tests",
 		},
+		{
+			"name": "Debug Unit Tests",
+			"type": "node",
+			"request": "launch",
+			"program": "${workspaceFolder}/out/test/test/unit/run.js",
+			"preLaunchTask": "npm: compile-tests",
+			"outFiles": [
+				"${workspaceFolder}/out/test/**/*.js"
+			],
+			"skipFiles": [
+				"<node_internals>/**"
+			],
+			"console": "integratedTerminal",
+			"internalConsoleOptions": "neverOpen"
+		}
 	]
 }

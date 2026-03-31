@@ -1,0 +1,120 @@
+[project]
+name = "behave-vsc-gs-python"
+version = "0.1.0"
+requires-python = ">=3.10.15"
+
+[dependency-groups]
+dev = [
+    "behave==1.3.3",
+    "mypy>=1.0",
+    "ruff>=0.6",
+]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+explicit_package_bases = true
+exclude = [
+    "example-projects/",  # Behave test fixtures - not real packages, have duplicate module names
+]
+
+
+[[tool.mypy.overrides]]
+module = "behave.*"
+ignore_missing_imports = true
+
+[tool.ruff]
+# Set indentation to 2 spaces
+indent-width = 2
+# Exclude example-projects from all Ruff checks (linting and formatting)
+# These are behave test fixtures, not production code
+extend-exclude = ["example-projects"]
+# Force exclusions even when files are explicitly passed to ruff
+force-exclude = true
+
+[tool.ruff.format]
+# Use spaces (not tabs)
+indent-style = "space"
+# Respect the indent-width setting
+quote-style = "double"
+[tool.ruff.lint]
+# Ruff lint selection is based on Ruff version 0.6.9
+select = [
+    "F",      # Pyflakes
+    "E",      # pycodestyle errors
+    "W",      # pycodestyles warnings
+    "C90",    # mccabe
+    "I",      # isort - also enforced by format
+    "N",      # pep8-naming
+    "D",      # pydocstyle
+    "UP",     # pyupgrade
+    "YTT",    # flake8-2020 - sys.version checks
+    "ASYNC",  # flake8-async
+    "BLE",    # flake8-blind-except
+    "B",      # flake8-bugbear
+    "A",      # flake8-builtin
+    "C4",     # flake8-comprehension
+    "DTZ",    # flake8-datetimez
+    "T10",    # flake8-debugger
+    "DJ",     # flake8-django
+    "EM",     # flake8-errmsg
+    "EXE",    # flake8-executable
+    "FA",     # flake8-future-annotations
+    "ICN",    # flake8-import-convention
+    "LOG",    # flake8-logging
+    "G",      # flake8-logging-format
+    "INP",    # flake8-no-pep420
+    "PIE",    # flake8-pie
+    "T20",    # flake8-print
+    "PYI",    # flake8-pyi
+    "PT",     # flake8-pytest-style
+    "Q",      # flake8-quotes
+    "RSE",    # flake8-raise
+    "RET",    # flake8-return
+    "SLF",    # flake8-self
+    "SLOT",   # flake8-slots
+    "TID",    # flake8-tidy-imports
+    "INT",    # flake8-gettext
+    "ARG",    # flake8-unused-arguments
+    "PTH",    # flake8-use-pathlib
+    "ERA",    # eradicate
+    "PD",     # pandas-vet
+    "PGH",    # pygrep-hooks
+    "PL",     # Pylint
+    "TRY",    # tryceratops
+    "FLY",    # flynt
+    "NPY",    # NumPy-specific rules
+    "AIR",    # Airflow
+    "FURB",   # refurb
+    "RUF",    # Ruff specific
+]
+
+ignore = [
+    "D100",     # Missing docstring in public module
+    "D101",     # Missing docstring in public method 
+    "D102",     # Missing docstring in public method 
+    "D103",     # Missing docstring in public function
+    "D104",     # Missing docstring in public package
+    "D105",     # Missing docstring in magic method -
+    "D107",     # Missing docstring in __init__
+    "D200",     # One-line docstring should fit on one line
+    "D203",     # 1 blank line required before class docstring - conflict with formatter
+    "D205",     # 1 blank line required between summary line and description - maybe later
+    "D212",     # Multi-line docstring summary should start at the first line
+    "D400",     # First line should end with a period
+    "D401",     # First line of docstring should be in imperative mood
+    "D404",     # First word of the docstring should not be "This"
+    "D415",     # First line should end with a period, question mark, or exclamation point
+    "E501",     # Line too long
+    "G004",     # Logging statement uses f-string
+    "N818",     # Exception name should be named with an Error suffix
+    "PLR0913",  # Too many arguments in function definition
+    "PLR0915",  # Too many statements
+    "PLR2004",  # Magic value used in comparison
+    "PLR5501",  # Use `elif` instead of `else` then `if`, to reduce indentation
+    "PLW2901",  # for loop variable overwritten
+    "RET504",   # Unnecessary assignment to variable before `return` statement
+    "PTH123",   # `open()` should be replaced by `Path.open()`
+    "TRY400",   # Use `logging.exception` instead of `logging.error`
+    "T201",
+]

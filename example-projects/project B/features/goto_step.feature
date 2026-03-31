@@ -19,16 +19,16 @@ Feature: Go to Step def tests
 		But then step
 
 	Scenario: simple step
-		Given a SIMPLE step
+		Given a simple step
 
 	Scenario: simple step with more text
 		Given a simple step with more text
 
-	Scenario: a cased step
-		Given a CASed StEP
+	Scenario: an incorrectly cased step
+		Given a missing step CASed StEP
 
 	Scenario: a cased step2
-		Given a cased STEP
+		Given a missing step CaSeD step
 
 	Scenario: param step
 		Given a param step

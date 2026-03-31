@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { getWorkspaceUriForFile, getLines } from '../common';
 import { config } from '../configuration';
 import { parser } from '../extension';
-import { featureFileStepRe } from '../parsers/featureParser';
+import { featureFileStepRe } from '../parsers/gherkinPatterns';
 import { getStepFileStepForFeatureFileStep } from '../parsers/stepMappings';
 import { parseRepWildcard } from '../parsers/stepsParser';
 
@@ -10,7 +10,6 @@ const tokenTypes = new Map<string, number>();
 
 export const semLegend = (function () {
 	const tokenTypesLegend = [
-		"missing_step",
 		"function",
 	];
 	tokenTypesLegend.forEach((tokenType, index) => tokenTypes.set(tokenType, index));
@@ -26,12 +25,16 @@ interface ParsedToken {
 
 // NOTE: most colourising is done via gherkin.grammar.json,
 // this is only to do advanced custom highlighting 
-// i.e. to highlight step {parameters} and missing steps, by comparing feature file steps against parsed stepmappings
+// i.e. to highlight step {parameters}, by comparing feature file steps against parsed stepmappings
 export class SemHighlightProvider implements vscode.DocumentSemanticTokensProvider {
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, cancelToken: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 
-		await parser.stepsParseComplete(2000, "provideDocumentSemanticTokens");
+		const isReady = await parser.stepsParseComplete(2000, "provideDocumentSemanticTokens");
+
+		if (!isReady) {
+			return new vscode.SemanticTokens(new Uint32Array(0));
+		}
 
 		// line numbers and contents shift for compares, so wouldn't match up 
 		// with current step mappings, so skip semhighlight for git scheme
@@ -57,7 +60,8 @@ export class SemHighlightProvider implements vscode.DocumentSemanticTokensProvid
 			try {
 				// not worth showing the error to user for this, just log it
 				const wkspUri = getWorkspaceUriForFile(document.uri);
-				config.logger.logInfo(`${e}`, wkspUri);
+				if (wkspUri)
+					config.logger.logInfo(`${e}`, wkspUri);
 			}
 			catch {
 				config.logger.showError(`${e}`);
@@ -83,18 +87,6 @@ export class SemHighlightProvider implements vscode.DocumentSemanticTokensProvid
 
 			const line = lines[i];
 			const stepFileStep = getStepFileStepForFeatureFileStep(document.uri, i);
-
-			if (!stepFileStep && featureFileStepRe.test(line)) {
-
-				r.push({
-					line: i,
-					startCharacter: 0,
-					length: line.length,
-					tokenType: "missing_step",
-				});
-
-				continue;
-			}
 
 			if (stepFileStep && stepFileStep.textAsRe.includes(parseRepWildcard)) {
 				const grpWldText = stepFileStep.textAsRe.replaceAll(parseRepWildcard, `(${parseRepWildcard})`);

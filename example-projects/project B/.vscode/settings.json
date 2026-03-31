@@ -13,7 +13,7 @@
     ],
     "python.testing.unittestEnabled": true,
     "python.testing.pytestEnabled": false,
-    "behave-vsc.featuresPath": "",
-    "behave-vsc.runParallel": true,
-    "behave-vsc.xRay": true
+    "behave-vsc-gs.featuresPath": "",
+    "behave-vsc-gs.runParallel": true,
+    "behave-vsc-gs.xRay": true
 }

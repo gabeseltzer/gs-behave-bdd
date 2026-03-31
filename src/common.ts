@@ -112,9 +112,11 @@ export async function cleanExtensionTempDirectory(cancelToken: vscode.Cancellati
 
 // get the actual value in the file or return undefined, this is
 // for cases where we need to distinguish between an unset value and the default value
-export const getActualWorkspaceSetting = <T>(wkspConfig: vscode.WorkspaceConfiguration, name: string): T => {
+export const getActualWorkspaceSetting = <T>(wkspConfig: vscode.WorkspaceConfiguration, name: string, legacyConfig?: vscode.WorkspaceConfiguration): T => {
   const value = wkspConfig.inspect(name)?.workspaceFolderValue;
-  return (value as T);
+  if (value !== undefined) return value as T;
+  if (legacyConfig) return legacyConfig.inspect(name)?.workspaceFolderValue as T;
+  return undefined as unknown as T;
 }
 
 
@@ -131,16 +133,41 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
 
   function hasFeaturesFolder(folder: vscode.WorkspaceFolder): boolean {
 
+    // check if projectPath and/or featuresPath specified in settings.json
+    // NOTE: this will return package.json defaults (or failing that, type defaults) if no settings.json found
+    const wkspConfig = vscode.workspace.getConfiguration("behave-vsc-gs", folder.uri);
+    const legacyWkspConfig = vscode.workspace.getConfiguration("behave-vsc", folder.uri);
+    const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath", legacyWkspConfig);
+    const featuresPath = getActualWorkspaceSetting<string>(wkspConfig, "featuresPath", legacyWkspConfig);
+
+    // Determine the project root (either custom projectPath or workspace root)
+    let projectUri = folder.uri;
+    if (projectPath) {
+      projectUri = vscode.Uri.joinPath(folder.uri, projectPath);
+      if (!fs.existsSync(projectUri.fsPath)) {
+        const fullPath = projectUri.fsPath;
+        // Check if the path looks like it was doubled (common mistake)
+        const hint = fullPath.includes(projectPath + path.sep + projectPath)
+          ? ` Note: The path appears to be duplicated - "projectPath" should be relative to the workspace root, not an absolute path.`
+          : "";
+        vscode.window.showWarningMessage(
+          `Behave VSC: Project path not found.\n\n` +
+          `Workspace: "${folder.name}"\n` +
+          `Configured projectPath: "${projectPath}"\n` +
+          `Full path checked: "${fullPath}"${hint}\n\n` +
+          `Behave VSC will ignore this workspace until the path is corrected.`,
+          "OK"
+        );
+        return false;
+      }
+    }
+
     // default features path, no settings.json required
-    let featuresUri = vscode.Uri.joinPath(folder.uri, "features");
+    let featuresUri = vscode.Uri.joinPath(projectUri, "features");
 
     // try/catch with await vwfs.stat(uri) is much too slow atm
     const hasDefaultFeaturesFolder = fs.existsSync(featuresUri.fsPath);
 
-    // check if featuresPath specified in settings.json
-    // NOTE: this will return package.json defaults (or failing that, type defaults) if no settings.json found, i.e. "features" if no settings.json
-    const wkspConfig = vscode.workspace.getConfiguration("behave-vsc", folder.uri);
-    const featuresPath = getActualWorkspaceSetting(wkspConfig, "featuresPath");
     if (!featuresPath && !hasDefaultFeaturesFolder) {
       return false; // probably a workspace with no behave requirements
     }
@@ -149,13 +176,20 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     if (hasDefaultFeaturesFolder && !featuresPath)
       return true;
 
-    featuresUri = vscode.Uri.joinPath(folder.uri, featuresPath as string);
+    featuresUri = vscode.Uri.joinPath(projectUri, featuresPath as string);
     if (fs.existsSync(featuresUri.fsPath) && vscode.workspace.getWorkspaceFolder(featuresUri) === folder)
       return true;
 
     // we don't use config.logger.showWarn here, because we may not have a logger yet
-    vscode.window.showWarningMessage(`Specified features path "${featuresPath}" not found in workspace "${folder.name}". ` +
-      `Behave VSC will ignore this workspace until this is corrected.`, "OK");
+    const projectPathInfo = projectPath ? ` (relative to projectPath "${projectPath}")` : "";
+    vscode.window.showWarningMessage(
+      `Behave VSC: Features path not found.\n\n` +
+      `Workspace: "${folder.name}"\n` +
+      `Configured featuresPath: "${featuresPath}"${projectPathInfo}\n` +
+      `Full path checked: "${featuresUri.fsPath}"\n\n` +
+      `Behave VSC will ignore this workspace until the path is corrected.`,
+      "OK"
+    );
 
     return false;
   }
@@ -176,33 +210,39 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     `workspaceFoldersWithFeatures: ${workspaceFoldersWithFeatures.length}`);
 
   if (workspaceFoldersWithFeatures.length === 0) {
-    if (folders.length === 1 && folders[0].name === "behave-vsc")
+    if (folders.length === 1 && folders[0].name === "behave-vsc-gs")
       throw `Please disable the marketplace Behave VSC extension before beginning development!`;
     else
       throw `Extension was activated because a '*.feature' file was found in a workspace folder, but ` +
-      `none of the workspace folders contain either a root 'features' folder or a settings.json that specifies a valid 'behave-vsc.featuresPath'.\n` +
-      `Please add a valid 'behave-vsc.featuresPath' property to your workspace settings.json file and then restart vscode.`;
+      `none of the workspace folders contain either a root 'features' folder or a settings.json that specifies a valid 'behave-vsc-gs.featuresPath'.\n` +
+      `Please add a valid 'behave-vsc-gs.featuresPath' property to your workspace settings.json file and then restart vscode.`;
   }
 
   return workspaceFoldersWithFeatures;
 }
 
 
-export const getWorkspaceUriForFile = (fileorFolderUri: vscode.Uri | undefined): vscode.Uri => {
+export const getWorkspaceUriForFile = (fileorFolderUri: vscode.Uri | undefined): vscode.Uri | undefined => {
+  // Return undefined for non-file URIs (e.g., git: scheme from diff views)
   if (fileorFolderUri?.scheme !== "file")
-    throw new Error(`Unexpected scheme: ${fileorFolderUri?.scheme}`);
+    return undefined;
   if (!fileorFolderUri) // handling this here for caller convenience
-    throw new Error("uri is undefined");
+    return undefined;
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileorFolderUri);
-  const wkspUri = workspaceFolder ? workspaceFolder.uri : undefined;
-  if (!wkspUri)
-    throw "No workspace folder found for file " + fileorFolderUri.fsPath;
-  return wkspUri;
+  if (!workspaceFolder) {
+    // Return undefined instead of throwing for files outside workspace (e.g. git worktree paths).
+    // Callers already handle undefined return gracefully.
+    console.warn(`[behave-vsc-gs] No workspace folder found for file ${fileorFolderUri.fsPath}, skipping workspace-specific features`);
+    return undefined;
+  }
+  return workspaceFolder.uri;
 }
 
 
-export const getWorkspaceSettingsForFile = (fileorFolderUri: vscode.Uri | undefined): WorkspaceSettings => {
+export const getWorkspaceSettingsForFile = (fileorFolderUri: vscode.Uri | undefined): WorkspaceSettings | undefined => {
   const wkspUri = getWorkspaceUriForFile(fileorFolderUri);
+  if (!wkspUri)
+    return undefined;
   return config.workspaceSettings[wkspUri.path];
 }
 
@@ -238,6 +278,10 @@ export const isFeatureFile = (uri: vscode.Uri): boolean => {
   return path.endsWith(".feature");
 }
 
+export const couldBePythonStepsFile = (uri: vscode.Uri): boolean => {
+  const path = uri.path.toLowerCase();
+  return path.endsWith('.py') && !isFeatureFile(uri);
+}
 
 export const getAllTestItems = (wkspId: string | null, collection: vscode.TestItemCollection): vscode.TestItem[] => {
   const items: vscode.TestItem[] = [];
@@ -284,10 +328,37 @@ export function cleanBehaveText(text: string) {
 }
 
 
+// Directories that never contain useful Python/feature files — skipped by findFiles
+export const DEFAULT_EXCLUDE_DIRS = new Set([
+  '__pycache__', '.git', 'node_modules', '.venv', '.tox',
+  '.mypy_cache', '.pytest_cache', '.eggs', '*.egg-info'
+]);
+
+function isDirExcluded(dirName: string, excludeDirs: Set<string>): boolean {
+  if (excludeDirs.has(dirName))
+    return true;
+  // Handle wildcard patterns like *.egg-info
+  for (const pattern of excludeDirs) {
+    if (pattern.startsWith('*') && dirName.endsWith(pattern.substring(1)))
+      return true;
+  }
+  return false;
+}
+
 // custom function to replace vscode.workspace.findFiles() functionality when required
 // due to the glob INTERMITTENTLY not returning results on vscode startup in Windows OS for multiroot workspaces
 export async function findFiles(directory: vscode.Uri, matchSubDirectory: string | undefined,
-  extension: string, cancelToken: vscode.CancellationToken): Promise<vscode.Uri[]> {
+  extension: string, cancelToken: vscode.CancellationToken,
+  excludeDirs?: Set<string>): Promise<vscode.Uri[]> {
+
+  const compiledRegex = matchSubDirectory ? new RegExp(`/${matchSubDirectory}/`, "i") : undefined;
+  const dirs = excludeDirs ?? DEFAULT_EXCLUDE_DIRS;
+  return _findFilesRecursive(directory, compiledRegex, extension, cancelToken, dirs);
+}
+
+async function _findFilesRecursive(directory: vscode.Uri, compiledRegex: RegExp | undefined,
+  extension: string, cancelToken: vscode.CancellationToken,
+  excludeDirs: Set<string>): Promise<vscode.Uri[]> {
 
   const entries = await vwfs.readDirectory(directory);
   const results: vscode.Uri[] = [];
@@ -299,10 +370,12 @@ export async function findFiles(directory: vscode.Uri, matchSubDirectory: string
     const fileType = entry[1];
     const entryUri = vscode.Uri.joinPath(directory, fileName);
     if (fileType === vscode.FileType.Directory) {
-      results.push(...await findFiles(entryUri, matchSubDirectory, extension, cancelToken));
+      if (isDirExcluded(fileName, excludeDirs))
+        continue;
+      results.push(...await _findFilesRecursive(entryUri, compiledRegex, extension, cancelToken, excludeDirs));
     }
     else {
-      if (fileName.endsWith(extension) && (!matchSubDirectory || new RegExp(`/${matchSubDirectory}/`, "i").test(entryUri.path))) {
+      if (fileName.endsWith(extension) && (!compiledRegex || compiledRegex.test(entryUri.path))) {
         results.push(entryUri);
       }
     }
@@ -312,6 +385,9 @@ export async function findFiles(directory: vscode.Uri, matchSubDirectory: string
 }
 
 export function findSubdirectorySync(searchPath: string, targetDirName: string): string | null {
+  if (!fs.existsSync(searchPath)) {
+    return null;
+  }
   const files = fs.readdirSync(searchPath);
   for (const file of files) {
     const filePath = path.join(searchPath, file);
@@ -335,6 +411,10 @@ export function findHighestTargetParentDirectorySync(startPath: string, stopPath
   let currentPath = startPath;
   let highestMatch = null;
   while (currentPath.startsWith(stopPath)) {
+    if (!fs.existsSync(currentPath)) {
+      currentPath = path.dirname(currentPath);
+      continue;
+    }
     const files = fs.readdirSync(currentPath);
     if (files.includes(targetDirName))
       highestMatch = path.join(currentPath, targetDirName);
