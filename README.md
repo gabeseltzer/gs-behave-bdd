@@ -10,12 +10,12 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
 ### New in this fork
 
 1. Added support for lots of VSCode language features:
-  - [Ctrl + Click go to definition](https://code.visualstudio.com/docs/editing/editingevolved#_go-to-definition) in feature files
-  - [Find All References](https://code.visualstudio.com/api/language-extensions/programmatic-language-features#find-all-references-to-a-symbol) for steps in feature files
-  - [Outline View](https://code.visualstudio.com/docs/getstarted/userinterface#_outline-view) in feature files
-  - [Sticky Scrolling](https://code.visualstudio.com/docs/getstarted/userinterface#_sticky-scroll) for steps and fixtures in feature files
-  - [Hover Definitions](https://code.visualstudio.com/api/language-extensions/programmatic-language-features#show-hovers) for steps and fixtures in feature files
-  - [Selection Ranges](https://code.visualstudio.com/api/references/vscode-api#SelectionRangeProvider) in feature files
+    - [Ctrl + Click go to definition](https://code.visualstudio.com/docs/editing/editingevolved#_go-to-definition) in feature files
+    - [Find All References](https://code.visualstudio.com/api/language-extensions/programmatic-language-features#find-all-references-to-a-symbol) for steps in feature files
+    - [Outline View](https://code.visualstudio.com/docs/getstarted/userinterface#_outline-view) in feature files
+    - [Sticky Scrolling](https://code.visualstudio.com/docs/getstarted/userinterface#_sticky-scroll) for steps and fixtures in feature files
+    - [Hover Definitions](https://code.visualstudio.com/api/language-extensions/programmatic-language-features#show-hovers) for steps and fixtures in feature files
+    - [Selection Ranges](https://code.visualstudio.com/api/references/vscode-api#SelectionRangeProvider) in feature files
 2. Added two-way navigation for **fixtures** in feature files and python definitions
 3. Slightly better formatting for VSCode Test Results pane (when you run tests with the little "play" buttons or via the Testing tab).
 4. Use prettier diagnostics for missing step definitions, especially while still parsing the workspace
