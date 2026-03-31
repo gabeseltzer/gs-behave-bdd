@@ -39,7 +39,7 @@ def simple_step_with_more_text(context):
     pass
 
 
-@step("a CaSeD step")
+@step("a missing step CaSeD step")
 def cased_step(context):
     pass
 

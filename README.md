@@ -1,9 +1,31 @@
 # Behave VSC
 
+Forked from [jimasp's](https://github.com/jimasp) excellent [behave-vsc](https://github.com/jimasp/behave-vsc) extension, this one adds features!
+
 Debug and run Python [behave](https://behave.readthedocs.io/) BDD tests using the native Visual Studio Code Test API.  
 Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, autocompletion, and a few basic snippets.
 
 ## Features
+
+### New in this fork
+
+1. Added support for lots of VSCode language features:
+    - [Ctrl + Click go to definition](https://code.visualstudio.com/docs/editing/editingevolved#_go-to-definition) in feature files
+    - [Find All References](https://code.visualstudio.com/api/language-extensions/programmatic-language-features#find-all-references-to-a-symbol) for steps in feature files
+    - [Outline View](https://code.visualstudio.com/docs/getstarted/userinterface#_outline-view) in feature files
+    - [Sticky Scrolling](https://code.visualstudio.com/docs/getstarted/userinterface#_sticky-scroll) for steps and fixtures in feature files
+    - [Hover Definitions](https://code.visualstudio.com/api/language-extensions/programmatic-language-features#show-hovers) for steps and fixtures in feature files
+    - [Selection Ranges](https://code.visualstudio.com/api/references/vscode-api#SelectionRangeProvider) in feature files
+2. Added two-way navigation for **fixtures** in feature files and python definitions
+3. Slightly better formatting for VSCode Test Results pane (when you run tests with the little "play" buttons or via the Testing tab).
+4. Use prettier diagnostics for missing step definitions, especially while still parsing the workspace
+5. Added the ability to save presets for environment variables to use when running tests.
+6. Package Behave in with the extension (with the option to use a pre-installed version of behave)
+7. Support for tests that aren't in the root workspace directory (ie for monorepos).
+8. Support for [step libraries](https://github.com/behave/behave/blob/main/features/step.use_step_library.feature).
+9. Fix issues with step parsing that was inconsistent with Behave (case sensitivity and colons).
+
+### Old from the original extension
 
 - Run or Debug behave tests, either from the test side bar or from inside a feature file.
 - Select to run/debug all tests, a nested folder, or just a single feature or scenario.
@@ -29,12 +51,10 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
 - Extension activation requires at least one `*.feature` file somewhere in the workspace
 - A compatible directory structure
 - [ms-python.python](https://marketplace.visualstudio.com/items?itemName=ms-python.python) extension
-- [behave](https://behave.readthedocs.io)
 - [python](https://www.python.org/)
 
 ### Required project directory structure
 
-- A single `features` folder (lowercase by default), which either contains a `steps` folder or has a sibling `steps` folder at the same level. You don't have to call it "features" - read on, but behave requires you have a folder called "steps". (Multiple features folders are allowed in a multi-root workspace, but only one per project.)
 - A [behave-conformant](https://behave.readthedocs.io/en/stable/gherkin.html) directory structure. Note however that the features and steps folders must be somewhere *inside* the project folder (not above it).
 
 Example 1:
@@ -85,7 +105,25 @@ paths=my_tests/behave_features
 
 // settings.json
 { 
-  "behave-vsc.featuresPath": "my_tests/behave_features" 
+  "behave-vsc-gs.featuresPath": "my_tests/behave_features" 
+}
+```
+
+- If your behave project is not in the workspace root (e.g. in a monorepo), you can use the `projectPath` setting to specify where your behave project lives. The `featuresPath` is then relative to this project path. For example:
+
+```text
+// Directory structure:
+// my-workspace/
+//   └── backend/
+//       └── behave.ini
+//       └── features/
+//           └── my.feature
+//           └── steps/
+
+// settings.json
+{ 
+  "behave-vsc-gs.projectPath": "backend",
+  "behave-vsc-gs.featuresPath": "features"
 }
 ```
 
@@ -94,6 +132,7 @@ paths=my_tests/behave_features
 ## Extension settings
 
 - This extension has various options to customise your test run via `settings.json`, e.g. `runParallel`, `featuresPath`, and `envVarOverrides`.
+- By default, the extension uses its own bundled copy of behave. If you want to use behave from your Python environment instead (e.g. for a newer version), set `importStrategy` to `"fromEnvironment"` in your `settings.json`.
 - You can also disable/enable `justMyCode` for debug (via `settings.json` not `launch.json`).
 - If you are using a multi-root workspace with multiple projects that contain feature files, you can set up default settings in your `*.code-workspace` file, then optionally override these as required in the `settings.json` in each workspace folder.
 - For more information on available options, go to the extension settings in vscode.
@@ -162,9 +201,9 @@ paths=my_tests/behave_features
 - Do you have runParallel turned on? Try turning it off.
 - Do you have the latest version of the extension installed? The problem may have been fixed in a newer release. (Please note that the latest version you can install is determined by your vscode version, so you may need to update vscode first.)
 - Check if the problem is in [Known Issues](#known-issues-and-limitations) below
-- Check if the issue has already been reported in github [issues](https://github.com/jimasp/behave-vsc/issues?q=is%3Aissue).
+- Check if the issue has already been reported in github [issues](https://github.com/gabeseltzer/behave-vsc-gs/issues?q=is%3Aissue).
 - Try temporarily disabling other extensions.
-- Have you recently upgraded vscode, and does your python/behave environment match the one tested for this release? You can check the environment tested for each release in [github](https://github.com/jimasp/behave-vsc/releases) and downgrade as required.
+- Have you recently upgraded vscode, and does your python/behave environment match the one tested for this release? You can check the environment tested for each release in [github](https://github.com/gabeseltzer/behave-vsc-gs/releases) and downgrade as required.
 - Any extension errors should pop up in a notification window, but you can also look at debug logs and error stacks by enabling `xRay` in the extension settings and using vscode command "Developer: Toggle Developer Tools".
 - The extension is only tested with a few example projects. It's possible that something specific to your project/setup/environment is not accounted for. See [Contributing](CONTRIBUTING.md) for instructions on debugging the extension with your own project. (If you debug with your own project, you may also wish to check whether the same issue occurs with one of the example project workspaces.)
 
@@ -178,9 +217,6 @@ paths=my_tests/behave_features
 - There is currently a [bug](https://github.com/microsoft/vscode-extension-samples/issues/728) in vscode itself where a test will no longer play from within the editor window when you add spaces or autoformat a feature file. A workaround is to close the feature file and reopen it.
 - Test durations are taken from behave junit xml files, not an actual execution time.
 - vscode always adds up test durations. For `runParallel` runs this means the parent test node reports a longer time than the test run actually took.
-- Step navigation limitations ("Go to Step Definition" and "Find All Step References"):
-  - Step matching does not always match as per behave. It uses a simple regex match via replacing `{foo}` -> `{.*}`. As such, it does *not* consider typed parameters like `{foo:d}`, or `cfparse` cardinal parameters like `{foo:?}` or `re` regex matching like `(?P<foo>foo)`.
-  - Step navigation only finds steps that are in `.py` files in a folder called `steps` either inside the features folder or project root. If you import steps in python from a steps library folder outside your steps folder it won't find them.
 
 ---
 

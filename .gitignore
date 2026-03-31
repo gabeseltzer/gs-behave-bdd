@@ -1,7 +1,13 @@
 out
 dist
 node_modules
+bundled/libs/
 __pycache__
 .vscode-test
 **/.venv/**
 **/venv/**
+plans/*
+*.vsix
+.mypy_cache
+.ruff_cache
+.claude/settings.local.json

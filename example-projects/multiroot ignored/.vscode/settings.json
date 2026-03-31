@@ -1,5 +1,5 @@
 {
     /* see README.md in parent folder */
-    "behave-vsc.runParallel": false,
-    "behave-vsc.justMyCode": true,
+    "behave-vsc-gs.runParallel": false,
+    "behave-vsc-gs.justMyCode": true,
 }

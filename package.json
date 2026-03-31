@@ -1,85 +1,124 @@
 {
 	"contributes": {
 		"configuration": {
-			"title": "behave-vsc",
+			"title": "behave-vsc-gs",
 			"properties": {
-				"behave-vsc.envVarOverrides": {
+				"behave-vsc-gs.envVarOverrides": {
 					"scope": "resource",
 					"type": "object",
-					"markdownDescription": "Optional key-value pairs of environment variable overrides (or additions) to use when calling a behave command. This will apply to all behave tests within the workspace.",
+					"markdownDescription": "Optional key-value pairs of environment variable overrides (or additions) to use when calling a behave command. This will apply to all behave tests within the workspace. These are merged with (and override) any variables from the selected environment preset.",
 					"additionalProperties": {
 						"type": "string"
 					}
 				},
-				"behave-vsc.featuresPath": {
+				"behave-vsc-gs.envVarPresets": {
+					"scope": "resource",
+					"type": "object",
+					"markdownDescription": "Named presets of environment variables. Each key is a preset name, and the value is an object of environment variable key-value pairs. Use the gear icon on the test profile to switch between presets. Example:\n```json\n{\n  \"development\": { \"API_URL\": \"http://localhost:3000\" },\n  \"staging\": { \"API_URL\": \"https://staging.example.com\" }\n}\n```",
+					"default": {},
+					"additionalProperties": {
+						"type": "object",
+						"additionalProperties": {
+							"type": "string"
+						}
+					}
+				},
+				"behave-vsc-gs.activeEnvVarPreset": {
 					"scope": "resource",
 					"type": "string",
-					"markdownDescription": "*workspace-relative* path to the features subfolder. If not `features` (the default), then this must tie up with the `\"paths=\"` setting in your behave configuration file. Example: `mysubfolder/my_behave_tests`.",
+					"markdownDescription": "The currently active environment variable preset name. Use the gear icon on the test profile to change this, or set it manually.",
+					"default": ""
+				},
+				"behave-vsc-gs.projectPath": {
+					"scope": "resource",
+					"type": "string",
+					"markdownDescription": "*workspace-relative* path to the root of your behave project. This is the directory where behave will be executed from (working directory). If not set (the default), the workspace root folder is used. Example: `myproject/backend`.",
+					"default": ""
+				},
+				"behave-vsc-gs.featuresPath": {
+					"scope": "resource",
+					"type": "string",
+					"markdownDescription": "*project-relative* path to the features subfolder. If not `features` (the default), then this must tie up with the `\"paths=\"` setting in your behave configuration file. This path is relative to `projectPath` (or workspace root if `projectPath` is not set). Example: `my_behave_tests`.",
 					"default": "features"
 				},
-				"behave-vsc.justMyCode": {
+				"behave-vsc-gs.justMyCode": {
 					"scope": "resource",
 					"type": "boolean",
 					"markdownDescription": "If set to false (disabled), the debugger will step into external code when debugging a behave test.",
 					"default": true
 				},
-				"behave-vsc.multiRootRunWorkspacesInParallel": {
+				"behave-vsc-gs.multiRootRunWorkspacesInParallel": {
 					"scope": "window",
 					"type": "boolean",
 					"markdownDescription": "For multi-root workspaces only. If enabled, then when behave tests are run from more than one workspace, behave tests from those workspaces are run at the same time. This setting should be in your `*.code-workspace` file.",
 					"default": true
 				},
-				"behave-vsc.runParallel": {
+				"behave-vsc-gs.runParallel": {
 					"scope": "resource",
 					"type": "boolean",
 					"markdownDescription": "Specifies whether to create a separate behave instance for each feature and run those instances simultaneously (except when debugging). Leave this off for your initial run, then enable if you wish and your test setup supports it (i.e. your features are fully isolated).",
 					"default": false
 				},
-				"behave-vsc.xRay": {
+				"behave-vsc-gs.xRay": {
 					"scope": "window",
 					"type": "boolean",
 					"markdownDescription": "Specifies whether extension errors have stack traces and diagnostics are logged in console. The console output is viewable via the vscode command `Developer: Toggle Developer Tools`. Diagnostic logs are noisy, and may have a small performance impact.",
 					"default": false
+				},
+				"behave-vsc-gs.importStrategy": {
+					"scope": "resource",
+					"type": "string",
+					"enum": [
+						"useBundled",
+						"fromEnvironment"
+					],
+					"markdownDescription": "Controls how behave is resolved. `useBundled` (default) uses the version of behave bundled with the extension. `fromEnvironment` uses behave from your Python environment.",
+					"default": "useBundled"
 				}
 			}
 		},
 		"commands": [
 			{
-				"command": "behave-vsc.gotoStep",
+				"command": "behave-vsc-gs.gotoStep",
 				"title": "Go to Step Definition"
 			},
 			{
-				"command": "behave-vsc.findStepReferences",
+				"command": "behave-vsc-gs.findStepReferences",
 				"title": "Find All Step References"
 			},
 			{
-				"command": "behave-vsc.stepReferences.next",
+				"command": "behave-vsc-gs.stepReferences.next",
 				"title": "Step References: Next"
 			},
 			{
-				"command": "behave-vsc.stepReferences.prev",
+				"command": "behave-vsc-gs.stepReferences.prev",
 				"title": "Step References: Previous"
+			},
+			{
+				"command": "behave-vsc-gs.selectEnvPreset",
+				"title": "Behave: Select Environment Preset",
+				"icon": "$(server-environment)"
 			}
 		],
 		"keybindings": [
 			{
-				"command": "behave-vsc.gotoStep",
+				"command": "behave-vsc-gs.gotoStep",
 				"key": "f12",
 				"when": "!isInEmbeddedEditor && editorTextFocus && resourceExtname =~ /\\.feature$/"
 			},
 			{
-				"command": "behave-vsc.findStepReferences",
+				"command": "behave-vsc-gs.findStepReferences",
 				"key": "alt+f12",
-				"when": "!isInEmbeddedEditor && editorTextFocus && resourcePath =~ /steps/ && resourceExtname =~ /\\.py$/"
+				"when": "!isInEmbeddedEditor && editorTextFocus && editorLangId == python && resourceExtname =~ /\\.py$/"
 			},
 			{
-				"command": "behave-vsc.stepReferences.next",
-				"when": "behave-vsc.stepReferences.navKeysEnabled",
+				"command": "behave-vsc-gs.stepReferences.next",
+				"when": "behave-vsc-gs.stepReferences.navKeysEnabled",
 				"key": "f4"
 			},
 			{
-				"command": "behave-vsc.stepReferences.prev",
-				"when": "behave-vsc.stepReferences.navKeysEnabled",
+				"command": "behave-vsc-gs.stepReferences.prev",
+				"when": "behave-vsc-gs.stepReferences.navKeysEnabled",
 				"key": "shift+f4"
 			}
 		],
@@ -115,22 +154,33 @@
 			}
 		],
 		"configurationDefaults": {
-			"editor.semanticTokenColorCustomizations": {
-				"rules": {
-					"missing_step": "#cf1036"
-				}
+			"[gherkin]": {
+				"editor.stickyScroll.enabled": true
 			}
 		},
 		"menus": {
 			"editor/context": [
 				{
 					"when": "!isInEmbeddedEditor && editorTextFocus && resourceExtname =~ /\\.feature$/",
-					"command": "behave-vsc.gotoStep",
+					"command": "behave-vsc-gs.gotoStep",
 					"group": "navigation"
 				},
 				{
 					"when": "!isInEmbeddedEditor && editorTextFocus && resourcePath =~ /steps/ && resourceExtname =~ /\\.py$/",
-					"command": "behave-vsc.findStepReferences",
+					"command": "behave-vsc-gs.findStepReferences",
+					"group": "navigation"
+				}
+			],
+			"view/title": [
+				{
+					"command": "behave-vsc-gs.selectEnvPreset",
+					"when": "view == workbench.view.testing",
+					"group": "navigation"
+				}
+			],
+			"testing/item/gutter": [
+				{
+					"command": "behave-vsc-gs.selectEnvPreset",
 					"group": "navigation"
 				}
 			]
@@ -151,7 +201,7 @@
 					"name": "Step References",
 					"icon": "images/behave-vsc.png",
 					"contextualTitle": "Step References",
-					"when": "behave-vsc.stepReferences.visible"
+					"when": "behave-vsc-gs.stepReferences.visible"
 				}
 			]
 		},
@@ -162,25 +212,25 @@
 			}
 		]
 	},
-	"name": "behave-vsc",
-	"displayName": "Behave VSC",
-	"description": "Debug, Run and Navigate Python behave tests",
-	"version": "0.6.4",
+	"name": "behave-vsc-gs",
+	"displayName": "Behave VSC GS",
+	"description": "Debug, Run and Navigate Python behave tests. Forked from jimasp",
+	"version": "0.9.0",
 	"icon": "images/behave-vsc.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",
 		"theme": "dark"
 	},
-	"publisher": "jimasp",
+	"publisher": "gabeseltzer",
 	"private": true,
 	"license": "SEE LICENSE IN LICENSE.txt",
-	"homepage": "https://github.com/jimasp/behave-vsc/blob/main/README.md",
+	"homepage": "https://github.com/gabeseltzer/behave-vsc-gs/blob/main/README.md",
 	"bugs": {
-		"url": "https://github.com/jimasp/behave-vsc/issues"
+		"url": "https://github.com/gabeseltzer/behave-vsc-gs/issues"
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/jimasp/behave-vsc.git"
+		"url": "https://github.com/gabeseltzer/behave-vsc-gs.git"
 	},
 	"engines": {
 		"vscode": "^1.82.0"
@@ -206,34 +256,40 @@
 	],
 	"main": "./dist/extension.js",
 	"scripts": {
-		"prevscode:prepublish": "npm run test",
-		"vscode:prepublish": "npm run package",
-		"compile": "npm run clean-output && webpack",
+		"vscode:prepublish": "npm run bundle-behave && npm run test && npm run package",
+		"compile": "npm run bundle-behave && npm run clean-output && webpack",
+		"bundle-behave": "uv pip install --target bundled/libs --no-deps behave==1.3.3",
 		"watch": "npm run clean-output && webpack --watch",
-		"package": "webpack --mode production --devtool hidden-source-map",
-		"compile-tests": "tsc -p . --outDir out",
-		"watch-tests": "tsc -p . -w --outDir out",
+		"package": "npm run bundle-behave && webpack --mode production --devtool hidden-source-map",
+		"compile-tests": "tsc -p test/tsconfig.json",
+		"watch-tests": "tsc -p test/tsconfig.json -w",
 		"lint": "eslint src --ext ts",
-		"test": "node ./out/_integrationTests/runTestSuites.js --stable",
-		"pretest": "npm run compile && npm run compile-tests && npm run lint",
+		"lint:python": "uv run ruff check src/python example-projects && uv run ruff format --check src/python example-projects && uv run python -m mypy src/python",
+		"test:unit": "npm run compile-tests && node ./out/test/test/unit/run.js",
+		"test:integration": "npm run compile-tests && node ./out/test/test/integration/runTestSuites.js --stable",
+		"test:debug-suite": "npm run compile-tests && node ./out/test/test/integration/runDebugSuite.js --insiders",
+		"test": "npm run test:unit && npm run test:integration",
+		"pretest": "npm run compile && npm run lint && npm run lint:python",
 		"pretestinsiders": "npm run pretest",
-		"testinsiders": "node ./out/_integrationTests/runTestSuites.js --insiders",
+		"testinsiders": "npm run compile-tests && node ./out/test/test/integration/runTestSuites.js --insiders",
 		"rimraf": "./node_modules/rimraf/bin.js",
 		"clean-output": "rimraf out/ dist/"
 	},
 	"devDependencies": {
-		"@types/glob": "^7.1.4",
-		"@types/mocha": "^9.0.0",
-		"@types/node": "17.x",
+		"@types/glob": "^8.1.0",
+		"@types/mocha": "^10.0.10",
+		"@types/sinon": "^21.0.0",
 		"@types/vscode": "^1.82.0",
 		"@types/xml2js": "^0.4.11",
 		"@typescript-eslint/eslint-plugin": "^5.9.0",
 		"@typescript-eslint/parser": "^5.9.0",
-		"@vscode/test-electron": "^2.1.3",
+		"@vscode/test-electron": "^2.5.2",
+		"copy-webpack-plugin": "^13.0.1",
 		"eslint": "^8.6.0",
 		"glob": "^7.1.7",
 		"mocha": "^9.1.3",
 		"rimraf": "^3.0.2",
+		"sinon": "^21.0.1",
 		"ts-loader": "^9.2.5",
 		"typescript": "^4.5.5",
 		"webpack": "^5.76.0",
