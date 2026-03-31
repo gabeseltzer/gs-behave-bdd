@@ -212,6 +212,10 @@ export class FileParser {
       );
       diagLog(`${caller}: _parseStepsFiles loadFromBehave took ${Math.round(performance.now() - loadBehaveStart)}ms, returned ${result.steps.length} steps and ${result.fixtures.length} fixtures`);
 
+      if (result.stderr) {
+        config.logger.logInfo(`behave stderr output:\n${result.stderr}`, wkspSettings.uri);
+      }
+
       if (cancelToken.isCancellationRequested) {
         diagLog(`${caller}: cancelling, _parseStepsFiles stopped after behave load`);
         return 0;
@@ -639,6 +643,10 @@ export class FileParser {
             [stepsPath],
             wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined
           );
+
+          if (result.stderr) {
+            config.logger.logInfo(`behave stderr output:\n${result.stderr}`, wkspSettings.uri);
+          }
 
           if (result.error) {
             // discover.py reported an error (e.g. duplicate steps) — keep old definitions

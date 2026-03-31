@@ -557,3 +557,126 @@ suite('duplicate step diagnostics integration (via reparseFile)', () => {
     assert.ok(errors[0]?.includes('AmbiguousStep'));
   });
 });
+
+
+suite('stderr logging to output channel (via reparseFile)', () => {
+  let fileParser: FileParser;
+  let clock: sinon.SinonFakeTimers;
+  let loadFromBehaveStub: sinon.SinonStub;
+  let logInfoStub: sinon.SinonStub;
+
+  const wkspUri = vscode.Uri.file('c:/test-workspace');
+  const featuresUri = vscode.Uri.joinPath(wkspUri, 'features');
+  const stepsUri = vscode.Uri.joinPath(wkspUri, 'steps');
+  const stepsFileUri = vscode.Uri.joinPath(stepsUri, 'steps.py');
+
+  const wkspSettings = {
+    uri: wkspUri,
+    name: 'test',
+    featuresUri: featuresUri,
+    stepsSearchUri: stepsUri,
+    projectUri: wkspUri,
+  } as WorkspaceSettings;
+
+  setup(() => {
+    clock = sinon.useFakeTimers();
+    fileParser = new FileParser();
+
+    sinon.stub(commonModule, 'isStepsFile').returns(true);
+    sinon.stub(commonModule, 'isFeatureFile').returns(false);
+    sinon.stub(commonModule, 'couldBePythonStepsFile').returns(true);
+    sinon.stub(commonModule, 'getContentFromFilesystem').resolves('');
+    sinon.stub(commonModule, 'findFiles').resolves([stepsFileUri]);
+
+    sinon.stub(stepsMapModule, 'rebuildStepMappings');
+    loadFromBehaveStub = sinon.stub(behaveLoaderModule, 'loadFromBehave').resolves({ steps: [], fixtures: [] });
+    sinon.stub(adapterModule, 'storeBehaveStepDefinitions').resolves(0);
+    sinon.stub(stepsParserModule, 'deleteStepFileSteps');
+    sinon.stub(fixtureParserModule, 'deleteFixtures');
+    sinon.stub(dupDiagModule, 'setDuplicateStepDiagnostics');
+    sinon.stub(dupDiagModule, 'clearDuplicateStepDiagnostics');
+
+    sinon.stub(configModule.config, 'getPythonExecutable').resolves('python3');
+    sinon.stub(configModule.config.logger, 'showError');
+    sinon.stub(configModule.config.logger, 'showWarn');
+    logInfoStub = sinon.stub(configModule.config.logger, 'logInfo');
+    sinon.stub(configModule.config.logger, 'show');
+  });
+
+  teardown(() => {
+    fileParser.dispose();
+    clock.restore();
+    sinon.restore();
+  });
+
+  test('stderr from behave is logged to the output channel on success', async () => {
+    loadFromBehaveStub.resolves({
+      steps: [], fixtures: [],
+      stderr: 'UserWarning: some deprecation warning from a step file',
+    });
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    const stderrLogCall = logInfoStub.getCalls().find(
+      (c: sinon.SinonSpyCall) => (c.args[0] as string).includes('behave stderr output')
+    );
+    assert.ok(stderrLogCall, 'logInfo should be called with stderr output');
+    assert.ok((stderrLogCall.args[0] as string).includes('UserWarning'),
+      'the full stderr content should be in the log');
+  });
+
+  test('stderr from behave is logged to the output channel on error', async () => {
+    loadFromBehaveStub.resolves({
+      steps: [], fixtures: [],
+      error: 'Failed to load steps',
+      stderr: 'Traceback (most recent call last):\n  File "steps.py", line 5\nAmbiguousStep: duplicate',
+    });
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    const stderrLogCall = logInfoStub.getCalls().find(
+      (c: sinon.SinonSpyCall) => (c.args[0] as string).includes('behave stderr output')
+    );
+    assert.ok(stderrLogCall, 'logInfo should log stderr even when there is an error');
+    assert.ok((stderrLogCall.args[0] as string).includes('Traceback'),
+      'the full traceback should be in the log');
+  });
+
+  test('no stderr logging when stderr is empty', async () => {
+    loadFromBehaveStub.resolves({ steps: [], fixtures: [] });
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    const stderrLogCall = logInfoStub.getCalls().find(
+      (c: sinon.SinonSpyCall) => (c.args[0] as string).includes('behave stderr output')
+    );
+    assert.ok(!stderrLogCall, 'logInfo should NOT log stderr when it is empty/undefined');
+  });
+
+  test('no stderr logging when stderr is undefined', async () => {
+    loadFromBehaveStub.resolves({ steps: [], fixtures: [], stderr: undefined });
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    const stderrLogCall = logInfoStub.getCalls().find(
+      (c: sinon.SinonSpyCall) => (c.args[0] as string).includes('behave stderr output')
+    );
+    assert.ok(!stderrLogCall, 'logInfo should NOT log stderr when it is undefined');
+  });
+});

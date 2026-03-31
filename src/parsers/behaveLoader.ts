@@ -50,6 +50,8 @@ export interface BehaveDiscoveryResult {
   fixtures: BehaveFixtureDefinition[];
   error?: string;
   duplicates?: DuplicateStepInfo[];
+  /** Raw stderr from the Python process (warnings, tracebacks, etc.) */
+  stderr?: string;
 }
 
 /**
@@ -75,7 +77,7 @@ export async function loadFromBehave(
     const args = [projectPath, JSON.stringify(stepsPaths)];
     if (bundledLibsPath)
       args.push('--bundled-libs', bundledLibsPath);
-    const output = await spawnPython(pythonExec, scriptPath, args, projectPath);
+    const { stdout: output, stderr: processStderr } = await spawnPython(pythonExec, scriptPath, args, projectPath);
 
     // Parse JSON output
     interface RawStepInfo {
@@ -144,7 +146,7 @@ export async function loadFromBehave(
     if (duplicates?.length)
       diagLog(`loadFromBehave: ${duplicates.length} duplicate step definitions detected`);
 
-    return { steps, fixtures, error: parsed.error, duplicates };
+    return { steps, fixtures, error: parsed.error, duplicates, stderr: processStderr || undefined };
 
   } catch (e) {
     const elapsed = Math.round(performance.now() - startTime);
@@ -187,6 +189,11 @@ export function getDiscoveryScriptPath(): string {
   throw new Error(`Could not find discover.py (searched from ${__dirname})`);
 }
 
+interface SpawnResult {
+  stdout: string;
+  stderr: string;
+}
+
 /**
  * Spawns Python process with a script file
  */
@@ -195,7 +202,7 @@ function spawnPython(
   scriptPath: string,
   args: string[],
   cwd: string
-): Promise<string> {
+): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     let stdout = '';
     let stderr = '';
@@ -206,7 +213,7 @@ function spawnPython(
       settled = true;
       clearTimeout(timeoutId);
       if (err) reject(err);
-      else resolve(stdout.trim());
+      else resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
     };
 
     const cp = spawn(pythonExec, [scriptPath, ...args], {
