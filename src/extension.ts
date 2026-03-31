@@ -88,6 +88,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     parser.onStatusChange((busy: boolean) => {
       statusItem.busy = busy;
       statusItem.text = busy ? "Behave: Parsing..." : "Behave: Ready";
+      if (!busy)
+        statusItem.severity = vscode.LanguageStatusSeverity.Information;
+    });
+
+    parser.onStepLoadError((error: string | undefined) => {
+      if (error) {
+        statusItem.text = "Behave: Step Load Error";
+        statusItem.severity = vscode.LanguageStatusSeverity.Error;
+        statusItem.detail = error.length > 200 ? error.substring(0, 200) + "..." : error;
+      } else {
+        statusItem.detail = undefined;
+        // severity is reset by onStatusChange when parsing completes
+      }
     });
 
     // After a Python step/env file debounce fires and step mappings are rebuilt, re-validate
