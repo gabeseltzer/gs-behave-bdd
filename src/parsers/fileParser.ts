@@ -162,10 +162,6 @@ export class FileParser {
   private _parseStepsFiles = async (wkspSettings: WorkspaceSettings, cancelToken: vscode.CancellationToken,
     caller: string): Promise<number> => {
 
-    diagLog("removing existing steps for workspace: " + wkspSettings.name);
-    deleteStepFileSteps(wkspSettings.featuresUri);
-    deleteFixtures(wkspSettings.featuresUri);
-
     // Single findFiles call for all .py files — used to find step directories
     const findFilesStart = performance.now();
     const searchInFeatures = wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path);
@@ -178,6 +174,7 @@ export class FileParser {
     const stepFiles = allPyFiles.filter(uri => isStepsFile(uri));
 
     // Load all steps and fixtures using behave's built-in registry (handles imports automatically)
+    // We load BEFORE deleting old steps so that on failure we keep the previous valid definitions
     try {
       const getPythonStart = performance.now();
       const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
@@ -210,6 +207,11 @@ export class FileParser {
         return 0;
       }
 
+      // Behave loaded successfully — now safe to replace old definitions
+      diagLog("removing existing steps for workspace: " + wkspSettings.name);
+      deleteStepFileSteps(wkspSettings.featuresUri);
+      deleteFixtures(wkspSettings.featuresUri);
+
       // Convert and store all behave definitions
       const storeBehaveStart = performance.now();
       const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, result.steps);
@@ -228,9 +230,10 @@ export class FileParser {
 
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
-      diagLog(`behave step loading error: ${errMsg}`);
-      config.logger.showWarn(`Failed to load step definitions: ${errMsg}`, wkspSettings.uri);
-      return 0;
+      diagLog(`behave step loading error (keeping previous step definitions): ${errMsg}`);
+      config.logger.showWarn(`Failed to load step definitions (keeping previous): ${errMsg}`, wkspSettings.uri);
+      // Return the count of step files found (not 0) so callers know files exist even though loading failed
+      return stepFiles.length;
     }
   }
 
@@ -584,9 +587,6 @@ export class FileParser {
         diagLog(`[reparseFile] Starting: file=${fileUri.path}`);
 
         try {
-          deleteStepFileSteps(wkspSettings.featuresUri);
-          deleteFixtures(wkspSettings.featuresUri);
-
           const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
           const startTime = performance.now();
 
@@ -613,6 +613,10 @@ export class FileParser {
             wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined
           );
 
+          // Behave loaded successfully — now safe to replace old definitions
+          deleteStepFileSteps(wkspSettings.featuresUri);
+          deleteFixtures(wkspSettings.featuresUri);
+
           const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, result.steps);
           storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
           const elapsed = Math.round(performance.now() - startTime);
@@ -620,7 +624,7 @@ export class FileParser {
 
           tokenSource.dispose();
         } catch (e) {
-          diagLog(`[reparseFile] Behave step loading error: ${e instanceof Error ? e.message : String(e)}`);
+          diagLog(`[reparseFile] Behave step loading error (keeping previous step definitions): ${e instanceof Error ? e.message : String(e)}`);
         }
 
         rebuildStepMappings(wkspSettings.featuresUri);
