@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import json
+import re as _re
 import sys
 import types
 from pathlib import Path
@@ -51,7 +52,8 @@ class StepLoadError(Exception):
 
 
 def load_step_directories(steps_paths: list[str]) -> None:
-  """Load step modules from all step directories.
+  """
+  Load step modules from all step directories.
 
   Raises StepLoadError instead of exiting, so the caller can attempt
   duplicate detection before producing output.
@@ -143,8 +145,6 @@ def collect_fixtures_from_modules(
   return fixtures
 
 
-import re as _re
-
 # Matches @given("..."), @when('...'), @behave.step("..."), etc.
 _DECORATOR_RE = _re.compile(
   r"^\s*@(?:behave\.)?(step|given|when|then)\(\s*u?(?:\"|')(.+?)(?:\"|')",
@@ -152,13 +152,10 @@ _DECORATOR_RE = _re.compile(
 )
 
 
-def find_duplicate_steps(steps_paths: list[str]) -> list[dict[str, Any]]:
-  """Scan step files with regex to find duplicate step decorator patterns.
-
-  Returns a list of duplicate entries, where each entry represents one
-  occurrence of a pattern that appears more than once across all step files.
-  """
-  # Collect all (step_type, pattern) -> [(file, line), ...]
+def _collect_step_patterns(
+  steps_paths: list[str],
+) -> dict[tuple[str, str], list[dict[str, Any]]]:
+  """Collect all step decorator patterns from step files."""
   pattern_locations: dict[tuple[str, str], list[dict[str, Any]]] = {}
 
   for sp in steps_paths:
@@ -176,14 +173,29 @@ def find_duplicate_steps(steps_paths: list[str]) -> list[dict[str, Any]]:
           continue
         step_type = m.group(1).lower()
         pattern = m.group(2)
-        key = (step_type, pattern)
-        entry = {"file": str(py_file), "line": line_no, "step_type": step_type, "pattern": pattern}
-        pattern_locations.setdefault(key, []).append(entry)
+        entry = {
+          "file": str(py_file),
+          "line": line_no,
+          "step_type": step_type,
+          "pattern": pattern,
+        }
+        pattern_locations.setdefault((step_type, pattern), []).append(entry)
         # @step matches all types, so also register under a wildcard key
         if step_type == "step":
           for alias in ("given", "when", "then"):
-            alias_key = (alias, pattern)
-            pattern_locations.setdefault(alias_key, []).append(entry)
+            pattern_locations.setdefault((alias, pattern), []).append(entry)
+
+  return pattern_locations
+
+
+def find_duplicate_steps(steps_paths: list[str]) -> list[dict[str, Any]]:
+  """
+  Scan step files with regex to find duplicate step decorator patterns.
+
+  Returns a list of duplicate entries, where each entry represents one
+  occurrence of a pattern that appears more than once across all step files.
+  """
+  pattern_locations = _collect_step_patterns(steps_paths)
 
   # Filter to patterns with 2+ occurrences (deduplicate entries by file+line)
   duplicates: list[dict[str, Any]] = []
@@ -222,6 +234,37 @@ def _get_file_path(matcher: Any) -> str:
   return file_path
 
 
+def _setup_sys_path(
+  project_path: str,
+  steps_paths: list[str],
+  bundled_libs: str | None,
+) -> None:
+  """Configure sys.path for behave imports."""
+  if bundled_libs:
+    sys.path.insert(0, bundled_libs)
+
+  if project_path not in sys.path:
+    sys.path.insert(0, project_path)
+
+  # Add parent directories of step paths so that modules living alongside the
+  # features directory (e.g. lib/) can be imported.  Step paths are like
+  # ".../subproject/features/steps", so grandparent is ".../subproject".
+  for sp in steps_paths:
+    features_dir = str(Path(sp).resolve().parent)
+    behave_project_dir = str(Path(features_dir).parent)
+    if behave_project_dir not in sys.path:
+      sys.path.insert(0, behave_project_dir)
+
+
+def _parse_bundled_libs() -> str | None:
+  """Parse the optional --bundled-libs argument from sys.argv."""
+  if "--bundled-libs" in sys.argv:
+    idx = sys.argv.index("--bundled-libs")
+    if idx + 1 < len(sys.argv):
+      return sys.argv[idx + 1]
+  return None
+
+
 def main() -> None:
   """Main entry point for step and fixture discovery."""
   try:
@@ -229,29 +272,7 @@ def main() -> None:
     steps_paths_json = sys.argv[2] if len(sys.argv) > 2 else "[]"
     steps_paths = json.loads(steps_paths_json)
 
-    # Parse optional --bundled-libs argument
-    bundled_libs = None
-    if "--bundled-libs" in sys.argv:
-      idx = sys.argv.index("--bundled-libs")
-      if idx + 1 < len(sys.argv):
-        bundled_libs = sys.argv[idx + 1]
-
-    # Insert bundled libs path before importing behave
-    if bundled_libs:
-      sys.path.insert(0, bundled_libs)
-
-    if project_path not in sys.path:
-      sys.path.insert(0, project_path)
-
-    # Add parent directories of step paths to sys.path so that modules living
-    # alongside the features directory (e.g. lib/) can be imported.
-    # Step paths are like ".../subproject/features/steps", so grandparent is
-    # ".../subproject" which is typically where behave.ini and importable modules live.
-    for sp in steps_paths:
-      features_dir = str(Path(sp).resolve().parent)
-      behave_project_dir = str(Path(features_dir).parent)
-      if behave_project_dir not in sys.path:
-        sys.path.insert(0, behave_project_dir)
+    _setup_sys_path(project_path, steps_paths, _parse_bundled_libs())
 
     from behave import step_registry  # noqa: PLC0415  # deferred until sys.path setup
 
