@@ -14,6 +14,7 @@ import * as behaveLoaderModule from '../../../src/parsers/behaveLoader';
 import * as adapterModule from '../../../src/parsers/stepsParserBehaveAdapter';
 import * as stepsParserModule from '../../../src/parsers/stepsParser';
 import * as fixtureParserModule from '../../../src/parsers/fixtureParser';
+import * as dupDiagModule from '../../../src/handlers/duplicateStepDiagnostics';
 
 
 suite('atomic step reload - reparseFile (debounced Python path)', () => {
@@ -384,5 +385,175 @@ suite('step load error notification', () => {
     await clock.tickAsync(500);
 
     assert.ok(!showWarnStub.called, 'showWarningMessage should NOT be called on success');
+  });
+});
+
+
+suite('duplicate step diagnostics integration (via reparseFile)', () => {
+  let fileParser: FileParser;
+  let clock: sinon.SinonFakeTimers;
+  let loadFromBehaveStub: sinon.SinonStub;
+  let setDupDiagStub: sinon.SinonStub;
+  let clearDupDiagStub: sinon.SinonStub;
+  let deleteStepFileStepsStub: sinon.SinonStub;
+
+  const wkspUri = vscode.Uri.file('c:/test-workspace');
+  const featuresUri = vscode.Uri.joinPath(wkspUri, 'features');
+  const stepsUri = vscode.Uri.joinPath(wkspUri, 'steps');
+  const stepsFileUri = vscode.Uri.joinPath(stepsUri, 'steps.py');
+
+  const wkspSettings = {
+    uri: wkspUri,
+    name: 'test',
+    featuresUri: featuresUri,
+    stepsSearchUri: stepsUri,
+    projectUri: wkspUri,
+  } as WorkspaceSettings;
+
+  setup(() => {
+    clock = sinon.useFakeTimers();
+    fileParser = new FileParser();
+
+    sinon.stub(commonModule, 'isStepsFile').returns(true);
+    sinon.stub(commonModule, 'isFeatureFile').returns(false);
+    sinon.stub(commonModule, 'couldBePythonStepsFile').returns(true);
+    sinon.stub(commonModule, 'getContentFromFilesystem').resolves('');
+    sinon.stub(commonModule, 'findFiles').resolves([stepsFileUri]);
+
+    sinon.stub(stepsMapModule, 'rebuildStepMappings');
+    loadFromBehaveStub = sinon.stub(behaveLoaderModule, 'loadFromBehave').resolves({ steps: [], fixtures: [] });
+    sinon.stub(adapterModule, 'storeBehaveStepDefinitions').resolves(0);
+    deleteStepFileStepsStub = sinon.stub(stepsParserModule, 'deleteStepFileSteps');
+    sinon.stub(fixtureParserModule, 'deleteFixtures');
+
+    setDupDiagStub = sinon.stub(dupDiagModule, 'setDuplicateStepDiagnostics');
+    clearDupDiagStub = sinon.stub(dupDiagModule, 'clearDuplicateStepDiagnostics');
+
+    sinon.stub(configModule.config, 'getPythonExecutable').resolves('python3');
+    sinon.stub(configModule.config.logger, 'showError');
+    sinon.stub(configModule.config.logger, 'showWarn');
+    sinon.stub(configModule.config.logger, 'logInfo');
+    sinon.stub(configModule.config.logger, 'show');
+  });
+
+  teardown(() => {
+    fileParser.dispose();
+    clock.restore();
+    sinon.restore();
+  });
+
+  test('when loadFromBehave returns error with duplicates, setDuplicateStepDiagnostics is called', async () => {
+    const duplicates = [
+      { stepType: 'given', pattern: 'a step', filePath: '/proj/steps/a.py', lineNumber: 5 },
+      { stepType: 'given', pattern: 'a step', filePath: '/proj/steps/b.py', lineNumber: 10 },
+    ];
+    loadFromBehaveStub.resolves({
+      steps: [], fixtures: [],
+      error: 'AmbiguousStep: duplicate step',
+      duplicates,
+    });
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.ok(setDupDiagStub.calledOnce, 'setDuplicateStepDiagnostics should be called');
+    assert.deepStrictEqual(setDupDiagStub.firstCall.args[0], duplicates,
+      'should pass the duplicate info from the result');
+  });
+
+  test('when loadFromBehave returns error with duplicates, old steps are NOT deleted', async () => {
+    loadFromBehaveStub.resolves({
+      steps: [], fixtures: [],
+      error: 'AmbiguousStep: duplicate step',
+      duplicates: [
+        { stepType: 'given', pattern: 'a step', filePath: '/proj/steps/a.py', lineNumber: 5 },
+        { stepType: 'given', pattern: 'a step', filePath: '/proj/steps/b.py', lineNumber: 10 },
+      ],
+    });
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.strictEqual(deleteStepFileStepsStub.callCount, 0,
+      'old steps should be preserved when error+duplicates are returned');
+  });
+
+  test('when loadFromBehave returns error WITHOUT duplicates, setDuplicateStepDiagnostics is NOT called', async () => {
+    loadFromBehaveStub.resolves({
+      steps: [], fixtures: [],
+      error: 'ImportError: some module not found',
+    });
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.strictEqual(setDupDiagStub.callCount, 0,
+      'should not set duplicate diagnostics for non-duplicate errors');
+  });
+
+  test('when loadFromBehave succeeds, duplicate diagnostics are cleared', async () => {
+    loadFromBehaveStub.resolves({ steps: [], fixtures: [] });
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.ok(clearDupDiagStub.called, 'clearDuplicateStepDiagnostics should be called on success');
+  });
+
+  test('error then success: duplicates set then cleared', async () => {
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    // First: error with duplicates
+    loadFromBehaveStub.resolves({
+      steps: [], fixtures: [],
+      error: 'AmbiguousStep',
+      duplicates: [
+        { stepType: 'given', pattern: 'x', filePath: '/a.py', lineNumber: 1 },
+        { stepType: 'given', pattern: 'x', filePath: '/b.py', lineNumber: 1 },
+      ],
+    });
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.ok(setDupDiagStub.calledOnce, 'duplicates should be set');
+
+    // Second: success
+    loadFromBehaveStub.resolves({ steps: [], fixtures: [] });
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.ok(clearDupDiagStub.called, 'duplicates should be cleared on success');
+  });
+
+  test('onStepLoadError fires when loadFromBehave returns error in result', async () => {
+    const errors: (string | undefined)[] = [];
+    fileParser.onStepLoadError((err) => errors.push(err));
+
+    loadFromBehaveStub.resolves({
+      steps: [], fixtures: [],
+      error: 'AmbiguousStep: @given("a step") has already been defined',
+    });
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.strictEqual(errors.length, 1);
+    assert.ok(errors[0]?.includes('AmbiguousStep'));
   });
 });

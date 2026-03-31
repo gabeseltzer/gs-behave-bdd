@@ -33,11 +33,23 @@ export interface BehaveFixtureDefinition {
 }
 
 /**
+ * A step definition that appears more than once across step files
+ */
+export interface DuplicateStepInfo {
+  stepType: string;
+  pattern: string;
+  filePath: string;
+  lineNumber: number;
+}
+
+/**
  * Combined result from the Python discovery subprocess
  */
 export interface BehaveDiscoveryResult {
   steps: BehaveStepDefinition[];
   fixtures: BehaveFixtureDefinition[];
+  error?: string;
+  duplicates?: DuplicateStepInfo[];
 }
 
 /**
@@ -81,9 +93,18 @@ export async function loadFromBehave(
       def_line: number;
     }
 
+    interface RawDuplicateInfo {
+      step_type: string;
+      pattern: string;
+      file: string;
+      line: number;
+    }
+
     interface RawOutput {
       steps: RawStepInfo[];
       fixtures: RawFixtureInfo[];
+      error?: string;
+      duplicates?: RawDuplicateInfo[];
     }
 
     let parsed: RawOutput;
@@ -109,10 +130,21 @@ export async function loadFromBehave(
       defLine: f.def_line
     }));
 
+    const duplicates: DuplicateStepInfo[] | undefined = parsed.duplicates?.map(d => ({
+      stepType: d.step_type,
+      pattern: d.pattern,
+      filePath: d.file,
+      lineNumber: d.line
+    }));
+
     const elapsed = Math.round(performance.now() - startTime);
     diagLog(`loadFromBehave: loaded ${steps.length} steps and ${fixtures.length} fixtures in ${elapsed}ms`);
+    if (parsed.error)
+      diagLog(`loadFromBehave: error from Python: ${parsed.error}`);
+    if (duplicates?.length)
+      diagLog(`loadFromBehave: ${duplicates.length} duplicate step definitions detected`);
 
-    return { steps, fixtures };
+    return { steps, fixtures, error: parsed.error, duplicates };
 
   } catch (e) {
     const elapsed = Math.round(performance.now() - startTime);
