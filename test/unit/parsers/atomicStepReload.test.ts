@@ -57,6 +57,8 @@ suite('atomic step reload - reparseFile (debounced Python path)', () => {
     sinon.stub(configModule.config, 'getPythonExecutable').resolves('python3');
     sinon.stub(configModule.config.logger, 'showError');
     sinon.stub(configModule.config.logger, 'showWarn');
+    sinon.stub(configModule.config.logger, 'logInfo');
+    sinon.stub(configModule.config.logger, 'show');
   });
 
   teardown(() => {
@@ -150,5 +152,237 @@ suite('atomic step reload - reparseFile (debounced Python path)', () => {
       'delete should be called on subsequent success');
     assert.strictEqual(storeBehaveStepDefinitionsStub.callCount, 1,
       'store should be called on subsequent success');
+  });
+});
+
+
+suite('step load error notification', () => {
+  let fileParser: FileParser;
+  let clock: sinon.SinonFakeTimers;
+  let loadFromBehaveStub: sinon.SinonStub;
+
+  const wkspUri = vscode.Uri.file('c:/test-workspace');
+  const featuresUri = vscode.Uri.joinPath(wkspUri, 'features');
+  const stepsUri = vscode.Uri.joinPath(wkspUri, 'steps');
+  const stepsFileUri = vscode.Uri.joinPath(stepsUri, 'steps.py');
+
+  const wkspSettings = {
+    uri: wkspUri,
+    name: 'test',
+    featuresUri: featuresUri,
+    stepsSearchUri: stepsUri,
+    projectUri: wkspUri,
+  } as WorkspaceSettings;
+
+  setup(() => {
+    clock = sinon.useFakeTimers();
+    fileParser = new FileParser();
+
+    sinon.stub(commonModule, 'isStepsFile').returns(true);
+    sinon.stub(commonModule, 'isFeatureFile').returns(false);
+    sinon.stub(commonModule, 'couldBePythonStepsFile').returns(true);
+    sinon.stub(commonModule, 'getContentFromFilesystem').resolves('');
+    sinon.stub(commonModule, 'findFiles').resolves([stepsFileUri]);
+
+    sinon.stub(stepsMapModule, 'rebuildStepMappings');
+    loadFromBehaveStub = sinon.stub(behaveLoaderModule, 'loadFromBehave').resolves({ steps: [], fixtures: [] });
+    sinon.stub(adapterModule, 'storeBehaveStepDefinitions').resolves(0);
+    sinon.stub(stepsParserModule, 'deleteStepFileSteps');
+    sinon.stub(fixtureParserModule, 'deleteFixtures');
+
+    sinon.stub(configModule.config, 'getPythonExecutable').resolves('python3');
+    sinon.stub(configModule.config.logger, 'showError');
+    sinon.stub(configModule.config.logger, 'showWarn');
+    sinon.stub(configModule.config.logger, 'logInfo');
+    sinon.stub(configModule.config.logger, 'show');
+  });
+
+  teardown(() => {
+    fileParser.dispose();
+    clock.restore();
+    sinon.restore();
+  });
+
+  test('on behave failure, onStepLoadError fires with error message', async () => {
+    const errorMsg = 'AmbiguousStep: @given("a step") has already been defined';
+    loadFromBehaveStub.rejects(new Error(errorMsg));
+
+    const errors: (string | undefined)[] = [];
+    fileParser.onStepLoadError((err) => errors.push(err));
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.strictEqual(errors.length, 1, 'onStepLoadError should fire once');
+    assert.ok(errors[0]?.includes('AmbiguousStep'), 'error message should contain the behave error');
+  });
+
+  test('on behave success, onStepLoadError fires with undefined to clear error', async () => {
+    loadFromBehaveStub.resolves({ steps: [], fixtures: [] });
+
+    const errors: (string | undefined)[] = [];
+    fileParser.onStepLoadError((err) => errors.push(err));
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.strictEqual(errors.length, 1, 'onStepLoadError should fire once');
+    assert.strictEqual(errors[0], undefined, 'should clear error on success');
+  });
+
+  test('on failure then success, error is set then cleared', async () => {
+    const errors: (string | undefined)[] = [];
+    fileParser.onStepLoadError((err) => errors.push(err));
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    // First: failure
+    loadFromBehaveStub.rejects(new Error('duplicate step'));
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    // Second: success
+    loadFromBehaveStub.resolves({ steps: [], fixtures: [] });
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.strictEqual(errors.length, 2, 'onStepLoadError should fire twice');
+    assert.ok(typeof errors[0] === 'string', 'first call should have error message');
+    assert.strictEqual(errors[1], undefined, 'second call should clear error');
+  });
+
+  test('on behave failure, warning message is shown with "Show Output" action', async () => {
+    const showWarnStub = sinon.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+    loadFromBehaveStub.rejects(new Error('Import error in step files'));
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.ok(showWarnStub.called, 'showWarningMessage should be called');
+    const args = showWarnStub.firstCall.args;
+    assert.ok(args[0].includes('Failed to load step definitions'),
+      'warning should describe the failure');
+    assert.ok(args[0].includes('keeping previous'),
+      'warning should mention that old definitions are preserved');
+    assert.strictEqual(args[1], 'Show Output',
+      'warning should offer "Show Output" action');
+  });
+
+  test('on behave failure, error details are logged to output channel', async () => {
+    const logInfoStub = configModule.config.logger.logInfo as sinon.SinonStub;
+    loadFromBehaveStub.rejects(new Error('Python process exited with code 1: duplicate step'));
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.ok(logInfoStub.called, 'logInfo should be called to log to output channel');
+    const loggedText = logInfoStub.firstCall.args[0];
+    assert.ok(loggedText.includes('duplicate step'),
+      'output channel should contain the error details');
+  });
+
+  test('clicking "Show Output" opens the output channel', async () => {
+    // Simulate user clicking "Show Output"
+    const showWarnStub = sinon.stub(vscode.window, 'showWarningMessage').resolves('Show Output' as unknown as vscode.MessageItem);
+    const showStub = configModule.config.logger.show as sinon.SinonStub;
+    loadFromBehaveStub.rejects(new Error('some error'));
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    // Allow the .then() callback on showWarningMessage to execute
+    await clock.tickAsync(0);
+
+    assert.ok(showWarnStub.called, 'showWarningMessage should be called');
+    assert.ok(showStub.called, 'logger.show should be called when user clicks "Show Output"');
+    assert.strictEqual(showStub.firstCall.args[0].path, wkspUri.path,
+      'logger.show should receive the workspace URI');
+  });
+
+  test('dismissing the warning does NOT open the output channel', async () => {
+    // Simulate user dismissing the warning (undefined = dismissed)
+    sinon.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+    const showStub = configModule.config.logger.show as sinon.SinonStub;
+    loadFromBehaveStub.rejects(new Error('some error'));
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+    await clock.tickAsync(0);
+
+    assert.ok(!showStub.called, 'logger.show should NOT be called when warning is dismissed');
+  });
+
+  test('multiple onStepLoadError handlers all receive notifications', async () => {
+    loadFromBehaveStub.rejects(new Error('test error'));
+
+    const handler1Calls: (string | undefined)[] = [];
+    const handler2Calls: (string | undefined)[] = [];
+    fileParser.onStepLoadError((err) => handler1Calls.push(err));
+    fileParser.onStepLoadError((err) => handler2Calls.push(err));
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.strictEqual(handler1Calls.length, 1, 'handler 1 should receive notification');
+    assert.strictEqual(handler2Calls.length, 1, 'handler 2 should receive notification');
+    assert.ok(handler1Calls[0]?.includes('test error'));
+    assert.ok(handler2Calls[0]?.includes('test error'));
+  });
+
+  test('long error messages are truncated in warning but full in output channel', async () => {
+    const longError = 'X'.repeat(600);
+    const showWarnStub = sinon.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+    const logInfoStub = configModule.config.logger.logInfo as sinon.SinonStub;
+    loadFromBehaveStub.rejects(new Error(longError));
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    // Warning message should be truncated
+    const warnText = showWarnStub.firstCall.args[0] as string;
+    assert.ok(warnText.length <= 516, `warning text should be truncated (got ${warnText.length})`);  // 512 + "..."
+    assert.ok(warnText.endsWith('...'), 'truncated warning should end with "..."');
+
+    // Output channel should have the full error
+    const logText = logInfoStub.firstCall.args[0] as string;
+    assert.ok(logText.includes(longError), 'output channel should contain the full error');
+  });
+
+  test('on behave success after error, no warning is shown', async () => {
+    const showWarnStub = sinon.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+    loadFromBehaveStub.resolves({ steps: [], fixtures: [] });
+
+    const testData = new WeakMap();
+    const ctrlStub = {} as vscode.TestController;
+
+    await fileParser.reparseFile(stepsFileUri, '', wkspSettings, testData, ctrlStub);
+    await clock.tickAsync(500);
+
+    assert.ok(!showWarnStub.called, 'showWarningMessage should NOT be called on success');
   });
 });

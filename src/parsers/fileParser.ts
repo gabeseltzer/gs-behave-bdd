@@ -41,6 +41,7 @@ export class FileParser {
   private _pythonReparseTimers: Map<string, NodeJS.Timeout> = new Map();
   private static readonly PYTHON_REPARSE_DEBOUNCE_MS = 500;
   private _statusChangeHandlers: ((busy: boolean) => void)[] = [];
+  private _stepLoadErrorHandlers: ((error: string | undefined) => void)[] = [];
 
   // Called after a Python file debounce fires and step mappings have been rebuilt.
   // extension.ts registers this to re-validate diagnostics for all open feature files.
@@ -54,8 +55,16 @@ export class FileParser {
     this._statusChangeHandlers.push(handler);
   }
 
+  public onStepLoadError(handler: (error: string | undefined) => void) {
+    this._stepLoadErrorHandlers.push(handler);
+  }
+
   private _notifyStatusChange(busy: boolean) {
     this._statusChangeHandlers.forEach(h => h(busy));
+  }
+
+  private _notifyStepLoadError(error: string | undefined) {
+    this._stepLoadErrorHandlers.forEach(h => h(error));
   }
 
   async featureParseComplete(timeout: number, caller: string) {
@@ -207,7 +216,8 @@ export class FileParser {
         return 0;
       }
 
-      // Behave loaded successfully — now safe to replace old definitions
+      // Behave loaded successfully — clear any previous error state and replace old definitions
+      this._notifyStepLoadError(undefined);
       diagLog("removing existing steps for workspace: " + wkspSettings.name);
       deleteStepFileSteps(wkspSettings.featuresUri);
       deleteFixtures(wkspSettings.featuresUri);
@@ -231,7 +241,9 @@ export class FileParser {
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
       diagLog(`behave step loading error (keeping previous step definitions): ${errMsg}`);
-      config.logger.showWarn(`Failed to load step definitions (keeping previous): ${errMsg}`, wkspSettings.uri);
+      config.logger.logInfo(`Failed to load step definitions (keeping previous): ${errMsg}`, wkspSettings.uri);
+      this._notifyStepLoadError(errMsg);
+      this._showStepLoadWarning(errMsg, wkspSettings.uri);
       // Return the count of step files found (not 0) so callers know files exist even though loading failed
       return stepFiles.length;
     }
@@ -613,7 +625,8 @@ export class FileParser {
             wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined
           );
 
-          // Behave loaded successfully — now safe to replace old definitions
+          // Behave loaded successfully — clear any previous error state and replace old definitions
+          this._notifyStepLoadError(undefined);
           deleteStepFileSteps(wkspSettings.featuresUri);
           deleteFixtures(wkspSettings.featuresUri);
 
@@ -624,7 +637,11 @@ export class FileParser {
 
           tokenSource.dispose();
         } catch (e) {
-          diagLog(`[reparseFile] Behave step loading error (keeping previous step definitions): ${e instanceof Error ? e.message : String(e)}`);
+          const errMsg = e instanceof Error ? e.message : String(e);
+          diagLog(`[reparseFile] Behave step loading error (keeping previous step definitions): ${errMsg}`);
+          config.logger.logInfo(`Failed to load step definitions (keeping previous): ${errMsg}`, wkspSettings.uri);
+          this._notifyStepLoadError(errMsg);
+          this._showStepLoadWarning(errMsg, wkspSettings.uri);
         }
 
         rebuildStepMappings(wkspSettings.featuresUri);
@@ -641,6 +658,17 @@ export class FileParser {
     this._pythonReparseTimers.set(wkspKey, timer);
   }
 
+
+  private _showStepLoadWarning(errMsg: string, wkspUri: vscode.Uri) {
+    let winText = `Failed to load step definitions (keeping previous): ${errMsg}`;
+    if (winText.length > 512)
+      winText = winText.substring(0, 512) + "...";
+    // Fire-and-forget: don't block the caller or let errors propagate
+    vscode.window.showWarningMessage(winText, "Show Output").then(action => {
+      if (action === "Show Output")
+        config.logger.show(wkspUri);
+    }, () => { /* ignore dismiss/error */ });
+  }
 
   dispose() {
     for (const timer of this._pythonReparseTimers.values()) {
