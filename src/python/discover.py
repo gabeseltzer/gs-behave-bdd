@@ -46,8 +46,16 @@ def load_environment_files(steps_paths: list[str]) -> list[types.ModuleType]:
   return loaded_modules
 
 
+class StepLoadError(Exception):
+  """Raised when step loading fails, carrying the original error message."""
+
+
 def load_step_directories(steps_paths: list[str]) -> None:
-  """Load step modules from all step directories."""
+  """Load step modules from all step directories.
+
+  Raises StepLoadError instead of exiting, so the caller can attempt
+  duplicate detection before producing output.
+  """
   from behave import runner_util  # noqa: PLC0415  # deferred until sys.path setup
 
   step_dirs = [
@@ -58,9 +66,8 @@ def load_step_directories(steps_paths: list[str]) -> None:
 
   try:
     runner_util.load_step_modules(step_dirs)
-  except (ImportError, AttributeError, OSError) as load_err:
-    print(json.dumps({"error": f"Failed to load steps: {load_err!s}"}), file=sys.stderr)
-    sys.exit(1)
+  except Exception as load_err:
+    raise StepLoadError(str(load_err)) from load_err
 
 
 def collect_steps_from_registry(registry: Any) -> list[dict[str, Any]]:
@@ -136,6 +143,63 @@ def collect_fixtures_from_modules(
   return fixtures
 
 
+import re as _re
+
+# Matches @given("..."), @when('...'), @behave.step("..."), etc.
+_DECORATOR_RE = _re.compile(
+  r"^\s*@(?:behave\.)?(step|given|when|then)\(\s*u?(?:\"|')(.+?)(?:\"|')",
+  _re.IGNORECASE,
+)
+
+
+def find_duplicate_steps(steps_paths: list[str]) -> list[dict[str, Any]]:
+  """Scan step files with regex to find duplicate step decorator patterns.
+
+  Returns a list of duplicate entries, where each entry represents one
+  occurrence of a pattern that appears more than once across all step files.
+  """
+  # Collect all (step_type, pattern) -> [(file, line), ...]
+  pattern_locations: dict[tuple[str, str], list[dict[str, Any]]] = {}
+
+  for sp in steps_paths:
+    steps_dir = Path(sp).resolve()
+    if not steps_dir.exists():
+      continue
+    for py_file in steps_dir.glob("*.py"):
+      try:
+        lines = py_file.read_text(encoding="utf-8", errors="replace").splitlines()
+      except OSError:
+        continue
+      for line_no, line in enumerate(lines, start=1):
+        m = _DECORATOR_RE.match(line)
+        if not m:
+          continue
+        step_type = m.group(1).lower()
+        pattern = m.group(2)
+        key = (step_type, pattern)
+        entry = {"file": str(py_file), "line": line_no, "step_type": step_type, "pattern": pattern}
+        pattern_locations.setdefault(key, []).append(entry)
+        # @step matches all types, so also register under a wildcard key
+        if step_type == "step":
+          for alias in ("given", "when", "then"):
+            alias_key = (alias, pattern)
+            pattern_locations.setdefault(alias_key, []).append(entry)
+
+  # Filter to patterns with 2+ occurrences (deduplicate entries by file+line)
+  duplicates: list[dict[str, Any]] = []
+  seen: set[tuple[str, int]] = set()
+  for _key, locations in pattern_locations.items():
+    if len(locations) < 2:
+      continue
+    for loc in locations:
+      ident = (loc["file"], loc["line"])
+      if ident not in seen:
+        seen.add(ident)
+        duplicates.append(loc)
+
+  return duplicates
+
+
 def _get_regex_pattern(matcher: Any) -> str:
   """Extract regex pattern from matcher."""
   regex_pat = getattr(matcher, "regex_pattern", None)
@@ -192,7 +256,25 @@ def main() -> None:
     from behave import step_registry  # noqa: PLC0415  # deferred until sys.path setup
 
     env_modules = load_environment_files(steps_paths)
-    load_step_directories(steps_paths)
+
+    load_error: str | None = None
+    try:
+      load_step_directories(steps_paths)
+    except StepLoadError as e:
+      load_error = str(e)
+
+    if load_error is not None:
+      # Step loading failed — scan files to detect duplicates
+      duplicates = find_duplicate_steps(steps_paths)
+      result: dict[str, Any] = {
+        "steps": [],
+        "fixtures": [],
+        "error": load_error,
+      }
+      if duplicates:
+        result["duplicates"] = duplicates
+      print(json.dumps(result))
+      sys.exit(0)
 
     registry = step_registry.registry
     steps = collect_steps_from_registry(registry)
