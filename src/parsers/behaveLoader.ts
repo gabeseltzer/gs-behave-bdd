@@ -33,11 +33,25 @@ export interface BehaveFixtureDefinition {
 }
 
 /**
+ * A step definition that appears more than once across step files
+ */
+export interface DuplicateStepInfo {
+  stepType: string;
+  pattern: string;
+  filePath: string;
+  lineNumber: number;
+}
+
+/**
  * Combined result from the Python discovery subprocess
  */
 export interface BehaveDiscoveryResult {
   steps: BehaveStepDefinition[];
   fixtures: BehaveFixtureDefinition[];
+  error?: string;
+  duplicates?: DuplicateStepInfo[];
+  /** Raw stderr from the Python process (warnings, tracebacks, etc.) */
+  stderr?: string;
 }
 
 /**
@@ -63,7 +77,7 @@ export async function loadFromBehave(
     const args = [projectPath, JSON.stringify(stepsPaths)];
     if (bundledLibsPath)
       args.push('--bundled-libs', bundledLibsPath);
-    const output = await spawnPython(pythonExec, scriptPath, args, projectPath);
+    const { stdout: output, stderr: processStderr } = await spawnPython(pythonExec, scriptPath, args, projectPath);
 
     // Parse JSON output
     interface RawStepInfo {
@@ -81,9 +95,18 @@ export async function loadFromBehave(
       def_line: number;
     }
 
+    interface RawDuplicateInfo {
+      step_type: string;
+      pattern: string;
+      file: string;
+      line: number;
+    }
+
     interface RawOutput {
       steps: RawStepInfo[];
       fixtures: RawFixtureInfo[];
+      error?: string;
+      duplicates?: RawDuplicateInfo[];
     }
 
     let parsed: RawOutput;
@@ -109,10 +132,21 @@ export async function loadFromBehave(
       defLine: f.def_line
     }));
 
+    const duplicates: DuplicateStepInfo[] | undefined = parsed.duplicates?.map(d => ({
+      stepType: d.step_type,
+      pattern: d.pattern,
+      filePath: d.file,
+      lineNumber: d.line
+    }));
+
     const elapsed = Math.round(performance.now() - startTime);
     diagLog(`loadFromBehave: loaded ${steps.length} steps and ${fixtures.length} fixtures in ${elapsed}ms`);
+    if (parsed.error)
+      diagLog(`loadFromBehave: error from Python: ${parsed.error}`);
+    if (duplicates?.length)
+      diagLog(`loadFromBehave: ${duplicates.length} duplicate step definitions detected`);
 
-    return { steps, fixtures };
+    return { steps, fixtures, error: parsed.error, duplicates, stderr: processStderr || undefined };
 
   } catch (e) {
     const elapsed = Math.round(performance.now() - startTime);
@@ -123,6 +157,11 @@ export async function loadFromBehave(
     if (!bundledLibsPath && isBehaveNotInstalledError(errMsg)) {
       diagLog(`loadFromBehave: behave not found in environment, falling back to bundled behave`);
       return loadFromBehave(pythonExec, projectPath, stepsPaths, getBundledBehavePath());
+    }
+
+    // If bundled was already tried and still failed, give a clearer message than "pip install behave"
+    if (bundledLibsPath && isBehaveNotInstalledError(errMsg)) {
+      throw new Error(`Bundled behave at "${bundledLibsPath}" failed to import. This may indicate an extension installation issue.\n${errMsg}`);
     }
 
     throw e;
@@ -155,6 +194,11 @@ export function getDiscoveryScriptPath(): string {
   throw new Error(`Could not find discover.py (searched from ${__dirname})`);
 }
 
+interface SpawnResult {
+  stdout: string;
+  stderr: string;
+}
+
 /**
  * Spawns Python process with a script file
  */
@@ -163,7 +207,7 @@ function spawnPython(
   scriptPath: string,
   args: string[],
   cwd: string
-): Promise<string> {
+): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     let stdout = '';
     let stderr = '';
@@ -174,7 +218,7 @@ function spawnPython(
       settled = true;
       clearTimeout(timeoutId);
       if (err) reject(err);
-      else resolve(stdout.trim());
+      else resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
     };
 
     const cp = spawn(pythonExec, [scriptPath, ...args], {
@@ -206,9 +250,9 @@ function spawnPython(
         // Check if behave module itself is missing
         if ((stderrLower.includes('modulenotfounderror') || stderrLower.includes('importerror'))
           && stderrLower.includes('behave')) {
-          settle(new Error(`behave is not installed in the Python environment. Please install it: pip install behave`));
+          settle(new Error(`behave is not installed in the Python environment. Please install it: pip install behave\n[Details: ${stderr}]`));
         } else if (stderrLower.includes('behave') && stderrLower.includes('not installed')) {
-          settle(new Error(`behave is not installed in the Python environment. Please install it: pip install behave`));
+          settle(new Error(`behave is not installed in the Python environment. Please install it: pip install behave\n[Details: ${stderr}]`));
         } else if (stderrLower.includes('importerror') || stderrLower.includes('modulenotfounderror')) {
           settle(new Error(`Import error in step files: ${stderr}`));
         } else {
