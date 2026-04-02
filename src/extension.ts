@@ -98,8 +98,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         statusItem.severity = vscode.LanguageStatusSeverity.Error;
         statusItem.detail = error.length > 200 ? error.substring(0, 200) + "..." : error;
       } else {
+        statusItem.text = "Behave: Ready";
+        statusItem.severity = vscode.LanguageStatusSeverity.Information;
         statusItem.detail = undefined;
-        // severity is reset by onStatusChange when parsing completes
       }
     });
 
@@ -452,6 +453,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
 
           // If steps file or library file changes, re-validate step definitions in all open feature files
           if (couldBePythonStepsFile(uri) && !isEnvFile) {
+            // Immediately clear any stale step load error — the debounce will re-evaluate from disk
+            // after 500ms, but only surface an error if the file is still saved with the problem.
+            parser.clearStepLoadError();
             for (const document of vscode.workspace.textDocuments) {
               if (isFeatureFile(document.uri)) {
                 validateStepDefinitions(document);
