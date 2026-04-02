@@ -16,6 +16,7 @@ import { diagLog } from '../logger';
 import * as path from 'path';
 import { deleteStepMappings, rebuildStepMappings, getStepMappings } from './stepMappings';
 import { getBundledBehavePath } from '../bundledBehave';
+import { setDuplicateStepDiagnostics, clearDuplicateStepDiagnostics } from '../handlers/duplicateStepDiagnostics';
 
 
 // for integration test assertions      
@@ -41,6 +42,7 @@ export class FileParser {
   private _pythonReparseTimers: Map<string, NodeJS.Timeout> = new Map();
   private static readonly PYTHON_REPARSE_DEBOUNCE_MS = 500;
   private _statusChangeHandlers: ((busy: boolean) => void)[] = [];
+  private _stepLoadErrorHandlers: ((error: string | undefined) => void)[] = [];
 
   // Called after a Python file debounce fires and step mappings have been rebuilt.
   // extension.ts registers this to re-validate diagnostics for all open feature files.
@@ -54,8 +56,20 @@ export class FileParser {
     this._statusChangeHandlers.push(handler);
   }
 
+  public onStepLoadError(handler: (error: string | undefined) => void) {
+    this._stepLoadErrorHandlers.push(handler);
+  }
+
+  public clearStepLoadError() {
+    this._notifyStepLoadError(undefined);
+  }
+
   private _notifyStatusChange(busy: boolean) {
     this._statusChangeHandlers.forEach(h => h(busy));
+  }
+
+  private _notifyStepLoadError(error: string | undefined) {
+    this._stepLoadErrorHandlers.forEach(h => h(error));
   }
 
   async featureParseComplete(timeout: number, caller: string) {
@@ -162,10 +176,6 @@ export class FileParser {
   private _parseStepsFiles = async (wkspSettings: WorkspaceSettings, cancelToken: vscode.CancellationToken,
     caller: string): Promise<number> => {
 
-    diagLog("removing existing steps for workspace: " + wkspSettings.name);
-    deleteStepFileSteps(wkspSettings.featuresUri);
-    deleteFixtures(wkspSettings.featuresUri);
-
     // Single findFiles call for all .py files — used to find step directories
     const findFilesStart = performance.now();
     const searchInFeatures = wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path);
@@ -178,6 +188,7 @@ export class FileParser {
     const stepFiles = allPyFiles.filter(uri => isStepsFile(uri));
 
     // Load all steps and fixtures using behave's built-in registry (handles imports automatically)
+    // We load BEFORE deleting old steps so that on failure we keep the previous valid definitions
     try {
       const getPythonStart = performance.now();
       const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
@@ -205,10 +216,33 @@ export class FileParser {
       );
       diagLog(`${caller}: _parseStepsFiles loadFromBehave took ${Math.round(performance.now() - loadBehaveStart)}ms, returned ${result.steps.length} steps and ${result.fixtures.length} fixtures`);
 
+      if (result.stderr) {
+        config.logger.logInfo(`behave stderr output:\n${result.stderr}`, wkspSettings.uri);
+      }
+
       if (cancelToken.isCancellationRequested) {
         diagLog(`${caller}: cancelling, _parseStepsFiles stopped after behave load`);
         return 0;
       }
+
+      // If discover.py reported an error (e.g. duplicate steps), keep old definitions
+      if (result.error) {
+        diagLog(`behave step loading error: ${result.error}`);
+        config.logger.logInfo(`Failed to load step definitions: ${result.error}`, wkspSettings.uri);
+        this._notifyStepLoadError(result.error);
+        this._showStepLoadWarning(result.error, wkspSettings.uri);
+        if (result.duplicates?.length) {
+          setDuplicateStepDiagnostics(result.duplicates);
+        }
+        return stepFiles.length;
+      }
+
+      // Behave loaded successfully — clear any previous error state and replace old definitions
+      this._notifyStepLoadError(undefined);
+      clearDuplicateStepDiagnostics();
+      diagLog("removing existing steps for workspace: " + wkspSettings.name);
+      deleteStepFileSteps(wkspSettings.featuresUri);
+      deleteFixtures(wkspSettings.featuresUri);
 
       // Convert and store all behave definitions
       const storeBehaveStart = performance.now();
@@ -227,10 +261,14 @@ export class FileParser {
       return stepFileCount;
 
     } catch (e) {
+      // This catch handles truly unrecoverable errors (Python not found, timeout, etc.)
       const errMsg = e instanceof Error ? e.message : String(e);
       diagLog(`behave step loading error: ${errMsg}`);
-      config.logger.showWarn(`Failed to load step definitions: ${errMsg}`, wkspSettings.uri);
-      return 0;
+      config.logger.logInfo(`Failed to load step definitions: ${errMsg}`, wkspSettings.uri);
+      this._notifyStepLoadError(errMsg);
+      this._showStepLoadWarning(errMsg, wkspSettings.uri);
+      // Return the count of step files found (not 0) so callers know files exist even though loading failed
+      return stepFiles.length;
     }
   }
 
@@ -584,9 +622,6 @@ export class FileParser {
         diagLog(`[reparseFile] Starting: file=${fileUri.path}`);
 
         try {
-          deleteStepFileSteps(wkspSettings.featuresUri);
-          deleteFixtures(wkspSettings.featuresUri);
-
           const pythonExec = await config.getPythonExecutable(wkspSettings.uri, wkspSettings.name);
           const startTime = performance.now();
 
@@ -613,14 +648,46 @@ export class FileParser {
             wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined
           );
 
-          const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, result.steps);
-          storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
-          const elapsed = Math.round(performance.now() - startTime);
-          diagLog(`[reparseFile] Reloaded ${storedCount} steps and ${result.fixtures.length} fixtures from behave in ${elapsed}ms`);
+          if (result.stderr) {
+            config.logger.logInfo(`behave stderr output:\n${result.stderr}`, wkspSettings.uri);
+          }
+
+          if (result.error) {
+            // discover.py reported an error (e.g. duplicate steps) — keep old definitions
+            diagLog(`[reparseFile] Behave step loading error: ${result.error}`);
+            config.logger.logInfo(`Failed to load step definitions: ${result.error}`, wkspSettings.uri);
+            // Only surface the error when the triggering file is saved — if the document has
+            // unsaved changes (e.g. the user just undid a duplicate), the disk state is stale
+            // and showing the error would be misleading.
+            const openDoc = (vscode.workspace.textDocuments ?? []).find(d => d.uri.toString() === fileUri.toString());
+            if (!openDoc?.isDirty) {
+              this._notifyStepLoadError(result.error);
+              this._showStepLoadWarning(result.error, wkspSettings.uri);
+            }
+            if (result.duplicates?.length) {
+              setDuplicateStepDiagnostics(result.duplicates);
+            }
+          } else {
+            // Behave loaded successfully — clear any previous error state and replace old definitions
+            this._notifyStepLoadError(undefined);
+            clearDuplicateStepDiagnostics();
+            deleteStepFileSteps(wkspSettings.featuresUri);
+            deleteFixtures(wkspSettings.featuresUri);
+
+            const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, result.steps);
+            storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
+            const elapsed = Math.round(performance.now() - startTime);
+            diagLog(`[reparseFile] Reloaded ${storedCount} steps and ${result.fixtures.length} fixtures from behave in ${elapsed}ms`);
+          }
 
           tokenSource.dispose();
         } catch (e) {
-          diagLog(`[reparseFile] Behave step loading error: ${e instanceof Error ? e.message : String(e)}`);
+          // Truly unrecoverable errors (Python not found, timeout, etc.)
+          const errMsg = e instanceof Error ? e.message : String(e);
+          diagLog(`[reparseFile] Behave step loading error: ${errMsg}`);
+          config.logger.logInfo(`Failed to load step definitions: ${errMsg}`, wkspSettings.uri);
+          this._notifyStepLoadError(errMsg);
+          this._showStepLoadWarning(errMsg, wkspSettings.uri);
         }
 
         rebuildStepMappings(wkspSettings.featuresUri);
@@ -637,6 +704,17 @@ export class FileParser {
     this._pythonReparseTimers.set(wkspKey, timer);
   }
 
+
+  private _showStepLoadWarning(errMsg: string, wkspUri: vscode.Uri) {
+    let winText = `Failed to load step definitions: ${errMsg}`;
+    if (winText.length > 512)
+      winText = winText.substring(0, 512) + "...";
+    // Fire-and-forget: don't block the caller or let errors propagate
+    vscode.window.showWarningMessage(winText, "Show Output").then(action => {
+      if (action === "Show Output")
+        config.logger.show(wkspUri);
+    }, () => { /* ignore dismiss/error */ });
+  }
 
   dispose() {
     for (const timer of this._pythonReparseTimers.values()) {

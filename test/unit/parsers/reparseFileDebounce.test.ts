@@ -75,6 +75,8 @@ suite('fileParser - reparseFile debouncing', () => {
     // Stub logger methods to prevent channel access errors
     sinon.stub(configModule.config.logger, 'showError');
     sinon.stub(configModule.config.logger, 'showWarn');
+    sinon.stub(configModule.config.logger, 'logInfo');
+    sinon.stub(configModule.config.logger, 'show');
   });
 
   teardown(() => {
