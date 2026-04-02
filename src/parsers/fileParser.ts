@@ -60,6 +60,10 @@ export class FileParser {
     this._stepLoadErrorHandlers.push(handler);
   }
 
+  public clearStepLoadError() {
+    this._notifyStepLoadError(undefined);
+  }
+
   private _notifyStatusChange(busy: boolean) {
     this._statusChangeHandlers.forEach(h => h(busy));
   }
@@ -652,8 +656,14 @@ export class FileParser {
             // discover.py reported an error (e.g. duplicate steps) — keep old definitions
             diagLog(`[reparseFile] Behave step loading error: ${result.error}`);
             config.logger.logInfo(`Failed to load step definitions: ${result.error}`, wkspSettings.uri);
-            this._notifyStepLoadError(result.error);
-            this._showStepLoadWarning(result.error, wkspSettings.uri);
+            // Only surface the error when the triggering file is saved — if the document has
+            // unsaved changes (e.g. the user just undid a duplicate), the disk state is stale
+            // and showing the error would be misleading.
+            const openDoc = (vscode.workspace.textDocuments ?? []).find(d => d.uri.toString() === fileUri.toString());
+            if (!openDoc?.isDirty) {
+              this._notifyStepLoadError(result.error);
+              this._showStepLoadWarning(result.error, wkspSettings.uri);
+            }
             if (result.duplicates?.length) {
               setDuplicateStepDiagnostics(result.duplicates);
             }
