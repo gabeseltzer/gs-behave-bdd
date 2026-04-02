@@ -273,8 +273,6 @@ suite('step load error notification', () => {
     const args = showWarnStub.firstCall.args;
     assert.ok(args[0].includes('Failed to load step definitions'),
       'warning should describe the failure');
-    assert.ok(args[0].includes('keeping previous'),
-      'warning should mention that old definitions are preserved');
     assert.strictEqual(args[1], 'Show Output',
       'warning should offer "Show Output" action');
   });

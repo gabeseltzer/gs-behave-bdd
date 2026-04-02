@@ -223,8 +223,8 @@ export class FileParser {
 
       // If discover.py reported an error (e.g. duplicate steps), keep old definitions
       if (result.error) {
-        diagLog(`behave step loading error (keeping previous step definitions): ${result.error}`);
-        config.logger.logInfo(`Failed to load step definitions (keeping previous): ${result.error}`, wkspSettings.uri);
+        diagLog(`behave step loading error: ${result.error}`);
+        config.logger.logInfo(`Failed to load step definitions: ${result.error}`, wkspSettings.uri);
         this._notifyStepLoadError(result.error);
         this._showStepLoadWarning(result.error, wkspSettings.uri);
         if (result.duplicates?.length) {
@@ -259,8 +259,8 @@ export class FileParser {
     } catch (e) {
       // This catch handles truly unrecoverable errors (Python not found, timeout, etc.)
       const errMsg = e instanceof Error ? e.message : String(e);
-      diagLog(`behave step loading error (keeping previous step definitions): ${errMsg}`);
-      config.logger.logInfo(`Failed to load step definitions (keeping previous): ${errMsg}`, wkspSettings.uri);
+      diagLog(`behave step loading error: ${errMsg}`);
+      config.logger.logInfo(`Failed to load step definitions: ${errMsg}`, wkspSettings.uri);
       this._notifyStepLoadError(errMsg);
       this._showStepLoadWarning(errMsg, wkspSettings.uri);
       // Return the count of step files found (not 0) so callers know files exist even though loading failed
@@ -650,8 +650,8 @@ export class FileParser {
 
           if (result.error) {
             // discover.py reported an error (e.g. duplicate steps) — keep old definitions
-            diagLog(`[reparseFile] Behave step loading error (keeping previous step definitions): ${result.error}`);
-            config.logger.logInfo(`Failed to load step definitions (keeping previous): ${result.error}`, wkspSettings.uri);
+            diagLog(`[reparseFile] Behave step loading error: ${result.error}`);
+            config.logger.logInfo(`Failed to load step definitions: ${result.error}`, wkspSettings.uri);
             this._notifyStepLoadError(result.error);
             this._showStepLoadWarning(result.error, wkspSettings.uri);
             if (result.duplicates?.length) {
@@ -674,8 +674,8 @@ export class FileParser {
         } catch (e) {
           // Truly unrecoverable errors (Python not found, timeout, etc.)
           const errMsg = e instanceof Error ? e.message : String(e);
-          diagLog(`[reparseFile] Behave step loading error (keeping previous step definitions): ${errMsg}`);
-          config.logger.logInfo(`Failed to load step definitions (keeping previous): ${errMsg}`, wkspSettings.uri);
+          diagLog(`[reparseFile] Behave step loading error: ${errMsg}`);
+          config.logger.logInfo(`Failed to load step definitions: ${errMsg}`, wkspSettings.uri);
           this._notifyStepLoadError(errMsg);
           this._showStepLoadWarning(errMsg, wkspSettings.uri);
         }
@@ -696,7 +696,7 @@ export class FileParser {
 
 
   private _showStepLoadWarning(errMsg: string, wkspUri: vscode.Uri) {
-    let winText = `Failed to load step definitions (keeping previous): ${errMsg}`;
+    let winText = `Failed to load step definitions: ${errMsg}`;
     if (winText.length > 512)
       winText = winText.substring(0, 512) + "...";
     // Fire-and-forget: don't block the caller or let errors propagate
