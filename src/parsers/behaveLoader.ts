@@ -159,6 +159,11 @@ export async function loadFromBehave(
       return loadFromBehave(pythonExec, projectPath, stepsPaths, getBundledBehavePath());
     }
 
+    // If bundled was already tried and still failed, give a clearer message than "pip install behave"
+    if (bundledLibsPath && isBehaveNotInstalledError(errMsg)) {
+      throw new Error(`Bundled behave at "${bundledLibsPath}" failed to import. This may indicate an extension installation issue.\n${errMsg}`);
+    }
+
     throw e;
   }
 }
@@ -245,9 +250,9 @@ function spawnPython(
         // Check if behave module itself is missing
         if ((stderrLower.includes('modulenotfounderror') || stderrLower.includes('importerror'))
           && stderrLower.includes('behave')) {
-          settle(new Error(`behave is not installed in the Python environment. Please install it: pip install behave`));
+          settle(new Error(`behave is not installed in the Python environment. Please install it: pip install behave\n[Details: ${stderr}]`));
         } else if (stderrLower.includes('behave') && stderrLower.includes('not installed')) {
-          settle(new Error(`behave is not installed in the Python environment. Please install it: pip install behave`));
+          settle(new Error(`behave is not installed in the Python environment. Please install it: pip install behave\n[Details: ${stderr}]`));
         } else if (stderrLower.includes('importerror') || stderrLower.includes('modulenotfounderror')) {
           settle(new Error(`Import error in step files: ${stderr}`));
         } else {
