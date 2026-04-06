@@ -1,4 +1,4 @@
-// Tests for the legacy settings fallback (behave-vsc → behave-vsc-gs migration).
+// Tests for the legacy settings fallback (behave-vsc → gs-behave-bdd migration).
 // WindowSettings is used as the test surface since it has no filesystem dependencies.
 
 import * as assert from 'assert';
@@ -37,7 +37,7 @@ suite('legacy settings fallback (getWithLegacyFallback)', () => {
 
   suite('legacyConfig provided, new key NOT explicitly set', () => {
     test('uses legacy value when new config is at default', () => {
-      // Simulate: user had "behave-vsc.xRay": true, hasn't set "behave-vsc-gs.xRay"
+      // Simulate: user had "behave-vsc.xRay": true, hasn't set "gs-behave-bdd.xRay"
       const newConfig = makeConfig(NEW_DEFAULTS); // not in explicitKeys → inspect shows no explicit value
       const legacyConfig = makeConfig({ xRay: true, multiRootRunWorkspacesInParallel: false });
 
@@ -60,7 +60,7 @@ suite('legacy settings fallback (getWithLegacyFallback)', () => {
 
   suite('legacyConfig provided, new key IS explicitly set', () => {
     test('new value wins over legacy', () => {
-      // Simulate: user already set "behave-vsc-gs.xRay": false explicitly, legacy has true
+      // Simulate: user already set "gs-behave-bdd.xRay": false explicitly, legacy has true
       const newConfig = makeConfig({ ...NEW_DEFAULTS, xRay: false }, ['xRay']);
       const legacyConfig = makeConfig({ xRay: true, multiRootRunWorkspacesInParallel: false });
 
@@ -127,7 +127,7 @@ suite('getActualWorkspaceSetting legacy fallback (hasFeaturesFolder scenario)', 
   });
 
   test('falls back to legacy workspaceFolderValue when new key not explicitly set', () => {
-    // This is the real-world bug: user has "behave-vsc.featuresPath" but not "behave-vsc-gs.featuresPath"
+    // This is the real-world bug: user has "behave-vsc.featuresPath" but not "gs-behave-bdd.featuresPath"
     const newConfig = makeWkspConfig({}); // no workspaceFolderValue set
     const legacyConfig = makeWkspConfig({ featuresPath: 'my_tests' });
     assert.strictEqual(getActualWorkspaceSetting(newConfig, 'featuresPath', legacyConfig), 'my_tests');

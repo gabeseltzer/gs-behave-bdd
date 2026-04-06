@@ -1,6 +1,6 @@
 # Unit Tests
 
-This directory contains unit tests for the behave-vsc-gs extension.
+This directory contains unit tests for the gs-behave-bdd extension.
 
 Unit tests run quickly without requiring a VS Code instance. They test individual functions and modules in isolation using mocks and stubs.
 

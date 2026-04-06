@@ -1,4 +1,4 @@
 {
-    "behave-vsc-gs.xRay": true,
-    "behave-vsc-gs.featuresPath": "Featurez"
+    "gs-behave-bdd.xRay": true,
+    "gs-behave-bdd.featuresPath": "Featurez"
 }

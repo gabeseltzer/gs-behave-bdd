@@ -19,7 +19,7 @@ export class StepReference extends vscode.TreeItem {
 
 class StepReferenceDetails extends vscode.TreeItem {
   public readonly range: vscode.Range;
-  public readonly contextValue = "behave-vsc-gs.stepReferences.navKeysEnabled";
+  public readonly contextValue = "gs-behave-bdd.stepReferences.navKeysEnabled";
 
   constructor(
     public readonly label: string,
@@ -52,7 +52,7 @@ export class StepReferencesTree implements vscode.TreeDataProvider<vscode.TreeIt
 
   private _setStepReferencesNavKeysEnabled(enable: boolean) {
     // also see StepReferenceDetails.contextValue
-    vscode.commands.executeCommand('setContext', `behave-vsc-gs.stepReferences.navKeysEnabled`, enable);
+    vscode.commands.executeCommand('setContext', `gs-behave-bdd.stepReferences.navKeysEnabled`, enable);
   }
 
   setTreeView(treeView: vscode.TreeView<vscode.TreeItem>) {
@@ -64,7 +64,7 @@ export class StepReferencesTree implements vscode.TreeDataProvider<vscode.TreeIt
     this._treeView.message = message;
     this._stepReferences = stepReferences;
     this._onDidChangeTreeData.fire();
-    vscode.commands.executeCommand('setContext', 'behave-vsc-gs.stepReferences.visible', true);
+    vscode.commands.executeCommand('setContext', 'gs-behave-bdd.stepReferences.visible', true);
     this._setStepReferencesNavKeysEnabled(this._treeView.visible);
   }
 

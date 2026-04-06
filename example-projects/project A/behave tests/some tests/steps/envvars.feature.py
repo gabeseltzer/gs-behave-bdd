@@ -8,7 +8,7 @@ def envvars(context):
     osev = os.getenv("COMPUTERNAME") if os.name == "nt" else os.getenv("HOME")
     assert osev
 
-    # check behave-vsc-gs.envVarOverrides setting worked
+    # check gs-behave-bdd.envVarOverrides setting worked
     some_var = os.getenv("some_var")
     some_var2 = os.getenv("some_var2")
     space_var = os.getenv("space_var")

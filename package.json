@@ -1,9 +1,9 @@
 {
 	"contributes": {
 		"configuration": {
-			"title": "behave-vsc-gs",
+			"title": "gs-behave-bdd",
 			"properties": {
-				"behave-vsc-gs.envVarOverrides": {
+				"gs-behave-bdd.envVarOverrides": {
 					"scope": "resource",
 					"type": "object",
 					"markdownDescription": "Optional key-value pairs of environment variable overrides (or additions) to use when calling a behave command. This will apply to all behave tests within the workspace. These are merged with (and override) any variables from the selected environment preset.",
@@ -11,7 +11,7 @@
 						"type": "string"
 					}
 				},
-				"behave-vsc-gs.envVarPresets": {
+				"gs-behave-bdd.envVarPresets": {
 					"scope": "resource",
 					"type": "object",
 					"markdownDescription": "Named presets of environment variables. Each key is a preset name, and the value is an object of environment variable key-value pairs. Use the gear icon on the test profile to switch between presets. Example:\n```json\n{\n  \"development\": { \"API_URL\": \"http://localhost:3000\" },\n  \"staging\": { \"API_URL\": \"https://staging.example.com\" }\n}\n```",
@@ -23,49 +23,49 @@
 						}
 					}
 				},
-				"behave-vsc-gs.activeEnvVarPreset": {
+				"gs-behave-bdd.activeEnvVarPreset": {
 					"scope": "resource",
 					"type": "string",
 					"markdownDescription": "The currently active environment variable preset name. Use the gear icon on the test profile to change this, or set it manually.",
 					"default": ""
 				},
-				"behave-vsc-gs.projectPath": {
+				"gs-behave-bdd.projectPath": {
 					"scope": "resource",
 					"type": "string",
 					"markdownDescription": "*workspace-relative* path to the root of your behave project. This is the directory where behave will be executed from (working directory). If not set (the default), the workspace root folder is used. Example: `myproject/backend`.",
 					"default": ""
 				},
-				"behave-vsc-gs.featuresPath": {
+				"gs-behave-bdd.featuresPath": {
 					"scope": "resource",
 					"type": "string",
 					"markdownDescription": "*project-relative* path to the features subfolder. If not `features` (the default), then this must tie up with the `\"paths=\"` setting in your behave configuration file. This path is relative to `projectPath` (or workspace root if `projectPath` is not set). Example: `my_behave_tests`.",
 					"default": "features"
 				},
-				"behave-vsc-gs.justMyCode": {
+				"gs-behave-bdd.justMyCode": {
 					"scope": "resource",
 					"type": "boolean",
 					"markdownDescription": "If set to false (disabled), the debugger will step into external code when debugging a behave test.",
 					"default": true
 				},
-				"behave-vsc-gs.multiRootRunWorkspacesInParallel": {
+				"gs-behave-bdd.multiRootRunWorkspacesInParallel": {
 					"scope": "window",
 					"type": "boolean",
 					"markdownDescription": "For multi-root workspaces only. If enabled, then when behave tests are run from more than one workspace, behave tests from those workspaces are run at the same time. This setting should be in your `*.code-workspace` file.",
 					"default": true
 				},
-				"behave-vsc-gs.runParallel": {
+				"gs-behave-bdd.runParallel": {
 					"scope": "resource",
 					"type": "boolean",
 					"markdownDescription": "Specifies whether to create a separate behave instance for each feature and run those instances simultaneously (except when debugging). Leave this off for your initial run, then enable if you wish and your test setup supports it (i.e. your features are fully isolated).",
 					"default": false
 				},
-				"behave-vsc-gs.xRay": {
+				"gs-behave-bdd.xRay": {
 					"scope": "window",
 					"type": "boolean",
 					"markdownDescription": "Specifies whether extension errors have stack traces and diagnostics are logged in console. The console output is viewable via the vscode command `Developer: Toggle Developer Tools`. Diagnostic logs are noisy, and may have a small performance impact.",
 					"default": false
 				},
-				"behave-vsc-gs.importStrategy": {
+				"gs-behave-bdd.importStrategy": {
 					"scope": "resource",
 					"type": "string",
 					"enum": [
@@ -79,46 +79,46 @@
 		},
 		"commands": [
 			{
-				"command": "behave-vsc-gs.gotoStep",
+				"command": "gs-behave-bdd.gotoStep",
 				"title": "Go to Step Definition"
 			},
 			{
-				"command": "behave-vsc-gs.findStepReferences",
+				"command": "gs-behave-bdd.findStepReferences",
 				"title": "Find All Step References"
 			},
 			{
-				"command": "behave-vsc-gs.stepReferences.next",
+				"command": "gs-behave-bdd.stepReferences.next",
 				"title": "Step References: Next"
 			},
 			{
-				"command": "behave-vsc-gs.stepReferences.prev",
+				"command": "gs-behave-bdd.stepReferences.prev",
 				"title": "Step References: Previous"
 			},
 			{
-				"command": "behave-vsc-gs.selectEnvPreset",
+				"command": "gs-behave-bdd.selectEnvPreset",
 				"title": "Behave: Select Environment Preset",
 				"icon": "$(server-environment)"
 			}
 		],
 		"keybindings": [
 			{
-				"command": "behave-vsc-gs.gotoStep",
+				"command": "gs-behave-bdd.gotoStep",
 				"key": "f12",
 				"when": "!isInEmbeddedEditor && editorTextFocus && resourceExtname =~ /\\.feature$/"
 			},
 			{
-				"command": "behave-vsc-gs.findStepReferences",
+				"command": "gs-behave-bdd.findStepReferences",
 				"key": "alt+f12",
 				"when": "!isInEmbeddedEditor && editorTextFocus && editorLangId == python && resourceExtname =~ /\\.py$/"
 			},
 			{
-				"command": "behave-vsc-gs.stepReferences.next",
-				"when": "behave-vsc-gs.stepReferences.navKeysEnabled",
+				"command": "gs-behave-bdd.stepReferences.next",
+				"when": "gs-behave-bdd.stepReferences.navKeysEnabled",
 				"key": "f4"
 			},
 			{
-				"command": "behave-vsc-gs.stepReferences.prev",
-				"when": "behave-vsc-gs.stepReferences.navKeysEnabled",
+				"command": "gs-behave-bdd.stepReferences.prev",
+				"when": "gs-behave-bdd.stepReferences.navKeysEnabled",
 				"key": "shift+f4"
 			}
 		],
@@ -162,25 +162,25 @@
 			"editor/context": [
 				{
 					"when": "!isInEmbeddedEditor && editorTextFocus && resourceExtname =~ /\\.feature$/",
-					"command": "behave-vsc-gs.gotoStep",
+					"command": "gs-behave-bdd.gotoStep",
 					"group": "navigation"
 				},
 				{
 					"when": "!isInEmbeddedEditor && editorTextFocus && resourcePath =~ /steps/ && resourceExtname =~ /\\.py$/",
-					"command": "behave-vsc-gs.findStepReferences",
+					"command": "gs-behave-bdd.findStepReferences",
 					"group": "navigation"
 				}
 			],
 			"view/title": [
 				{
-					"command": "behave-vsc-gs.selectEnvPreset",
+					"command": "gs-behave-bdd.selectEnvPreset",
 					"when": "view == workbench.view.testing",
 					"group": "navigation"
 				}
 			],
 			"testing/item/gutter": [
 				{
-					"command": "behave-vsc-gs.selectEnvPreset",
+					"command": "gs-behave-bdd.selectEnvPreset",
 					"group": "navigation"
 				}
 			]
@@ -201,7 +201,7 @@
 					"name": "Step References",
 					"icon": "images/behave-vsc.png",
 					"contextualTitle": "Step References",
-					"when": "behave-vsc-gs.stepReferences.visible"
+					"when": "gs-behave-bdd.stepReferences.visible"
 				}
 			]
 		},
@@ -212,11 +212,11 @@
 			}
 		]
 	},
-	"name": "behave-vsc-gs",
-	"displayName": "Behave VSC GS",
-	"description": "Debug, Run and Navigate Python behave tests. Forked from jimasp",
-	"version": "0.9.5",
-	"icon": "images/behave-vsc.png",
+	"name": "gs-behave-bdd",
+	"displayName": "Behave BDD",
+	"description": "Full langague support for Behave feature files. Run and debug tests. Navigate between steps and definitions. Forked from jimasp's behave-vsc",
+	"version": "0.9.6",
+	"icon": "images/gs-behave-bdd.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",
 		"theme": "dark"
@@ -224,13 +224,13 @@
 	"publisher": "gabeseltzer",
 	"private": true,
 	"license": "SEE LICENSE IN LICENSE.txt",
-	"homepage": "https://github.com/gabeseltzer/behave-vsc-gs/blob/main/README.md",
+	"homepage": "https://github.com/gabeseltzer/gs-behave-bdd/blob/main/README.md",
 	"bugs": {
-		"url": "https://github.com/gabeseltzer/behave-vsc-gs/issues"
+		"url": "https://github.com/gabeseltzer/gs-behave-bdd/issues"
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/gabeseltzer/behave-vsc-gs.git"
+		"url": "https://github.com/gabeseltzer/gs-behave-bdd.git"
 	},
 	"engines": {
 		"vscode": "^1.82.0"
