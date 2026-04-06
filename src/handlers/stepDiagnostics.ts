@@ -47,7 +47,7 @@ export function validateStepDefinitions(document: vscode.TextDocument): void {
           vscode.DiagnosticSeverity.Warning
         );
         diagnostic.code = 'step-not-found';
-        diagnostic.source = 'behave-vsc-gs';
+        diagnostic.source = 'gs-behave-bdd';
 
         stepDiagnostics.push(diagnostic);
       }

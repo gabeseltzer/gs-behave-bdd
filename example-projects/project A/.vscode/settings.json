@@ -8,15 +8,15 @@
     ],
     "python.testing.unittestEnabled": true,
     "python.testing.pytestEnabled": false,
-    "behave-vsc-gs.envVarOverrides": {
+    "gs-behave-bdd.envVarOverrides": {
         "some_var": "double qu\"oted",
         "some_var2": "single qu'oted",
         "space_var": " ",
         "USERNAME": "bob-163487"
     },
-    "behave-vsc-gs.featuresPath": "behave tests/some tests/",
-    "behave-vsc-gs.justMyCode": true,
-    "behave-vsc-gs.runParallel": false,
-    "behave-vsc-gs.xRay": true,
-    "behave-vsc-gs.activeEnvVarPreset": "staging"
+    "gs-behave-bdd.featuresPath": "behave tests/some tests/",
+    "gs-behave-bdd.justMyCode": true,
+    "gs-behave-bdd.runParallel": false,
+    "gs-behave-bdd.xRay": true,
+    "gs-behave-bdd.activeEnvVarPreset": "staging"
 }

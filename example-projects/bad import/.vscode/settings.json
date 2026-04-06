@@ -1,4 +1,4 @@
 {
-    "behave-vsc-gs.xRay": true,
-    "behave-vsc-gs.runParallel": true
+    "gs-behave-bdd.xRay": true,
+    "gs-behave-bdd.runParallel": true
 }
