@@ -1,10 +1,10 @@
-# AI Agent Instructions for behave-vsc-gs
+# AI Agent Instructions for gs-behave-bdd
 
 This file contains shared instructions for all AI coding agents (Claude, Copilot, etc.).
 
 ## Project Overview
 
-**behave-vsc-gs** is a VSCode extension that enables running, debugging, and navigating Python [behave](https://behave.readthedocs.io/) BDD tests using the native VSCode Test API. The extension provides:
+**gs-behave-bdd** is a VSCode extension that enables running, debugging, and navigating Python [behave](https://behave.readthedocs.io/) BDD tests using the native VSCode Test API. The extension provides:
 
 - Test execution/debugging via VSCode's Test Explorer
 - Two-way step navigation (Feature ↔ Step definitions)

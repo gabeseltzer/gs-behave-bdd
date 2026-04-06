@@ -1,4 +1,4 @@
-# Claude Instructions for behave-vsc-gs
+# Claude Instructions for gs-behave-bdd
 
 ## Shared Instructions
 

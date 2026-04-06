@@ -55,7 +55,7 @@ export function setDuplicateStepDiagnostics(duplicates: DuplicateStepInfo[]): vo
         vscode.DiagnosticSeverity.Error
       );
       diagnostic.code = DIAGNOSTIC_CODE;
-      diagnostic.source = 'behave-vsc-gs';
+      diagnostic.source = 'gs-behave-bdd';
       diagnostic.relatedInformation = otherLocations;
 
       const fileDiags = byFile.get(dup.filePath);

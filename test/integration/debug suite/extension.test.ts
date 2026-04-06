@@ -17,7 +17,7 @@ function getWorkspaceUri(): vscode.Uri {
 
 async function setupTestSupport(): Promise<TestSupport> {
 	if (instances) return instances;
-	const extension = vscode.extensions.getExtension('gabeseltzer.behave-vsc-gs');
+	const extension = vscode.extensions.getExtension('gabeseltzer.gs-behave-bdd');
 	assert.ok(extension);
 	assert.ok(extension.isActive);
 	instances = await extension.activate() as TestSupport;
