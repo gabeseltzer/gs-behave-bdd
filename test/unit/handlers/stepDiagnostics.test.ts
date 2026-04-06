@@ -172,7 +172,7 @@ suite('stepDiagnostics', () => {
       validateStepDefinitions(mockDocument);
 
       const diags = getDiagsFromSetStub(setStub);
-      assert.strictEqual(diags[0].source, 'behave-vsc-gs');
+      assert.strictEqual(diags[0].source, 'gs-behave-bdd');
     });
 
     test('diagnostic message should contain search information', () => {

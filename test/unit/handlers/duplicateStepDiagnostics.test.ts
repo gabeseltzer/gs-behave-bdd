@@ -65,7 +65,7 @@ suite('duplicateStepDiagnostics', () => {
       const diags = diagStore.get(uri.toString()) || [];
       assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Error);
       assert.strictEqual(diags[0].code, 'duplicate-step-definition');
-      assert.strictEqual(diags[0].source, 'behave-vsc-gs');
+      assert.strictEqual(diags[0].source, 'gs-behave-bdd');
     });
 
     test('diagnostic message includes step type and pattern', () => {

@@ -1,4 +1,4 @@
-**PLEASE READ [CONTRIBUTING.md](https://github.com/gabeseltzer/behave-vsc-gs/blob/main/CONTRIBUTING.md) BEFORE SUBMITTING A PULL REQUEST**
+**PLEASE READ [CONTRIBUTING.md](https://github.com/gabeseltzer/gs-behave-bdd/blob/main/CONTRIBUTING.md) BEFORE SUBMITTING A PULL REQUEST**
 
 **Issue #**
 Please link to the issue that this resolves here.

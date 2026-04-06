@@ -1,6 +1,6 @@
 # Integration Tests
 
-This directory contains integration tests for the behave-vsc-gs extension.
+This directory contains integration tests for the gs-behave-bdd extension.
 
 Integration tests run against a full VS Code instance and test the extension's functionality end-to-end with real workspace projects.
 
