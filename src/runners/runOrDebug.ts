@@ -199,16 +199,23 @@ function getPipedFeaturePathsPattern(wr: WkspRun, parallelMode: boolean, filtere
 function getPipedScenarioNames(selectedScenarios: QueueItem[]) {
   const scenarioNames: string[] = [];
   selectedScenarios.forEach(x => {
-    scenarioNames.push(getScenarioRunName(x.scenario.scenarioName, x.scenario.isOutline));
+    const isExampleRow = !!x.scenario.exampleRow;
+    const runName = x.scenario.exampleRow ? x.scenario.exampleRow.junitName : x.scenario.scenarioName;
+    scenarioNames.push(getScenarioRunName(runName, x.scenario.isOutline, isExampleRow));
   });
   const pipedScenarioNames = scenarioNames.join("|");
   return pipedScenarioNames;
 }
 
 
-function getScenarioRunName(scenName: string, isOutline: boolean) {
+export function getScenarioRunName(scenName: string, isOutline: boolean, isExampleRow = false) {
   // escape double quotes and regex special characters
   let scenarioName = scenName.replace(/[".*+?^${}()|[\]\\]/g, '\\$&');
+
+  // individual example row — exact match using the full junit-style name
+  if (isExampleRow) {
+    return "^" + scenarioName + "$";
+  }
 
   // scenario outline with a <param> in its name
   if (isOutline && scenarioName.includes("<"))

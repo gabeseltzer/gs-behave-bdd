@@ -273,6 +273,21 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
     const className = `${fullFeatureName}.${queueItem.scenario.featureName}`;
     const scenarioName = queueItem.scenario.scenarioName;
 
+    // individual example row — match by exact junit name (e.g. "Blend Success -- @1.1 Amphibians")
+    if (queueItem.scenario.exampleRow) {
+      const junitName = queueItem.scenario.exampleRow.junitName;
+      const queueItemResults = junitContents.testsuite.testcase.filter(tc =>
+        tc.$.classname === className && tc.$.name === junitName
+      );
+      if (queueItemResults.length === 0) {
+        throw `could not match example row queueItem to junit result, when trying to match with $.classname="${className}", ` +
+          `$.name="${junitName}" in file ${junitFileUri.fsPath}`;
+      }
+      const parseResult = CreateParseResult(wkspSettings, debug, queueItemResults[0]);
+      updateTest(run, debug, parseResult, queueItem);
+      continue;
+    }
+
     // normal scenario
     let queueItemResults = junitContents.testsuite.testcase.filter(tc =>
       tc.$.classname === className && tc.$.name === scenarioName
