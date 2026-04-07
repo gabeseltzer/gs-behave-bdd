@@ -373,6 +373,12 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
 
     const parseResult = CreateParseResult(wkspSettings, debug, queueItemResult);
     updateTest(run, debug, parseResult, queueItem);
+
+    // When an outline is run directly, also update child group and row items
+    // so individual example results are visible in the Test Explorer.
+    if (queueItem.scenario.isOutline && queueItemResults.length > 1) {
+      updateOutlineChildResults(wkspSettings, run, debug, queueItem.test, queueItemResults);
+    }
   }
 }
 
@@ -391,4 +397,103 @@ export function updateTestResultsForUnreadableJunitFile(wkspSettings: WorkspaceS
   }
 
   config.logger.show(wkspSettings.uri);
+}
+
+
+/**
+ * After running a Scenario Outline directly, propagate individual junit results
+ * to the outline's child test items (Examples groups and their row items).
+ * This makes per-row pass/fail visible in the Test Explorer even when the user
+ * ran the outline as a whole rather than individual rows.
+ */
+function updateOutlineChildResults(wkspSettings: WorkspaceSettings, run: vscode.TestRun, debug: boolean,
+  outlineItem: vscode.TestItem, testCases: TestCase[]) {
+
+  // Build a lookup from the " -- @x.y name" suffix to the testcase
+  const suffixMap = new Map<string, TestCase>();
+  for (const tc of testCases) {
+    const atIdx = tc.$.name.lastIndexOf(" -- @");
+    if (atIdx >= 0) {
+      const suffix = tc.$.name.substring(atIdx);
+      suffixMap.set(suffix, tc);
+    }
+  }
+
+  // Walk outline children: groups → rows
+  outlineItem.children.forEach(groupOrRow => {
+    let groupWorstStatus: string | undefined;
+    let groupWorstResult: ParseResult | undefined;
+
+    groupOrRow.children.forEach(rowItem => {
+      const result = matchRowItemToResult(wkspSettings, debug, rowItem, suffixMap);
+      if (result) {
+        reportResult(run, debug, rowItem, result);
+        // Track worst result for the group
+        if (!groupWorstResult || isWorse(result.status, groupWorstStatus ?? "passed")) {
+          groupWorstResult = result;
+          groupWorstStatus = result.status;
+        }
+      }
+    });
+
+    // Update the group item with its worst child result
+    if (groupWorstResult) {
+      reportResult(run, debug, groupOrRow, groupWorstResult);
+    }
+  });
+}
+
+
+function matchRowItemToResult(wkspSettings: WorkspaceSettings, debug: boolean,
+  rowItem: vscode.TestItem, suffixMap: Map<string, TestCase>): ParseResult | undefined {
+
+  // The row's label is like "@1.1 Red Tree Frog | mush" — extract the "@x.y" part to build the suffix
+  const label = rowItem.label;
+  const atMatch = /^@(\d+)\.(\d+)\b/.exec(label);
+  if (!atMatch)
+    return undefined;
+
+  // Try all suffixes that contain this @x.y pattern
+  for (const [suffix, tc] of suffixMap) {
+    if (suffix.includes(` -- @${atMatch[1]}.${atMatch[2]} `) || suffix.endsWith(` -- @${atMatch[1]}.${atMatch[2]}`)) {
+      return CreateParseResult(wkspSettings, debug, tc);
+    }
+  }
+  return undefined;
+}
+
+
+function reportResult(run: vscode.TestRun, debug: boolean, item: vscode.TestItem, result: ParseResult) {
+  if (run.token.isCancellationRequested)
+    return;
+  switch (result.status) {
+    case "passed":
+      run.passed(item, result.duration);
+      break;
+    case "skipped":
+      run.skipped(item);
+      break;
+    case "failed": {
+      const msg = new vscode.TestMessage(result.failedText ?? "failed");
+      if (item.uri && item.range)
+        msg.location = new vscode.Location(item.uri, item.range);
+      run.failed(item, msg, result.duration);
+      break;
+    }
+    case "error":
+    case "hook_error": {
+      const msg = new vscode.TestMessage(result.failedText ?? "error");
+      if (item.uri && item.range)
+        msg.location = new vscode.Location(item.uri, item.range);
+      run.errored(item, msg, result.duration);
+      break;
+    }
+  }
+  run.appendOutput(`Test item ${vscode.Uri.parse(item.id).fsPath}: ${result.status.toUpperCase()}\r\n`);
+}
+
+
+function isWorse(status: string, currentWorst: string): boolean {
+  const severity: Record<string, number> = { "passed": 0, "skipped": 1, "failed": 2, "error": 3, "hook_error": 3 };
+  return (severity[status] ?? 0) > (severity[currentWorst] ?? 0);
 }
