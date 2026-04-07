@@ -6,6 +6,7 @@ import { debugBehaveInstance } from './behaveDebug';
 import { QueueItem } from '../extension';
 import { WkspError } from '../common';
 import { WkspRun } from './testRunHandler';
+import { ExampleRow } from '../parsers/testFile';
 
 
 
@@ -199,22 +200,28 @@ function getPipedFeaturePathsPattern(wr: WkspRun, parallelMode: boolean, filtere
 function getPipedScenarioNames(selectedScenarios: QueueItem[]) {
   const scenarioNames: string[] = [];
   selectedScenarios.forEach(x => {
-    const isExampleRow = !!x.scenario.exampleRow;
-    const runName = x.scenario.exampleRow ? x.scenario.exampleRow.junitName : x.scenario.scenarioName;
-    scenarioNames.push(getScenarioRunName(runName, x.scenario.isOutline, isExampleRow));
+    scenarioNames.push(getScenarioRunName(x.scenario.scenarioName, x.scenario.isOutline, x.scenario.exampleRow));
   });
   const pipedScenarioNames = scenarioNames.join("|");
   return pipedScenarioNames;
 }
 
 
-export function getScenarioRunName(scenName: string, isOutline: boolean, isExampleRow = false) {
+export function getScenarioRunName(scenName: string, isOutline: boolean, exampleRow?: ExampleRow) {
   // escape double quotes and regex special characters
   let scenarioName = scenName.replace(/[".*+?^${}()|[\]\\]/g, '\\$&');
 
-  // individual example row — exact match using the full junit-style name
-  if (isExampleRow) {
-    return "^" + scenarioName + "$";
+  // individual example row — match outline name (with <param> → .*) + row suffix
+  if (exampleRow) {
+    // Replace <param> placeholders with .* since behave substitutes actual values
+    if (scenarioName.includes("<"))
+      scenarioName = scenarioName.replace(/<[^>]*>/g, ".*");
+    // Build the row suffix: " -- @tableIndex.rowIndex [examplesName]"
+    const escapedExName = exampleRow.examplesName.replace(/[".*+?^${}()|[\]\\]/g, '\\$&');
+    const suffix = exampleRow.examplesName
+      ? ` -- @${exampleRow.tableIndex}\\.${exampleRow.rowIndex} ${escapedExName}`
+      : ` -- @${exampleRow.tableIndex}\\.${exampleRow.rowIndex}`;
+    return "^" + scenarioName + suffix + "$";
   }
 
   // scenario outline with a <param> in its name

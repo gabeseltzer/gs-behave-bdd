@@ -75,49 +75,7 @@ suite('getScenarioRunName', () => {
     assert.ok(pattern.endsWith(' -- @'));
   });
 
-  test('example row produces exact-match pattern including -- @x.y suffix', () => {
-    // Individual example rows should produce an exact-match pattern like:
-    //   ^Blend Success -- @1\.1 Amphibians$
-    // so that only that specific row is run.
-    const junitName = 'Blend Success -- @1.1 Amphibians';
-    const pattern = getScenarioRunName(junitName, false, true);
-
-    // Must start with ^ and end with $
-    assert.ok(pattern.startsWith('^'), `Expected pattern to start with ^, got: ${pattern}`);
-    assert.ok(pattern.endsWith('$'), `Expected pattern to end with $, got: ${pattern}`);
-
-    // The dot in @1.1 must be escaped so it does not match "any character"
-    assert.ok(pattern.includes('\\.'), `Expected escaped dot in pattern, got: ${pattern}`);
-
-    // The pattern should contain the core scenario name
-    assert.ok(pattern.includes('Blend Success'), `Expected outline name in pattern, got: ${pattern}`);
-
-    // Verify the pattern actually matches the junitName via regex
-    const re = new RegExp(pattern);
-    assert.ok(re.test(junitName), `Pattern should match junitName "${junitName}", got pattern: ${pattern}`);
-
-    // And does NOT match a different row
-    assert.ok(!re.test('Blend Success -- @1.2 Amphibians'), 'Pattern must not match a different row');
-    assert.ok(!re.test('Blend Success -- @2.1 Electronics'), 'Pattern must not match another table');
-  });
-
-  test('example row with unnamed examples (empty examplesName) produces exact-match pattern', () => {
-    const junitName = 'Outline -- @1.1';
-    const pattern = getScenarioRunName(junitName, false, true);
-    assert.ok(pattern.startsWith('^'));
-    assert.ok(pattern.endsWith('$'));
-    const re = new RegExp(pattern);
-    assert.ok(re.test(junitName));
-    assert.ok(!re.test('Outline -- @1.2'));
-  });
-
-  test('example row with special chars in scenario name are escaped', () => {
-    const junitName = 'My (Special) Scenario -- @1.1 Test';
-    const pattern = getScenarioRunName(junitName, false, true);
-    const re = new RegExp(pattern);
-    assert.ok(re.test(junitName), 'Pattern should match the junitName with special chars');
-    assert.ok(!re.test('My (Special) Scenario -- @1.2 Test'), 'Pattern should not match different row');
-  });
+  // Example row pattern tests are in test/unit/runners/exampleRowRunPattern.test.ts
 
 });
 
