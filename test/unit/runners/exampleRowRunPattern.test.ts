@@ -3,7 +3,9 @@
 // and the parentFeatureOrAllSiblingsIncluded guard (must not treat groups as features).
 
 import * as assert from 'assert';
+import * as vscode from 'vscode';
 import { getScenarioRunName } from '../../../src/runners/runOrDebug';
+import { startItemWithDescendants } from '../../../src/runners/testRunHandler';
 import { Scenario } from '../../../src/parsers/testFile';
 
 // ---------------------------------------------------------------------------
@@ -108,6 +110,57 @@ suite('getScenarioRunName - example row patterns', () => {
     assert.ok(re.test('Outline -- @1.1 Group (A)'));
     // Unescaped parens would make (A) a capture group matching just "A"
     assert.ok(!re.test('Outline -- @1.1 Group A'), 'Parens should be literal, not regex groups');
+  });
+
+});
+
+
+// ---------------------------------------------------------------------------
+// startItemWithDescendants — spinner propagation to child items
+// ---------------------------------------------------------------------------
+
+suite('startItemWithDescendants - spinner propagation', () => {
+
+  function makeMockItem(id: string, childItems: vscode.TestItem[] = []): vscode.TestItem {
+    return {
+      id, label: id,
+      children: {
+        forEach: (cb: (item: vscode.TestItem) => void) => childItems.forEach(cb),
+      },
+    } as unknown as vscode.TestItem;
+  }
+
+  test('calls run.started on the item itself and all descendants', () => {
+    const row1 = makeMockItem('row1');
+    const row2 = makeMockItem('row2');
+    const row3 = makeMockItem('row3');
+    const groupA = makeMockItem('groupA', [row1]);
+    const groupB = makeMockItem('groupB', [row2, row3]);
+    const outline = makeMockItem('outline', [groupA, groupB]);
+
+    const startedIds: string[] = [];
+    const run = {
+      started: (item: vscode.TestItem) => startedIds.push(item.id),
+    } as unknown as vscode.TestRun;
+
+    startItemWithDescendants(run, outline);
+
+    assert.deepStrictEqual(startedIds, ['outline', 'groupA', 'row1', 'groupB', 'row2', 'row3'],
+      'Should call run.started on outline, both groups, and all rows in depth-first order');
+  });
+
+  test('works for items with no children (plain scenario)', () => {
+    const scenario = makeMockItem('scenario');
+
+    const startedIds: string[] = [];
+    const run = {
+      started: (item: vscode.TestItem) => startedIds.push(item.id),
+    } as unknown as vscode.TestRun;
+
+    startItemWithDescendants(run, scenario);
+
+    assert.deepStrictEqual(startedIds, ['scenario'],
+      'Should call run.started on just the item itself when it has no children');
   });
 
 });

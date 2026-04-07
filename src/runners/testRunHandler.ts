@@ -211,7 +211,7 @@ async function doRunType(wr: WkspRun) {
   }
 
   if (wr.allTestsForThisWkspIncluded) {
-    wr.sortedQueue.forEach(wkspQueueItem => wr.run.started(wkspQueueItem.test));
+    wr.sortedQueue.forEach(wkspQueueItem => startItemWithDescendants(wr.run, wkspQueueItem.test));
     await runAllFeatures(wr);
     return;
   }
@@ -254,14 +254,14 @@ async function runFeaturesTogether(wr: WkspRun) {
       continue;
 
     const selectedScenarios = wr.sortedQueue.filter(qi => qi.test.id.includes(featureId));
-    selectedScenarios.forEach(qi => wr.run.started(qi.test));
+    selectedScenarios.forEach(qi => startItemWithDescendants(wr.run, qi.test));
     await runOrDebugFeatureWithSelectedScenarios(wr, false, selectedScenarios);
   }
 
   if (runTogetherFeatures.length > 0) {
     const allChildScenarios: QueueItem[] = [];
     runTogetherFeatures.forEach(feature => allChildScenarios.push(...getChildScenariosForFeature(wr, feature)));
-    allChildScenarios.forEach(x => wr.run.started(x.test));
+    allChildScenarios.forEach(x => startItemWithDescendants(wr.run, x.test));
 
     await runOrDebugFeatures(wr, false, allChildScenarios);
   }
@@ -294,7 +294,7 @@ async function runFeaturesParallel(wr: WkspRun) {
       featuresRun.push(runEntireFeature.id);
 
       const childScenarios: QueueItem[] = getChildScenariosForParentFeature(wr, wkspQueueItem);
-      childScenarios.forEach(x => wr.run.started(x.test));
+      childScenarios.forEach(x => startItemWithDescendants(wr.run, x.test));
       const promise = runOrDebugFeatures(wr, true, childScenarios);
       asyncRunPromises.push(promise);
       continue;
@@ -305,7 +305,7 @@ async function runFeaturesParallel(wr: WkspRun) {
       continue;
 
     const selectedScenarios = wr.sortedQueue.filter(qi => qi.test.id.includes(featureId));
-    selectedScenarios.forEach(qi => wr.run.started(qi.test));
+    selectedScenarios.forEach(qi => startItemWithDescendants(wr.run, qi.test));
     const promise = runOrDebugFeatureWithSelectedScenarios(wr, false, selectedScenarios);
     asyncRunPromises.push(promise);
   }
@@ -434,4 +434,11 @@ function convertToTestItemArray(collection: vscode.TestItemCollection) {
   const items: vscode.TestItem[] = [];
   collection.forEach((item: vscode.TestItem) => items.push(item));
   return items;
+}
+
+
+/** Call run.started() on an item and all its descendants (depth-first). */
+export function startItemWithDescendants(run: vscode.TestRun, item: vscode.TestItem) {
+  run.started(item);
+  item.children.forEach(child => startItemWithDescendants(run, child));
 }
