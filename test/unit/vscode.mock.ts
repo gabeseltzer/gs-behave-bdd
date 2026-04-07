@@ -136,6 +136,9 @@ export const workspace = {
       if (key === 'importStrategy') {
         return 'useBundled';
       }
+      if (key === 'stepDefinitionSearchTimeout') {
+        return 10;
+      }
       return undefined;
     },
     has: () => false,

@@ -65,6 +65,13 @@
 					"markdownDescription": "Specifies whether extension errors have stack traces and diagnostics are logged in console. The console output is viewable via the vscode command `Developer: Toggle Developer Tools`. Diagnostic logs are noisy, and may have a small performance impact.",
 					"default": false
 				},
+				"gs-behave-bdd.stepDefinitionSearchTimeout": {
+					"scope": "resource",
+					"type": "number",
+					"minimum": 1,
+					"markdownDescription": "Timeout in seconds for loading step definitions. Increase this if your project has slow imports or side effects in step files.",
+					"default": 20
+				},
 				"gs-behave-bdd.importStrategy": {
 					"scope": "resource",
 					"type": "string",
@@ -215,7 +222,7 @@
 	"name": "gs-behave-bdd",
 	"displayName": "Behave BDD",
 	"description": "Full langague support for Behave feature files. Run and debug tests. Navigate between steps and definitions. Forked from jimasp's behave-vsc",
-	"version": "0.9.8",
+	"version": "0.9.11",
 	"icon": "images/gs-behave-bdd.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",

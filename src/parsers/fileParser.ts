@@ -212,7 +212,8 @@ export class FileParser {
         pythonExec,
         wkspSettings.projectUri.fsPath,
         stepsPaths,
-        wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined
+        wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined,
+        wkspSettings.stepDefinitionSearchTimeout * 1000
       );
       diagLog(`${caller}: _parseStepsFiles loadFromBehave took ${Math.round(performance.now() - loadBehaveStart)}ms, returned ${result.steps.length} steps and ${result.fixtures.length} fixtures`);
 
@@ -645,7 +646,8 @@ export class FileParser {
             pythonExec,
             wkspSettings.projectUri.fsPath,
             [stepsPath],
-            wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined
+            wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined,
+            wkspSettings.stepDefinitionSearchTimeout * 1000
           );
 
           if (result.stderr) {
