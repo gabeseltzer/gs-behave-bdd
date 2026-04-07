@@ -289,18 +289,43 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
     const className = `${fullFeatureName}.${queueItem.scenario.featureName}`;
     const scenarioName = queueItem.scenario.scenarioName;
 
-    // individual example row — match by the "-- @tableIndex.rowIndex [examplesName]" suffix.
-    // We cannot match by the full junitName template because behave substitutes <param> values
-    // in the junit testcase name (e.g. "Blenders Fail <thing>" → "Blenders Fail Red Tree Frog").
+    // individual example row — match by outline name + row suffix.
+    // Behave substitutes <param> values in junit names, so we:
+    // 1. Match the row suffix exactly (e.g. " -- @1.1 Amphibians")
+    // 2. Extract the scenario part (before " -- @") and verify it matches the outline name
+    //    pattern (with <param> → .* for outlines that use parameters).
+    // This prevents ambiguity when multiple outlines share the same Examples name and row index.
     if (queueItem.scenario.exampleRow) {
       const { tableIndex, rowIndex, examplesName: exName } = queueItem.scenario.exampleRow;
       const rowSuffix = exName ? ` -- @${tableIndex}.${rowIndex} ${exName}` : ` -- @${tableIndex}.${rowIndex}`;
-      const queueItemResults = junitContents.testsuite.testcase.filter(tc =>
-        tc.$.classname === className && tc.$.name.endsWith(rowSuffix)
-      );
+
+      // Build an outline name regex: exact for plain names, .* for <param> placeholders
+      let outlinePattern = scenarioName.replace(/[".*+?^${}()|[\]\\]/g, '\\$&');
+      if (scenarioName.includes("<"))
+        outlinePattern = outlinePattern.replace(/<[^>]*>/g, ".*");
+      const outlineRx = new RegExp("^" + outlinePattern + "$");
+
+      const queueItemResults = junitContents.testsuite.testcase.filter(tc => {
+        if (tc.$.classname !== className || !tc.$.name.endsWith(rowSuffix))
+          return false;
+        // Extract the scenario name portion (before " -- @") and match against the outline pattern
+        const jScenName = tc.$.name.substring(0, tc.$.name.lastIndexOf(" -- @"));
+        return outlineRx.test(jScenName);
+      });
       if (queueItemResults.length === 0) {
         throw `could not match example row queueItem to junit result, when trying to match with $.classname="${className}", ` +
-          `$.name ending with "${rowSuffix}" in file ${junitFileUri.fsPath}`;
+          `outline pattern "${outlineRx.source}", suffix "${rowSuffix}" in file ${junitFileUri.fsPath}`;
+      }
+
+      // When <param> outlines produce ambiguous matches (e.g. "Blend .*" matches both
+      // "Blend Frog" and "Blend paramless"), prefer the non-skipped result.
+      if (queueItemResults.length > 1) {
+        const nonSkipped = queueItemResults.find(tc => tc.$.status !== "skipped");
+        if (nonSkipped) {
+          const parseResult = CreateParseResult(wkspSettings, debug, nonSkipped);
+          updateTest(run, debug, parseResult, queueItem);
+          continue;
+        }
       }
       const parseResult = CreateParseResult(wkspSettings, debug, queueItemResults[0]);
       updateTest(run, debug, parseResult, queueItem);
