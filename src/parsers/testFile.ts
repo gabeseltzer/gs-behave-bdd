@@ -57,6 +57,9 @@ export class TestFile {
     const scenarioRanges = new Map<string, vscode.Range[]>();
     this.didResolve = true;
 
+    // Tracks the current Scenario Outline test item so example rows can be added as children
+    let currentOutlineItem: { item: vscode.TestItem, children: vscode.TestItem[] } | undefined;
+
     // Clear any existing diagnostics for this file
     const existingDiagnostics = config.diagnostics.get(featureUri) || [];
     const nonDuplicateDiagnostics = existingDiagnostics.filter(d => d.code !== "duplicate-scenario");
@@ -81,7 +84,15 @@ export class TestFile {
       }
     };
 
+    const flushOutlineChildren = () => {
+      if (currentOutlineItem) {
+        currentOutlineItem.item.children.replace(currentOutlineItem.children);
+        currentOutlineItem = undefined;
+      }
+    };
+
     const onScenarioLine = (range: vscode.Range, scenarioName: string, isOutline: boolean) => {
+      flushOutlineChildren();
       const parent = ancestors[ancestors.length - 1];
 
       // Track scenario name and range for duplicate detection
@@ -97,6 +108,10 @@ export class TestFile {
       parent.item.label = featureName;
       parent.children.push(tcase);
       diagLog(`created child test item scenario ${tcase.id} from ${featureUri.path}`);
+
+      if (isOutline) {
+        currentOutlineItem = { item: tcase, children: [] };
+      }
     }
 
     const onFeatureLine = (range: vscode.Range) => {
@@ -104,13 +119,38 @@ export class TestFile {
       ancestors.push({ item: item, children: [] });
     }
 
-    parseFeatureContent(wkspSettings, featureUri, content, caller, onScenarioLine, onFeatureLine);
+    const onExampleRow = (range: vscode.Range, outlineName: string, tableIndex: number, rowIndex: number, examplesNameStr: string, values: string[]) => {
+      if (!currentOutlineItem)
+        return;
+      const junitName = `${outlineName} -- @${tableIndex}.${rowIndex}${examplesNameStr ? ' ' + examplesNameStr : ''}`;
+      const exampleRow: ExampleRow = { tableIndex, rowIndex, examplesName: examplesNameStr, values, junitName };
+      const data = new Scenario(featureFilename, featureFileWkspRelativePath, featureName, outlineName, thisGeneration, false, exampleRow);
+      const label = data.getLabel();
+      const id = `${currentOutlineItem.item.id}/${label}`;
+      const tcase = controller.createTestItem(id, label, featureUri);
+      testData.set(tcase, data);
+      tcase.range = range;
+      currentOutlineItem.children.push(tcase);
+      diagLog(`created example row test item ${tcase.id} from ${featureUri.path}`);
+    }
 
+    parseFeatureContent(wkspSettings, featureUri, content, caller, onScenarioLine, onFeatureLine, onExampleRow);
+
+    flushOutlineChildren(); // ensure the last outline's example rows are set
     ascend(0); // assign children for all remaining items
   }
 
 }
 
+
+export interface ExampleRow {
+  tableIndex: number;    // 1-based index of the Examples table within this outline
+  rowIndex: number;      // 1-based index of the data row within the table
+  examplesName: string;  // text after "Examples:" (may be empty)
+  values: string[];      // cell values for this row
+  /** Full behave junit-style name: "<outlineName> -- @<tableIndex>.<rowIndex> <examplesName>" */
+  junitName: string;
+}
 
 export class Scenario {
   public result: string | undefined;
@@ -121,9 +161,14 @@ export class Scenario {
     public scenarioName: string,
     public generation: number,
     public readonly isOutline: boolean,
+    public readonly exampleRow?: ExampleRow,
   ) { }
 
   getLabel() {
+    if (this.exampleRow) {
+      const valuesStr = this.exampleRow.values.join(' | ');
+      return `@${this.exampleRow.tableIndex}.${this.exampleRow.rowIndex} ${valuesStr}`;
+    }
     return `${this.scenarioName}`;
   }
 }
