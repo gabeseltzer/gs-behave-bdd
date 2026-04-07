@@ -273,15 +273,18 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
     const className = `${fullFeatureName}.${queueItem.scenario.featureName}`;
     const scenarioName = queueItem.scenario.scenarioName;
 
-    // individual example row — match by exact junit name (e.g. "Blend Success -- @1.1 Amphibians")
+    // individual example row — match by the "-- @tableIndex.rowIndex [examplesName]" suffix.
+    // We cannot match by the full junitName template because behave substitutes <param> values
+    // in the junit testcase name (e.g. "Blenders Fail <thing>" → "Blenders Fail Red Tree Frog").
     if (queueItem.scenario.exampleRow) {
-      const junitName = queueItem.scenario.exampleRow.junitName;
+      const { tableIndex, rowIndex, examplesName: exName } = queueItem.scenario.exampleRow;
+      const rowSuffix = exName ? ` -- @${tableIndex}.${rowIndex} ${exName}` : ` -- @${tableIndex}.${rowIndex}`;
       const queueItemResults = junitContents.testsuite.testcase.filter(tc =>
-        tc.$.classname === className && tc.$.name === junitName
+        tc.$.classname === className && tc.$.name.endsWith(rowSuffix)
       );
       if (queueItemResults.length === 0) {
         throw `could not match example row queueItem to junit result, when trying to match with $.classname="${className}", ` +
-          `$.name="${junitName}" in file ${junitFileUri.fsPath}`;
+          `$.name ending with "${rowSuffix}" in file ${junitFileUri.fsPath}`;
       }
       const parseResult = CreateParseResult(wkspSettings, debug, queueItemResults[0]);
       updateTest(run, debug, parseResult, queueItem);
