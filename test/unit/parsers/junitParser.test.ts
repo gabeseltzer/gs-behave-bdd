@@ -204,4 +204,60 @@ suite('junitParser - example row matching', () => {
     );
   });
 
+  test('failed example row propagates failure message to parent items (group and outline)', async () => {
+    const xml = makeJunitXml([{
+      classname: 'outline_mixed.Mixed outline',
+      name: 'Blenders Fail Red Tree Frog -- @1.1 Amphibians',
+      status: 'failed',
+    }]);
+    getContentStub.resolves(xml);
+
+    // Build parent chain: outline → group → row
+    const outlineItem = {
+      id: 'outline-id',
+      uri: vscode.Uri.file('c:/test/features/outline_mixed.feature'),
+      range: new vscode.Range(new vscode.Position(0, 0), new vscode.Position(0, 10)),
+      label: 'Blenders Fail <thing>',
+      children: { forEach: () => { /* noop */ } },
+    } as unknown as vscode.TestItem;
+    const groupItem = {
+      id: 'group-id',
+      uri: vscode.Uri.file('c:/test/features/outline_mixed.feature'),
+      range: new vscode.Range(new vscode.Position(0, 0), new vscode.Position(0, 10)),
+      label: 'Amphibians',
+      parent: outlineItem,
+      children: { forEach: () => { /* noop */ } },
+    } as unknown as vscode.TestItem;
+
+    const scenario = makeExampleRowScenario('Blenders Fail <thing>', 1, 1, 'Amphibians', ['Red Tree Frog']);
+    const testItem = {
+      id: vscode.Uri.file('c:/test/features/outline_mixed.feature').toString() + '/@1.1 Red Tree Frog',
+      uri: vscode.Uri.file('c:/test/features/outline_mixed.feature'),
+      range: new vscode.Range(new vscode.Position(0, 0), new vscode.Position(0, 10)),
+      label: scenario.getLabel(),
+      parent: groupItem,
+      children: { forEach: () => { /* noop */ } },
+    } as unknown as vscode.TestItem;
+    const qi: QueueItem = { test: testItem, scenario };
+
+    const failedCalls: { itemId: string }[] = [];
+    const { run } = makeRun();
+    // Override failed to also capture item IDs
+    (run as unknown as { failed: unknown }).failed = (item: vscode.TestItem, _msg: unknown, _dur?: number) => {
+      failedCalls.push({ itemId: item.id });
+    };
+
+    await parseJunitFileAndUpdateTestResults(wkspSettings, run, false, junitUri, [qi]);
+
+    // The row itself should be failed
+    assert.ok(failedCalls.some(c => c.itemId === testItem.id),
+      'Row item should have run.failed() called');
+    // The group parent should also be failed
+    assert.ok(failedCalls.some(c => c.itemId === groupItem.id),
+      'Group item should have run.failed() called (propagated from child)');
+    // The outline grandparent should also be failed
+    assert.ok(failedCalls.some(c => c.itemId === outlineItem.id),
+      'Outline item should have run.failed() called (propagated from child)');
+  });
+
 });
