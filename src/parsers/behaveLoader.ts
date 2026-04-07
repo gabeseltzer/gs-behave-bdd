@@ -221,13 +221,18 @@ function spawnPython(
       else resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
     };
 
-    const cp = spawn(pythonExec, [scriptPath, ...args], {
-      cwd
-    });
+    const allArgs = [scriptPath, ...args];
+    const cp = spawn(pythonExec, allArgs, { cwd });
 
     const timeoutId = setTimeout(() => {
       cp.kill();
-      settle(new Error('Python process timeout after 10 seconds'));
+      const cmd = `cd ${shellQuote(cwd)} && ${shellQuote(pythonExec)} ${allArgs.map(shellQuote).join(' ')}`;
+      const debugInfo = [
+        `command: ${cmd}`,
+        stdout.trim() && `stdout:\n${stdout.trim()}`,
+        stderr.trim() && `stderr:\n${stderr.trim()}`,
+      ].filter(Boolean).join('\n');
+      settle(new Error(`Python process timeout after 10 seconds\n${debugInfo}`));
     }, 10000);
 
     cp.stdout?.on('data', (chunk) => {
@@ -263,6 +268,14 @@ function spawnPython(
       }
     });
   });
+}
+
+/**
+ * Wraps a string in POSIX single quotes, escaping any single quotes within.
+ * Exported for testing.
+ */
+export function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 /**
