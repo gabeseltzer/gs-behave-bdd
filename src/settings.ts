@@ -61,6 +61,7 @@ export class WorkspaceSettings {
   public readonly justMyCode: boolean;
   public readonly runParallel: boolean;
   public readonly importStrategy: string;
+  public readonly stepDefinitionSearchTimeout: number;
   public readonly workspaceRelativeProjectPath: string;
   public readonly projectRelativeFeaturesPath: string;
   // convenience properties
@@ -112,11 +113,15 @@ export class WorkspaceSettings {
       throw "importStrategy is undefined";
     if (importStrategyCfg !== 'useBundled' && importStrategyCfg !== 'fromEnvironment')
       throw `importStrategy value "${importStrategyCfg}" is invalid. Must be "useBundled" or "fromEnvironment"`;
+    const stepDefinitionSearchTimeoutCfg: number | undefined = get("stepDefinitionSearchTimeout");
+    if (stepDefinitionSearchTimeoutCfg === undefined)
+      throw "stepDefinitionSearchTimeout is undefined";
 
 
     this.justMyCode = justMyCodeCfg;
     this.runParallel = runParallelCfg;
     this.importStrategy = importStrategyCfg;
+    this.stepDefinitionSearchTimeout = Math.max(1, stepDefinitionSearchTimeoutCfg);
     this.activeEnvVarPreset = activeEnvVarPresetCfg;
 
 

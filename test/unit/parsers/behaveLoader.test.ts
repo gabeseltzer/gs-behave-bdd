@@ -49,7 +49,7 @@ suite('behaveLoader', () => {
   let spawnStub: sinon.SinonStub;
   let diagLogStub: sinon.SinonStub;
   let mockProcess: MockChildProcess;
-  let loadFromBehave: (pythonExec: string, projectPath: string, stepsPaths: string[]) => Promise<BehaveDiscoveryResult>;
+  let loadFromBehave: (pythonExec: string, projectPath: string, stepsPaths: string[], bundledLibsPath?: string, timeoutMs?: number) => Promise<BehaveDiscoveryResult>;
 
   class MockChildProcess extends EventEmitter {
     pid = 12345;
@@ -291,6 +291,53 @@ suite('behaveLoader', () => {
       const quoted = shellQuote(json);
       const [token] = shellSplit(quoted);
       assert.deepStrictEqual(JSON.parse(token), stepsPaths);
+    });
+  });
+
+  suite('custom timeoutMs', () => {
+    test('error message reflects configured timeout in seconds', async () => {
+      const clock = sinon.useFakeTimers();
+      try {
+        const promise = loadFromBehave('python', '/project', ['/project/steps'], undefined, 5000);
+        await clock.tickAsync(5001);
+        await assert.rejects(promise, /timeout after 5 seconds/i,
+          'error message should state the configured timeout duration');
+      } finally {
+        clock.restore();
+      }
+    });
+
+    test('does not timeout before configured duration elapses', async () => {
+      const clock = sinon.useFakeTimers();
+      try {
+        let settled = false;
+        const promise = loadFromBehave('python', '/project', ['/project/steps'], undefined, 5000)
+          .then(() => { settled = true; })
+          .catch(() => { settled = true; });
+
+        await clock.tickAsync(4999);
+        assert.strictEqual(settled, false, 'promise should still be pending before timeout');
+
+        // Clean up: emit a successful response so the promise resolves cleanly
+        mockProcess.stdout.emit('data', '{"steps":[],"fixtures":[]}');
+        mockProcess.emit('close', 0);
+        await clock.tickAsync(1);
+        await promise;
+      } finally {
+        clock.restore();
+      }
+    });
+
+    test('default timeout of 10000ms is used when timeoutMs is not provided', async () => {
+      const clock = sinon.useFakeTimers();
+      try {
+        const promise = loadFromBehave('python', '/project', ['/project/steps']);
+        await clock.tickAsync(10001);
+        await assert.rejects(promise, /timeout after 10 seconds/i,
+          'default timeout should be 10 seconds');
+      } finally {
+        clock.restore();
+      }
     });
   });
 
