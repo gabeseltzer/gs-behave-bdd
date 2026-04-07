@@ -208,6 +208,7 @@ export class FileParser {
       const stepsPaths = stepsDirs.length > 0 ? stepsDirs : [wkspSettings.stepsSearchUri.fsPath];
 
       const loadBehaveStart = performance.now();
+      config.logger.logInfo(`Searching for step definitions...`, wkspSettings.uri);
       const result = await loadFromBehave(
         pythonExec,
         wkspSettings.projectUri.fsPath,
@@ -215,7 +216,9 @@ export class FileParser {
         wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined,
         wkspSettings.stepDefinitionSearchTimeout * 1000
       );
-      diagLog(`${caller}: _parseStepsFiles loadFromBehave took ${Math.round(performance.now() - loadBehaveStart)}ms, returned ${result.steps.length} steps and ${result.fixtures.length} fixtures`);
+      const loadBehaveElapsed = Math.round(performance.now() - loadBehaveStart);
+      diagLog(`${caller}: _parseStepsFiles loadFromBehave took ${loadBehaveElapsed}ms, returned ${result.steps.length} steps and ${result.fixtures.length} fixtures`);
+      config.logger.logInfo(`Step definition search complete in ${loadBehaveElapsed}ms`, wkspSettings.uri);
 
       if (result.stderr) {
         config.logger.logInfo(`behave stderr output:\n${result.stderr}`, wkspSettings.uri);
@@ -642,6 +645,7 @@ export class FileParser {
             stepsPath = path.dirname(stepFiles[0].fsPath);
           }
 
+          config.logger.logInfo(`Searching for step definitions...`, wkspSettings.uri);
           const result = await loadFromBehave(
             pythonExec,
             wkspSettings.projectUri.fsPath,
@@ -680,6 +684,7 @@ export class FileParser {
             storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
             const elapsed = Math.round(performance.now() - startTime);
             diagLog(`[reparseFile] Reloaded ${storedCount} steps and ${result.fixtures.length} fixtures from behave in ${elapsed}ms`);
+            config.logger.logInfo(`Step definition search complete in ${elapsed}ms`, wkspSettings.uri);
           }
 
           tokenSource.dispose();
