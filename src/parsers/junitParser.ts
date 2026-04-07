@@ -104,6 +104,22 @@ export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseRes
       : "FAILED";
   run.appendOutput(`Test item ${vscode.Uri.parse(item.test.id).fsPath}: ${statusOutput}\r\n`);
 
+  // Propagate failure/error results to ancestor items (group and outline) so the
+  // error message is visible on parent nodes in the Test Explorer, not just the row.
+  if (item.scenario.exampleRow && (result.status === "failed" || result.status === "error" || result.status === "hook_error")) {
+    let ancestor = item.test.parent;
+    while (ancestor) {
+      const msg = new vscode.TestMessage(result.failedText ?? result.status);
+      if (ancestor.uri && ancestor.range)
+        msg.location = new vscode.Location(ancestor.uri, ancestor.range);
+      if (result.status === "failed")
+        run.failed(ancestor, msg, result.duration);
+      else
+        run.errored(ancestor, msg, result.duration);
+      ancestor = ancestor.parent;
+    }
+  }
+
 }
 
 
