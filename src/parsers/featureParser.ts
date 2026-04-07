@@ -97,7 +97,8 @@ export const getFeatureNameFromContent = async (content: string, uri: vscode.Uri
 export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode.Uri, content: string, caller: string,
   onScenarioLine: (range: vscode.Range, scenarioName: string, isOutline: boolean) => void,
   onFeatureLine: (range: vscode.Range) => void,
-  onExampleRow?: (range: vscode.Range, outlineName: string, tableIndex: number, rowIndex: number, examplesName: string, values: string[]) => void) => {
+  onExampleRow?: (range: vscode.Range, outlineName: string, tableIndex: number, rowIndex: number, examplesName: string, values: string[]) => void,
+  onExamplesGroup?: (range: vscode.Range, outlineName: string, tableIndex: number, examplesName: string) => void) => {
 
   const fileName = basename(uri);
   const lines = getLines(content);
@@ -193,6 +194,10 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
       examplesRowIndex = 0;
       examplesIsHeaderRow = true;
       examplesName = examplesMatch[1].trim();
+      if (onExamplesGroup && currentOutlineName !== undefined) {
+        const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + line.length));
+        onExamplesGroup(range, currentOutlineName, examplesTableIndex, examplesName);
+      }
       continue;
     }
 
