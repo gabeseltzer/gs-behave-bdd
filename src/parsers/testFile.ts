@@ -6,7 +6,6 @@ import { WorkspaceSettings } from "../settings";
 import { diagLog } from '../logger';
 
 let generationCounter = 0;
-export type BehaveTestData = TestFile | Scenario | ScenarioExamplesGroup;
 export type TestData = WeakMap<vscode.TestItem, BehaveTestData>;
 
 
@@ -213,6 +212,8 @@ export class ScenarioExamplesGroup {
     return this.examplesName || 'Examples';
   }
 }
+
+export type BehaveTestData = TestFile | Scenario | ScenarioExamplesGroup;
 
 
 
