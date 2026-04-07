@@ -10,6 +10,40 @@ import type { BehaveDiscoveryResult } from '../../../src/parsers/behaveLoader';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const loggerModule = require('../../../src/logger');
 
+/**
+ * Minimal POSIX shell tokenizer that handles single-quoted strings,
+ * including the `'\''` escape sequence for a literal single quote.
+ */
+/**
+ * Minimal POSIX shell tokenizer that handles single-quoted strings,
+ * including the `'\''` escape sequence for a literal single quote,
+ * and backslash escaping outside of quotes.
+ */
+function shellSplit(cmd: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  let i = 0;
+  while (i < cmd.length) {
+    if (cmd[i] === "'") {
+      i++; // skip opening '
+      while (i < cmd.length && cmd[i] !== "'") {
+        current += cmd[i++];
+      }
+      i++; // skip closing '
+    } else if (cmd[i] === '\\' && i + 1 < cmd.length) {
+      current += cmd[i + 1]; // consume escaped char literally
+      i += 2;
+    } else if (cmd[i] === ' ') {
+      if (current !== '') { tokens.push(current); current = ''; }
+      i++;
+    } else {
+      current += cmd[i++];
+    }
+  }
+  if (current !== '') tokens.push(current);
+  return tokens;
+}
+
 suite('behaveLoader', () => {
 
   let spawnStub: sinon.SinonStub;
@@ -214,6 +248,50 @@ suite('behaveLoader', () => {
       /import.*error/i,
       'should throw error for import errors'
     );
+  });
+
+  suite('shellQuote', () => {
+    let shellQuote: (s: string) => string;
+
+    setup(() => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      shellQuote = require('../../../src/parsers/behaveLoader').shellQuote;
+    });
+
+    test('wraps plain string in single quotes', () => {
+      assert.strictEqual(shellQuote('/usr/bin/python3'), "'/usr/bin/python3'");
+    });
+
+    test('preserves spaces inside quotes', () => {
+      const result = shellQuote('/path/with spaces/project');
+      assert.strictEqual(result, "'/path/with spaces/project'");
+      const [token] = shellSplit(result);
+      assert.strictEqual(token, '/path/with spaces/project');
+    });
+
+    test('escapes single quotes using the POSIX close-escape-reopen pattern', () => {
+      const result = shellQuote("it's here");
+      assert.strictEqual(result, "'it'\\''s here'");
+      const [token] = shellSplit(result);
+      assert.strictEqual(token, "it's here");
+    });
+
+    test('JSON steps path round-trips through shell tokenizer', () => {
+      const stepsPaths = ['/my project/features/steps', '/other project/steps'];
+      const json = JSON.stringify(stepsPaths);
+      const quoted = shellQuote(json);
+      const [token] = shellSplit(quoted);
+      assert.deepStrictEqual(JSON.parse(token), stepsPaths);
+    });
+
+    test('JSON steps path with double quotes round-trips correctly', () => {
+      // Paths containing double quotes would break naive double-quote wrapping
+      const stepsPaths = ['/path/to/"tricky"/steps'];
+      const json = JSON.stringify(stepsPaths);
+      const quoted = shellQuote(json);
+      const [token] = shellSplit(quoted);
+      assert.deepStrictEqual(JSON.parse(token), stepsPaths);
+    });
   });
 
   test('should use correct Python script file', async () => {

@@ -706,7 +706,8 @@ export class FileParser {
 
 
   private _showStepLoadWarning(errMsg: string, wkspUri: vscode.Uri) {
-    let winText = `Failed to load step definitions: ${errMsg}`;
+    const firstLine = errMsg.split('\n')[0];
+    let winText = `Failed to load step definitions: ${firstLine}`;
     if (winText.length > 512)
       winText = winText.substring(0, 512) + "...";
     // Fire-and-forget: don't block the caller or let errors propagate
