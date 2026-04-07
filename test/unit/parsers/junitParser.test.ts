@@ -310,4 +310,109 @@ suite('junitParser - example row matching', () => {
       'Outline item should have run.failed() called (propagated from child)');
   });
 
+  test('running outline directly updates child group and row items with individual results', async () => {
+    // When the user clicks play on "Blenders Fail <thing>" (the outline itself),
+    // the queue has one item: the outline Scenario with isOutline=true.
+    // Behave runs ALL examples and the junit XML has one entry per row.
+    // The child group and row test items should each get their individual result.
+    const xml = makeJunitXml([
+      { classname: 'outline_mixed.Mixed outline', name: 'Blenders Fail Red Tree Frog -- @1.1 Amphibians', status: 'passed' },
+      { classname: 'outline_mixed.Mixed outline', name: 'Blenders Fail ERROR -- @2.1 Electronics', status: 'failed' },
+      { classname: 'outline_mixed.Mixed outline', name: 'Blenders Fail iPhone -- @2.2 Electronics', status: 'passed' },
+    ]);
+    getContentStub.resolves(xml);
+
+    // Build the tree: outline → group → rows (mirroring the real test tree)
+    const featureUri = vscode.Uri.file('c:/test/features/outline_mixed.feature');
+    const baseRange = new vscode.Range(new vscode.Position(0, 0), new vscode.Position(0, 10));
+
+    // Row items (leaves)
+    const row1_1 = {
+      id: 'outline/amphibians/@1.1', label: '@1.1 Red Tree Frog', uri: featureUri, range: baseRange,
+      children: { forEach: () => { /* noop */ } },
+    } as unknown as vscode.TestItem;
+    const row2_1 = {
+      id: 'outline/electronics/@2.1', label: '@2.1 ERROR', uri: featureUri, range: baseRange,
+      children: { forEach: () => { /* noop */ } },
+    } as unknown as vscode.TestItem;
+    const row2_2 = {
+      id: 'outline/electronics/@2.2', label: '@2.2 iPhone', uri: featureUri, range: baseRange,
+      children: { forEach: () => { /* noop */ } },
+    } as unknown as vscode.TestItem;
+
+    // Group items
+    const amphibiansGroup = {
+      id: 'outline/amphibians', label: 'Amphibians', uri: featureUri, range: baseRange,
+      children: {
+        forEach: (cb: (item: vscode.TestItem) => void) => [row1_1].forEach(cb),
+      },
+    } as unknown as vscode.TestItem;
+    const electronicsGroup = {
+      id: 'outline/electronics', label: 'Electronics', uri: featureUri, range: baseRange,
+      children: {
+        forEach: (cb: (item: vscode.TestItem) => void) => [row2_1, row2_2].forEach(cb),
+      },
+    } as unknown as vscode.TestItem;
+
+    // Wire up parents
+    (row1_1 as unknown as { parent: vscode.TestItem }).parent = amphibiansGroup;
+    (row2_1 as unknown as { parent: vscode.TestItem }).parent = electronicsGroup;
+    (row2_2 as unknown as { parent: vscode.TestItem }).parent = electronicsGroup;
+    (amphibiansGroup as unknown as { parent: vscode.TestItem }).parent = undefined as unknown as vscode.TestItem;
+    (electronicsGroup as unknown as { parent: vscode.TestItem }).parent = undefined as unknown as vscode.TestItem;
+
+    // Outline item with children pointing to groups
+    const outlineItem = {
+      id: featureUri.toString() + '/Blenders Fail <thing>',
+      label: 'Blenders Fail <thing>', uri: featureUri, range: baseRange,
+      children: {
+        forEach: (cb: (item: vscode.TestItem) => void) => [amphibiansGroup, electronicsGroup].forEach(cb),
+      },
+    } as unknown as vscode.TestItem;
+    (amphibiansGroup as unknown as { parent: vscode.TestItem }).parent = outlineItem;
+    (electronicsGroup as unknown as { parent: vscode.TestItem }).parent = outlineItem;
+
+    // Queue: just the outline (as it would be when clicking play on the outline)
+    const outlineScenario = new Scenario(
+      'outline_mixed.feature', 'features/outline_mixed.feature', 'Mixed outline',
+      'Blenders Fail <thing>', 0, true
+    );
+    const qi: QueueItem = { test: outlineItem, scenario: outlineScenario };
+
+    // Track all calls by item ID
+    const resultCalls: { itemId: string; status: string }[] = [];
+    const run = {
+      token: { isCancellationRequested: false },
+      passed: (item: vscode.TestItem, _dur?: number) => resultCalls.push({ itemId: item.id, status: 'passed' }),
+      failed: (item: vscode.TestItem, _msg: unknown, _dur?: number) => resultCalls.push({ itemId: item.id, status: 'failed' }),
+      skipped: (item: vscode.TestItem) => resultCalls.push({ itemId: item.id, status: 'skipped' }),
+      errored: (item: vscode.TestItem, _msg: unknown, _dur?: number) => resultCalls.push({ itemId: item.id, status: 'errored' }),
+      appendOutput: () => { /* noop */ },
+    } as unknown as vscode.TestRun;
+
+    try {
+      await parseJunitFileAndUpdateTestResults(wkspSettings, run, false, junitUri, [qi]);
+    } catch (e: unknown) {
+      assert.fail(`Should not throw — got: ${String(e)}`);
+    }
+
+    // Outline itself should be failed (existing behavior: picks worst result)
+    assert.ok(resultCalls.some(c => c.itemId === outlineItem.id && c.status === 'failed'),
+      'Outline should be marked failed');
+
+    // Individual rows should get their own results
+    assert.ok(resultCalls.some(c => c.itemId === row1_1.id && c.status === 'passed'),
+      'Row @1.1 (Red Tree Frog) should be passed');
+    assert.ok(resultCalls.some(c => c.itemId === row2_1.id && c.status === 'failed'),
+      'Row @2.1 (ERROR) should be failed');
+    assert.ok(resultCalls.some(c => c.itemId === row2_2.id && c.status === 'passed'),
+      'Row @2.2 (iPhone) should be passed');
+
+    // Groups should reflect their children's worst result
+    assert.ok(resultCalls.some(c => c.itemId === amphibiansGroup.id && c.status === 'passed'),
+      'Amphibians group should be passed (all children passed)');
+    assert.ok(resultCalls.some(c => c.itemId === electronicsGroup.id && c.status === 'failed'),
+      'Electronics group should be failed (has a failed child)');
+  });
+
 });
