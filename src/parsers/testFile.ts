@@ -6,7 +6,7 @@ import { WorkspaceSettings } from "../settings";
 import { diagLog } from '../logger';
 
 let generationCounter = 0;
-export type BehaveTestData = TestFile | Scenario;
+export type BehaveTestData = TestFile | Scenario | ScenarioExamplesGroup;
 export type TestData = WeakMap<vscode.TestItem, BehaveTestData>;
 
 
@@ -57,8 +57,9 @@ export class TestFile {
     const scenarioRanges = new Map<string, vscode.Range[]>();
     this.didResolve = true;
 
-    // Tracks the current Scenario Outline test item so example rows can be added as children
+    // Tracks the current Scenario Outline and current Examples group for building the tree
     let currentOutlineItem: { item: vscode.TestItem, children: vscode.TestItem[] } | undefined;
+    let currentGroupItem: { item: vscode.TestItem, children: vscode.TestItem[] } | undefined;
 
     // Clear any existing diagnostics for this file
     const existingDiagnostics = config.diagnostics.get(featureUri) || [];
@@ -84,7 +85,15 @@ export class TestFile {
       }
     };
 
+    const flushGroupChildren = () => {
+      if (currentGroupItem) {
+        currentGroupItem.item.children.replace(currentGroupItem.children);
+        currentGroupItem = undefined;
+      }
+    };
+
     const flushOutlineChildren = () => {
+      flushGroupChildren();
       if (currentOutlineItem) {
         currentOutlineItem.item.children.replace(currentOutlineItem.children);
         currentOutlineItem = undefined;
@@ -119,24 +128,40 @@ export class TestFile {
       ancestors.push({ item: item, children: [] });
     }
 
-    const onExampleRow = (range: vscode.Range, outlineName: string, tableIndex: number, rowIndex: number, examplesNameStr: string, values: string[]) => {
+    const onExamplesGroup = (range: vscode.Range, outlineName: string, tableIndex: number, examplesNameStr: string) => {
       if (!currentOutlineItem)
+        return;
+      flushGroupChildren();
+      const groupData = new ScenarioExamplesGroup(featureFilename, featureFileWkspRelativePath, featureName, outlineName, examplesNameStr, tableIndex);
+      const label = groupData.getLabel();
+      const id = `${currentOutlineItem.item.id}/${label}-${tableIndex}`;
+      const tcase = controller.createTestItem(id, label, featureUri);
+      testData.set(tcase, groupData);
+      tcase.range = range;
+      currentOutlineItem.children.push(tcase);
+      currentGroupItem = { item: tcase, children: [] };
+      diagLog(`created examples group test item ${tcase.id} from ${featureUri.path}`);
+    }
+
+    const onExampleRow = (range: vscode.Range, outlineName: string, tableIndex: number, rowIndex: number, examplesNameStr: string, values: string[]) => {
+      const parent = currentGroupItem ?? currentOutlineItem;
+      if (!parent)
         return;
       const junitName = `${outlineName} -- @${tableIndex}.${rowIndex}${examplesNameStr ? ' ' + examplesNameStr : ''}`;
       const exampleRow: ExampleRow = { tableIndex, rowIndex, examplesName: examplesNameStr, values, junitName };
       const data = new Scenario(featureFilename, featureFileWkspRelativePath, featureName, outlineName, thisGeneration, false, exampleRow);
       const label = data.getLabel();
-      const id = `${currentOutlineItem.item.id}/${label}`;
+      const id = `${parent.item.id}/${label}`;
       const tcase = controller.createTestItem(id, label, featureUri);
       testData.set(tcase, data);
       tcase.range = range;
-      currentOutlineItem.children.push(tcase);
+      parent.children.push(tcase);
       diagLog(`created example row test item ${tcase.id} from ${featureUri.path}`);
     }
 
-    parseFeatureContent(wkspSettings, featureUri, content, caller, onScenarioLine, onFeatureLine, onExampleRow);
+    parseFeatureContent(wkspSettings, featureUri, content, caller, onScenarioLine, onFeatureLine, onExampleRow, onExamplesGroup);
 
-    flushOutlineChildren(); // ensure the last outline's example rows are set
+    flushOutlineChildren(); // ensure last outline/group children are set
     ascend(0); // assign children for all remaining items
   }
 
@@ -170,6 +195,22 @@ export class Scenario {
       return `@${this.exampleRow.tableIndex}.${this.exampleRow.rowIndex} ${valuesStr}`;
     }
     return `${this.scenarioName}`;
+  }
+}
+
+
+export class ScenarioExamplesGroup {
+  constructor(
+    public readonly featureFileName: string,
+    public readonly featureFileWorkspaceRelativePath: string,
+    public readonly featureName: string,
+    public readonly scenarioName: string,
+    public readonly examplesName: string,
+    public readonly tableIndex: number,
+  ) { }
+
+  getLabel() {
+    return this.examplesName || 'Examples';
   }
 }
 

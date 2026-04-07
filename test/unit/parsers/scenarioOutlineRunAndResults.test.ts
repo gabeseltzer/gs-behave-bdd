@@ -166,7 +166,7 @@ Feature: My Feature
     assert.strictEqual(scenarios[0].children.items.length, 0, 'Plain scenario should have no children');
   });
 
-  test('Scenario Outline has example rows as children', async () => {
+  test('Scenario Outline has Examples group children, each with rows', async () => {
     const content = `
 Feature: My Feature
   Scenario Outline: Blend Success
@@ -182,23 +182,24 @@ Feature: My Feature
     | Nexus  |
 `;
     const { featureItem } = await parseFeature(content);
-    const scenarios = featureItem.children.items;
-    assert.strictEqual(scenarios.length, 1, 'Should have 1 outline');
-    const outline = scenarios[0];
-    assert.ok(outline.label === 'Blend Success', `Outline label should be "Blend Success", got: ${outline.label}`);
+    const outline = featureItem.children.items[0];
+    assert.ok(outline.label === 'Blend Success');
 
-    const exampleRows = outline.children.items;
-    assert.strictEqual(exampleRows.length, 3, 'Should have 3 example rows (1 + 2)');
+    // Outline has 2 group children (not raw rows)
+    const groups = outline.children.items;
+    assert.strictEqual(groups.length, 2, 'Should have 2 Examples groups');
+    assert.strictEqual(groups[0].label, 'Amphibians');
+    assert.strictEqual(groups[1].label, 'Electronics');
 
-    // First row: table 1, row 1
-    assert.strictEqual(exampleRows[0].label, '@1.1 Red Tree Frog');
-    // Second row: table 2, row 1
-    assert.strictEqual(exampleRows[1].label, '@2.1 iPhone');
-    // Third row: table 2, row 2
-    assert.strictEqual(exampleRows[2].label, '@2.2 Nexus');
+    // Each group has its rows
+    assert.strictEqual(groups[0].children.items.length, 1);
+    assert.strictEqual(groups[0].children.items[0].label, '@1.1 Red Tree Frog');
+    assert.strictEqual(groups[1].children.items.length, 2);
+    assert.strictEqual(groups[1].children.items[0].label, '@2.1 iPhone');
+    assert.strictEqual(groups[1].children.items[1].label, '@2.2 Nexus');
   });
 
-  test('last Scenario Outline in file has its example rows (flush works at EOF)', async () => {
+  test('last Scenario Outline in file has its groups/rows flushed at EOF', async () => {
     const content = `
 Feature: My Feature
   Scenario Outline: First Outline
@@ -217,16 +218,15 @@ Feature: My Feature
     | 2 |
 `;
     const { featureItem } = await parseFeature(content);
-    const scenarios = featureItem.children.items;
-    assert.strictEqual(scenarios.length, 2, 'Should have 2 outlines');
-
-    const lastOutline = scenarios[1];
-    assert.ok(lastOutline.label === 'Last Outline', `Expected "Last Outline", got: ${lastOutline.label}`);
-    assert.strictEqual(lastOutline.children.items.length, 2,
-      'Last outline (at EOF) should have 2 example rows — tests that flush-at-EOF works');
+    const lastOutline = featureItem.children.items[1];
+    assert.ok(lastOutline.label === 'Last Outline');
+    // 1 group with 2 rows
+    assert.strictEqual(lastOutline.children.items.length, 1, 'Last outline should have 1 group');
+    assert.strictEqual(lastOutline.children.items[0].children.items.length, 2,
+      'Last group should have 2 rows — tests EOF flush');
   });
 
-  test('example row Scenario data has correct junitName', async () => {
+  test('example row Scenario data has correct junitName (accessed via group)', async () => {
     const content = `
 Feature: My Feature
   Scenario Outline: Blend Success
@@ -238,7 +238,8 @@ Feature: My Feature
 `;
     const { featureItem, testData } = await parseFeature(content);
     const outline = featureItem.children.items[0];
-    const rowItem = outline.children.items[0];
+    const group = outline.children.items[0];          // Examples: Amphibians
+    const rowItem = group.children.items[0];           // @1.1 Red Tree Frog
     const data = testData.get(rowItem) as unknown as Scenario;
 
     assert.ok(data, 'testData should contain the row item');
