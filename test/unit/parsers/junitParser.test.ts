@@ -185,6 +185,56 @@ suite('junitParser - example row matching', () => {
     assert.strictEqual(results[0].status, 'passed');
   });
 
+  test('matches correct outline when two outlines share same Examples name and row index', async () => {
+    // outline_success.feature has "Blend Success" and "Blend Success 2", both with
+    // Examples: Amphibians @1.1. When running only "Blend Success" @1.1, the skipped
+    // entry from "Blend Success 2" must NOT be picked up instead.
+    const xml = makeJunitXml([
+      // "Blend Success 2" entry comes FIRST — behave lists it as skipped since -n didn't match
+      { classname: 'outline_mixed.Mixed outline', name: 'Blend Success 2 -- @1.1 Amphibians', status: 'skipped' },
+      // The actual entry we want
+      { classname: 'outline_mixed.Mixed outline', name: 'Blend Success -- @1.1 Amphibians', status: 'passed' },
+    ]);
+    getContentStub.resolves(xml);
+
+    // Queue item is for "Blend Success" (no <param>), not "Blend Success 2"
+    const scenario = makeExampleRowScenario('Blend Success', 1, 1, 'Amphibians', ['Red Tree Frog']);
+    const qi = makeQueueItem(scenario);
+    const { run, results } = makeRun();
+
+    try {
+      await parseJunitFileAndUpdateTestResults(wkspSettings, run, false, junitUri, [qi]);
+    } catch (e: unknown) {
+      assert.fail(`Should not throw — got: ${String(e)}`);
+    }
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].status, 'passed',
+      'Must match "Blend Success" (passed), not "Blend Success 2" (skipped)');
+  });
+
+  test('matches correct outline when outline name has <param> and another outline has similar name', async () => {
+    // "Blenders Success <thing>" and "Blenders Success paramless" both have @1.1 Amphibians
+    const xml = makeJunitXml([
+      { classname: 'outline_mixed.Mixed outline', name: 'Blenders Success paramless -- @1.1 Amphibians', status: 'skipped' },
+      { classname: 'outline_mixed.Mixed outline', name: 'Blenders Success Red Tree Frog -- @1.1 Amphibians', status: 'passed' },
+    ]);
+    getContentStub.resolves(xml);
+
+    // Queue item is for "Blenders Success <thing>" — the <thing> should become .* in matching
+    const scenario = makeExampleRowScenario('Blenders Success <thing>', 1, 1, 'Amphibians', ['Red Tree Frog']);
+    const qi = makeQueueItem(scenario);
+    const { run, results } = makeRun();
+
+    try {
+      await parseJunitFileAndUpdateTestResults(wkspSettings, run, false, junitUri, [qi]);
+    } catch (e: unknown) {
+      assert.fail(`Should not throw — got: ${String(e)}`);
+    }
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].status, 'passed',
+      'Must match the <param> outline (passed), not "paramless" (skipped)');
+  });
+
   test('throws when no junit entry matches the example row suffix', async () => {
     const xml = makeJunitXml([{
       classname: 'outline_mixed.Mixed outline',
