@@ -414,6 +414,11 @@ function parentFeatureOrAllSiblingsIncluded(wr: WkspRun, wkspQueueItem: QueueIte
   if (includedParent)
     return includedParent;
 
+  // Only treat the parent as a "run entire feature" shortcut if it is actually a
+  // feature file item (not an intermediate node like ScenarioExamplesGroup or Outline).
+  if (!parent.id.toLowerCase().endsWith('.feature'))
+    return undefined;
+
   let allSiblingsIncluded = true;
   parent.children.forEach(child => {
     const includedChild = wr.sortedQueue?.find(x => x.test.id === child.id);
