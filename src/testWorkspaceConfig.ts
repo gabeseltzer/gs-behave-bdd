@@ -19,12 +19,13 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   private runParallel: boolean | undefined;
   private xRay: boolean | undefined;
   private importStrategy: string | undefined;
+  private stepDefinitionSearchTimeout: number | undefined;
 
   // all user-settable settings in settings.json or *.code-workspace
   constructor({
     envVarOverrides, envVarPresets, activeEnvVarPreset, projectPath, featuresPath: featuresPath, justMyCode,
     multiRootRunWorkspacesInParallel,
-    runParallel, xRay, importStrategy
+    runParallel, xRay, importStrategy, stepDefinitionSearchTimeout
   }: {
     envVarOverrides: { [name: string]: string } | undefined,
     envVarPresets?: { [presetName: string]: { [name: string]: string } } | undefined,
@@ -35,7 +36,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     multiRootRunWorkspacesInParallel: boolean | undefined,
     runParallel: boolean | undefined,
     xRay: boolean | undefined,
-    importStrategy?: string | undefined
+    importStrategy?: string | undefined,
+    stepDefinitionSearchTimeout?: number | undefined
   }) {
     this.envVarOverrides = envVarOverrides;
     this.envVarPresets = envVarPresets;
@@ -47,6 +49,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     this.multiRootRunWorkspacesInParallel = multiRootRunWorkspacesInParallel;
     this.xRay = xRay;
     this.importStrategy = importStrategy;
+    this.stepDefinitionSearchTimeout = stepDefinitionSearchTimeout;
   }
 
   get<T>(section: string): T {
@@ -79,6 +82,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.xRay === undefined ? false : this.xRay);
       case "importStrategy":
         return <T><unknown>(this.importStrategy === undefined ? "useBundled" : this.importStrategy);
+      case "stepDefinitionSearchTimeout":
+        return <T><unknown>(this.stepDefinitionSearchTimeout === undefined ? 20 : this.stepDefinitionSearchTimeout);
       default:
         debugger; // eslint-disable-line no-debugger
         throw new Error("get() missing case for section: " + section);
@@ -126,6 +131,9 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         break;
       case "importStrategy":
         response = <T><unknown>this.importStrategy;
+        break;
+      case "stepDefinitionSearchTimeout":
+        response = <T><unknown>this.stepDefinitionSearchTimeout;
         break;
       default:
         debugger; // eslint-disable-line no-debugger
@@ -221,6 +229,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.get("xRay"));
       case "importStrategy":
         return <T><unknown>(this.importStrategy === undefined ? "useBundled" : this.importStrategy);
+      case "stepDefinitionSearchTimeout":
+        return <T><unknown>(this.stepDefinitionSearchTimeout === undefined ? 20 : this.stepDefinitionSearchTimeout);
 
       default:
         debugger; // eslint-disable-line no-debugger
