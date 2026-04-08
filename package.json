@@ -81,6 +81,12 @@
 					],
 					"markdownDescription": "Controls how behave is resolved. `useBundled` (default) uses the version of behave bundled with the extension. `fromEnvironment` uses behave from your Python environment.",
 					"default": "useBundled"
+				},
+				"gs-behave-bdd.showStepReferenceCodeLens": {
+					"scope": "window",
+					"type": "boolean",
+					"markdownDescription": "Show reference counts above step definitions in Python files via CodeLens.",
+					"default": true
 				}
 			}
 		},
@@ -222,7 +228,7 @@
 	"name": "gs-behave-bdd",
 	"displayName": "Behave BDD",
 	"description": "Full langague support for Behave feature files. Run and debug tests. Navigate between steps and definitions. Forked from jimasp's behave-vsc",
-	"version": "0.9.15",
+	"version": "0.9.16",
 	"icon": "images/gs-behave-bdd.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",
