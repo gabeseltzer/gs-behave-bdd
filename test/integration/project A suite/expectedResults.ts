@@ -7,7 +7,7 @@ import { TestResult, applyTestConfiguration } from "../suite-shared/expectedResu
 export function getExpectedCounts(wkspUri: vscode.Uri, config: Configuration): WkspParseCounts {
   const testCount = getExpectedResults(wkspUri, config).length;
   return {
-    tests: { nodeCount: 74, testCount: testCount },
+    tests: { nodeCount: 116, testCount: testCount },
     featureFilesExceptEmptyOrCommentedOut: 25, stepFilesExceptEmptyOrCommentedOut: 5,
     stepFileStepsExceptCommentedOut: 16,
     featureFileStepsExceptCommentedOut: 123, stepMappings: 122 // (1 diff = "When we have a missing step")
@@ -273,6 +273,53 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
     }),
 
+    // Blenders Success <thing> - example rows
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@1.1 Red Tree Frog | mush',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Success <thing>',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success <thing>/Amphibians-1/@1.1 Red Tree Frog | mush',
+      test_label: '@1.1 Red Tree Frog | mush',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success <thing>/Amphibians-1',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.1 iPhone | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Success <thing>',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success <thing>/Consumer Electronics-2/@2.1 iPhone | toxic waste',
+      test_label: '@2.1 iPhone | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success <thing>/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.2 Galaxy Nexus | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Success <thing>',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success <thing>/Consumer Electronics-2/@2.2 Galaxy Nexus | toxic waste',
+      test_label: '@2.2 Galaxy Nexus | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success <thing>/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+
     new TestResult({
       scenario_featureName: 'Mixed outline',
       scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
@@ -287,6 +334,68 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail <thing>',
       test_label: 'Blenders Fail <thing>',
       test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+
+    // Blenders Fail <thing> - example rows
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@1.1 Red Tree Frog | mush',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Fail <thing>',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail <thing>/Amphibians-1/@1.1 Red Tree Frog | mush',
+      test_label: '@1.1 Red Tree Frog | mush',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail <thing>/Amphibians-1',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.1 ERROR | FAIL',
+      scenario_isOutline: false,
+      scenario_result: 'failed',
+      scenario_scenarioName: 'Blenders Fail <thing>',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail <thing>/Consumer Electronics-2/@2.1 ERROR | FAIL',
+      test_label: '@2.1 ERROR | FAIL',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail <thing>/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.2 iPhone | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Fail <thing>',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail <thing>/Consumer Electronics-2/@2.2 iPhone | toxic waste',
+      test_label: '@2.2 iPhone | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail <thing>/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.3 Galaxy Nexus | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Fail <thing>',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail <thing>/Consumer Electronics-2/@2.3 Galaxy Nexus | toxic waste',
+      test_label: '@2.3 Galaxy Nexus | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail <thing>/Consumer Electronics-2',
       test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
     }),
 
@@ -307,6 +416,53 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
     }),
 
+    // Blenders Skip <thing> - example rows
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@1.1 Red Tree Frog | mush',
+      scenario_isOutline: false,
+      scenario_result: 'skipped',
+      scenario_scenarioName: 'Blenders Skip <thing>',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Skip <thing>/Amphibians-1/@1.1 Red Tree Frog | mush',
+      test_label: '@1.1 Red Tree Frog | mush',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Skip <thing>/Amphibians-1',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.1 iPhone | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'skipped',
+      scenario_scenarioName: 'Blenders Skip <thing>',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Skip <thing>/Consumer Electronics-2/@2.1 iPhone | toxic waste',
+      test_label: '@2.1 iPhone | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Skip <thing>/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.2 Galaxy Nexus | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'skipped',
+      scenario_scenarioName: 'Blenders Skip <thing>',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Skip <thing>/Consumer Electronics-2/@2.2 Galaxy Nexus | toxic waste',
+      test_label: '@2.2 Galaxy Nexus | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Skip <thing>/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+
     new TestResult({
       scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
       scenario_featureName: 'Mixed outline',
@@ -321,6 +477,53 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success paramless',
       test_label: 'Blenders Success paramless',
       test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+
+    // Blenders Success paramless - example rows
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@1.1 Red Tree Frog | mush',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Success paramless',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success paramless/Amphibians-1/@1.1 Red Tree Frog | mush',
+      test_label: '@1.1 Red Tree Frog | mush',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success paramless/Amphibians-1',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.1 iPhone | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Success paramless',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success paramless/Consumer Electronics-2/@2.1 iPhone | toxic waste',
+      test_label: '@2.1 iPhone | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success paramless/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.2 Galaxy Nexus | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Success paramless',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success paramless/Consumer Electronics-2/@2.2 Galaxy Nexus | toxic waste',
+      test_label: '@2.2 Galaxy Nexus | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success paramless/Consumer Electronics-2',
       test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
     }),
 
@@ -341,6 +544,68 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
     }),
 
+    // Blenders Fail paramless - example rows
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@1.1 Red Tree Frog | mush',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Fail paramless',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail paramless/Amphibians-1/@1.1 Red Tree Frog | mush',
+      test_label: '@1.1 Red Tree Frog | mush',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail paramless/Amphibians-1',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.1 ERROR | FAIL',
+      scenario_isOutline: false,
+      scenario_result: 'failed',
+      scenario_scenarioName: 'Blenders Fail paramless',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail paramless/Consumer Electronics-2/@2.1 ERROR | FAIL',
+      test_label: '@2.1 ERROR | FAIL',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail paramless/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.2 iPhone | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Fail paramless',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail paramless/Consumer Electronics-2/@2.2 iPhone | toxic waste',
+      test_label: '@2.2 iPhone | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail paramless/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.3 Galaxy Nexus | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Fail paramless',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail paramless/Consumer Electronics-2/@2.3 Galaxy Nexus | toxic waste',
+      test_label: '@2.3 Galaxy Nexus | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail paramless/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+
     new TestResult({
       scenario_featureName: 'Mixed outline',
       scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
@@ -355,6 +620,53 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success "<thing>"',
       test_label: 'Blenders Success "<thing>"',
       test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+
+    // Blenders Success "<thing>" - example rows
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@1.1 Red Tree Frog | mush',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Success "<thing>"',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success "<thing>"/Amphibians-1/@1.1 Red Tree Frog | mush',
+      test_label: '@1.1 Red Tree Frog | mush',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success "<thing>"/Amphibians-1',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.1 iPhone | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Success "<thing>"',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success "<thing>"/Consumer Electronics-2/@2.1 iPhone | toxic waste',
+      test_label: '@2.1 iPhone | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success "<thing>"/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Mixed outline',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_mixed.feature',
+      scenario_getLabel: '@2.2 Galaxy Nexus | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blenders Success "<thing>"',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success "<thing>"/Consumer Electronics-2/@2.2 Galaxy Nexus | toxic waste',
+      test_label: '@2.2 Galaxy Nexus | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success "<thing>"/Consumer Electronics-2',
       test_uri: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature'
     }),
 
@@ -391,6 +703,53 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       test_uri: '.../project A/{{featurePath}}/group1_features/outline_success.feature'
     }),
 
+    // Blend Success - example rows
+    new TestResult({
+      scenario_featureName: 'Outline success',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_success.feature',
+      scenario_getLabel: '@1.1 Red Tree Frog | mush',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blend Success',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success/Amphibians-1/@1.1 Red Tree Frog | mush',
+      test_label: '@1.1 Red Tree Frog | mush',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success/Amphibians-1',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_success.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Outline success',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_success.feature',
+      scenario_getLabel: '@2.1 iPhone | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blend Success',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success/Consumer Electronics-2/@2.1 iPhone | toxic waste',
+      test_label: '@2.1 iPhone | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_success.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Outline success',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_success.feature',
+      scenario_getLabel: '@2.2 Galaxy Nexus | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blend Success',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success/Consumer Electronics-2/@2.2 Galaxy Nexus | toxic waste',
+      test_label: '@2.2 Galaxy Nexus | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_success.feature'
+    }),
+
     new TestResult({
       scenario_featureName: 'Outline success',
       scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_success.feature',
@@ -405,6 +764,53 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       test_id: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success 2',
       test_label: 'Blend Success 2',
       test_parent: '.../project A/{{featurePath}}/group1_features/outline_success.feature',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_success.feature'
+    }),
+
+    // Blend Success 2 - example rows
+    new TestResult({
+      scenario_featureName: 'Outline success',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_success.feature',
+      scenario_getLabel: '@1.1 Red Tree Frog | mush',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blend Success 2',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success 2/Amphibians-1/@1.1 Red Tree Frog | mush',
+      test_label: '@1.1 Red Tree Frog | mush',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success 2/Amphibians-1',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_success.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Outline success',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_success.feature',
+      scenario_getLabel: '@2.1 iPhone | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blend Success 2',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success 2/Consumer Electronics-2/@2.1 iPhone | toxic waste',
+      test_label: '@2.1 iPhone | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success 2/Consumer Electronics-2',
+      test_uri: '.../project A/{{featurePath}}/group1_features/outline_success.feature'
+    }),
+    new TestResult({
+      scenario_featureName: 'Outline success',
+      scenario_featureFileRelativePath: '{{featurePath}}/group1_features/outline_success.feature',
+      scenario_getLabel: '@2.2 Galaxy Nexus | toxic waste',
+      scenario_isOutline: false,
+      scenario_result: 'passed',
+      scenario_scenarioName: 'Blend Success 2',
+      test_children: undefined,
+      test_description: undefined,
+      test_error: undefined,
+      test_id: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success 2/Consumer Electronics-2/@2.2 Galaxy Nexus | toxic waste',
+      test_label: '@2.2 Galaxy Nexus | toxic waste',
+      test_parent: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success 2/Consumer Electronics-2',
       test_uri: '.../project A/{{featurePath}}/group1_features/outline_success.feature'
     }),
 
