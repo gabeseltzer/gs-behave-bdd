@@ -4,7 +4,7 @@ import { WorkspaceSettings } from "../settings";
 import { runBehaveInstance } from './behaveRun';
 import { debugBehaveInstance } from './behaveDebug';
 import { QueueItem } from '../extension';
-import { WkspError } from '../common';
+import { WkspError, escapeRegex } from '../common';
 import { WkspRun } from './testRunHandler';
 import { ExampleRow } from '../parsers/testFile';
 
@@ -208,8 +208,7 @@ function getPipedScenarioNames(selectedScenarios: QueueItem[]) {
 
 
 export function getScenarioRunName(scenName: string, isOutline: boolean, exampleRow?: ExampleRow) {
-  // escape double quotes and regex special characters
-  let scenarioName = scenName.replace(/[".*+?^${}()|[\]\\]/g, '\\$&');
+  let scenarioName = escapeRegex(scenName);
 
   // individual example row — match outline name (with <param> → .*) + row suffix
   if (exampleRow) {
@@ -217,7 +216,7 @@ export function getScenarioRunName(scenName: string, isOutline: boolean, example
     if (scenarioName.includes("<"))
       scenarioName = scenarioName.replace(/<[^>]*>/g, ".*");
     // Build the row suffix: " -- @tableIndex.rowIndex [examplesName]"
-    const escapedExName = exampleRow.examplesName.replace(/[".*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedExName = escapeRegex(exampleRow.examplesName);
     const suffix = exampleRow.examplesName
       ? ` -- @${exampleRow.tableIndex}\\.${exampleRow.rowIndex} ${escapedExName}`
       : ` -- @${exampleRow.tableIndex}\\.${exampleRow.rowIndex}`;
@@ -226,7 +225,7 @@ export function getScenarioRunName(scenName: string, isOutline: boolean, example
 
   // scenario outline with a <param> in its name
   if (isOutline && scenarioName.includes("<"))
-    scenarioName = scenarioName.replace(/<.*>/g, ".*");
+    scenarioName = scenarioName.replace(/<[^>]*>/g, ".*");
 
   return "^" + scenarioName + (isOutline ? " -- @" : "$");
 }

@@ -200,7 +200,7 @@ export class DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
           this.updateSymbolRange(currentExamples, startLine - 1, lines);
         }
 
-        const examplesName = examplesMatch[1].trim() || "Examples";
+        const examplesName = examplesMatch[2].trim() || "Examples";
         const selectionRange = new vscode.Range(
           new vscode.Position(lineNo, 0),
           new vscode.Position(lineNo, lines[lineNo].length)

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import * as xml2js from 'xml2js';
 import { QueueItem } from "../extension";
-import { getContentFromFilesystem, showDebugWindow, WIN_MAX_PATH, WkspError } from '../common';
+import { getContentFromFilesystem, showDebugWindow, WIN_MAX_PATH, WkspError, escapeRegex } from '../common';
 import { config } from '../configuration';
 import { getJunitWkspRunDirUri } from '../watchers/junitWatcher';
 import { WorkspaceSettings } from '../settings';
@@ -56,7 +56,8 @@ type ParseResult = {
 }
 
 
-export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseResult, item: QueueItem): void {
+export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseResult, item: QueueItem,
+  reportedAncestors = new Set<string>()): void {
 
   const window = debug ? "debug console" : `Behave VSC output window`;
   let message: vscode.TestMessage;
@@ -106,9 +107,13 @@ export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseRes
 
   // Propagate failure/error results to ancestor items (group and outline) so the
   // error message is visible on parent nodes in the Test Explorer, not just the row.
+  // Use reportedAncestors to avoid duplicate calls when multiple rows fail in the same group.
   if (item.scenario.exampleRow && (result.status === "failed" || result.status === "error" || result.status === "hook_error")) {
     let ancestor = item.test.parent;
     while (ancestor) {
+      if (reportedAncestors.has(ancestor.id))
+        break;
+      reportedAncestors.add(ancestor.id);
       const msg = new vscode.TestMessage(result.failedText ?? result.status);
       if (ancestor.uri && ancestor.range)
         msg.location = new vscode.Location(ancestor.uri, ancestor.range);
@@ -282,6 +287,8 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
   }
 
 
+  const reportedAncestors = new Set<string>();
+
   for (const queueItem of filteredQueue) {
 
     const fullFeatureName = getjUnitName(wkspSettings, queueItem.scenario.featureFileName,
@@ -300,7 +307,7 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
       const rowSuffix = exName ? ` -- @${tableIndex}.${rowIndex} ${exName}` : ` -- @${tableIndex}.${rowIndex}`;
 
       // Build an outline name regex: exact for plain names, .* for <param> placeholders
-      let outlinePattern = scenarioName.replace(/[".*+?^${}()|[\]\\]/g, '\\$&');
+      let outlinePattern = escapeRegex(scenarioName);
       if (scenarioName.includes("<"))
         outlinePattern = outlinePattern.replace(/<[^>]*>/g, ".*");
       const outlineRx = new RegExp("^" + outlinePattern + "$");
@@ -323,12 +330,12 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
         const nonSkipped = queueItemResults.find(tc => tc.$.status !== "skipped");
         if (nonSkipped) {
           const parseResult = CreateParseResult(wkspSettings, debug, nonSkipped);
-          updateTest(run, debug, parseResult, queueItem);
+          updateTest(run, debug, parseResult, queueItem, reportedAncestors);
           continue;
         }
       }
       const parseResult = CreateParseResult(wkspSettings, debug, queueItemResults[0]);
-      updateTest(run, debug, parseResult, queueItem);
+      updateTest(run, debug, parseResult, queueItem, reportedAncestors);
       continue;
     }
 
@@ -372,7 +379,7 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
     }
 
     const parseResult = CreateParseResult(wkspSettings, debug, queueItemResult);
-    updateTest(run, debug, parseResult, queueItem);
+    updateTest(run, debug, parseResult, queueItem, reportedAncestors);
 
     // When an outline is run directly, also update child group and row items
     // so individual example results are visible in the Test Explorer.
@@ -409,13 +416,18 @@ export function updateTestResultsForUnreadableJunitFile(wkspSettings: WorkspaceS
 function updateOutlineChildResults(wkspSettings: WorkspaceSettings, run: vscode.TestRun, debug: boolean,
   outlineItem: vscode.TestItem, testCases: TestCase[]) {
 
-  // Build a lookup from the " -- @x.y name" suffix to the testcase
-  const suffixMap = new Map<string, TestCase>();
+  // Build a lookup from the " -- @x.y name" suffix to testcase(s).
+  // Multiple outlines can share the same suffix; use an array to avoid silent overwrites.
+  const suffixMap = new Map<string, TestCase[]>();
   for (const tc of testCases) {
     const atIdx = tc.$.name.lastIndexOf(" -- @");
     if (atIdx >= 0) {
       const suffix = tc.$.name.substring(atIdx);
-      suffixMap.set(suffix, tc);
+      const existing = suffixMap.get(suffix);
+      if (existing)
+        existing.push(tc);
+      else
+        suffixMap.set(suffix, [tc]);
     }
   }
 
@@ -445,7 +457,7 @@ function updateOutlineChildResults(wkspSettings: WorkspaceSettings, run: vscode.
 
 
 function matchRowItemToResult(wkspSettings: WorkspaceSettings, debug: boolean,
-  rowItem: vscode.TestItem, suffixMap: Map<string, TestCase>): ParseResult | undefined {
+  rowItem: vscode.TestItem, suffixMap: Map<string, TestCase[]>): ParseResult | undefined {
 
   // The row's label is like "@1.1 Red Tree Frog | mush" — extract the "@x.y" part to build the suffix
   const label = rowItem.label;
@@ -454,8 +466,10 @@ function matchRowItemToResult(wkspSettings: WorkspaceSettings, debug: boolean,
     return undefined;
 
   // Try all suffixes that contain this @x.y pattern
-  for (const [suffix, tc] of suffixMap) {
+  for (const [suffix, testCases] of suffixMap) {
     if (suffix.includes(` -- @${atMatch[1]}.${atMatch[2]} `) || suffix.endsWith(` -- @${atMatch[1]}.${atMatch[2]}`)) {
+      // Prefer non-skipped result when multiple outlines share the suffix
+      const tc = testCases.find(t => t.$.status !== "skipped") ?? testCases[0];
       return CreateParseResult(wkspSettings, debug, tc);
     }
   }
