@@ -121,7 +121,14 @@ suite('gherkinPatterns', () => {
     test('should match Examples with description', () => {
       const match = examplesRe.exec('  Examples: Valid users');
       assert.ok(match);
-      assert.strictEqual(match[1].trim(), 'Valid users');
+      assert.strictEqual(match[2].trim(), 'Valid users');
+    });
+
+    test('should match Scenarios keyword (alias for Examples)', () => {
+      const match = examplesRe.exec('  Scenarios: Valid users');
+      assert.ok(match);
+      assert.strictEqual(match[1], 'Scenarios');
+      assert.strictEqual(match[2].trim(), 'Valid users');
     });
 
     test('should be case insensitive', () => {
