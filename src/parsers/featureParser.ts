@@ -3,7 +3,7 @@ import { WorkspaceSettings } from "../settings";
 import { uriId, sepr, basename, getLines, getWorkspaceUriForFile } from '../common';
 import { diagLog } from '../logger';
 import { config } from '../configuration';
-import { featureRe, featureMultiLineRe, scenarioRe, scenarioOutlineRe, featureFileStepRe, tagRe, textBlockDelimiterRe, tableRowRe } from './gherkinPatterns';
+import { featureRe, featureMultiLineRe, scenarioRe, scenarioOutlineRe, examplesRe, featureFileStepRe, tagRe, textBlockDelimiterRe, tableRowRe } from './gherkinPatterns';
 
 const commentedFeatureMultilineReStr = /^\s*#.*Feature:(.*)$/im;
 
@@ -96,7 +96,9 @@ export const getFeatureNameFromContent = async (content: string, uri: vscode.Uri
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode.Uri, content: string, caller: string,
   onScenarioLine: (range: vscode.Range, scenarioName: string, isOutline: boolean) => void,
-  onFeatureLine: (range: vscode.Range) => void) => {
+  onFeatureLine: (range: vscode.Range) => void,
+  onExampleRow?: (range: vscode.Range, outlineName: string, tableIndex: number, rowIndex: number, examplesName: string, values: string[]) => void,
+  onExamplesGroup?: (range: vscode.Range, outlineName: string, tableIndex: number, examplesName: string) => void) => {
 
   const fileName = basename(uri);
   const lines = getLines(content);
@@ -104,6 +106,14 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
   let fileSteps = 0;
   let lastStepType = "given";
   let insideStepTextBlock = false;
+
+  // Scenario Outline / Examples tracking
+  let currentOutlineName: string | undefined;
+  let inExamplesSection = false;
+  let examplesTableIndex = 0;
+  let examplesRowIndex = 0;
+  let examplesName = "";
+  let examplesIsHeaderRow = false;
 
   const fileUriMatchString = uriId(uri);
 
@@ -143,9 +153,21 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
       continue;
     }
 
-    // Skip table rows (lines starting with |)
+    // Handle table rows (lines starting with |)
     const tableRowMatch = tableRowRe.exec(line);
     if (tableRowMatch) {
+      if (inExamplesSection && onExampleRow && currentOutlineName !== undefined) {
+        if (examplesIsHeaderRow) {
+          // This is the header row — skip it but mark that data rows follow
+          examplesIsHeaderRow = false;
+        } else {
+          // Data row — parse cell values and emit
+          examplesRowIndex++;
+          const values = line.split('|').slice(1, -1).map(v => v.trim());
+          const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + line.length));
+          onExampleRow(range, currentOutlineName, examplesTableIndex, examplesRowIndex, examplesName, values);
+        }
+      }
       continue;
     }
 
@@ -164,8 +186,24 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
       continue;
     }
 
+    // Check for Examples: (must come before step check to avoid misidentification)
+    const examplesMatch = examplesRe.exec(line);
+    if (examplesMatch) {
+      inExamplesSection = true;
+      examplesTableIndex++;
+      examplesRowIndex = 0;
+      examplesIsHeaderRow = true;
+      examplesName = examplesMatch[2].trim();
+      if (onExamplesGroup && currentOutlineName !== undefined) {
+        const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + line.length));
+        onExamplesGroup(range, currentOutlineName, examplesTableIndex, examplesName);
+      }
+      continue;
+    }
+
     const step = featureFileStepRe.exec(line);
     if (step) {
+      inExamplesSection = false;
       const text = step[0].trim();
       const matchText = step[2].trim();
 
@@ -189,6 +227,15 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
       const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + scenario[0].length));
       onScenarioLine(range, scenarioName, isOutline);
       fileScenarios++;
+      // Reset outline tracking
+      if (isOutline) {
+        currentOutlineName = scenarioName;
+        examplesTableIndex = 0;
+        inExamplesSection = false;
+      } else {
+        currentOutlineName = undefined;
+        inExamplesSection = false;
+      }
       continue;
     }
 
@@ -196,6 +243,8 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
     if (feature) {
       const range = new vscode.Range(new vscode.Position(lineNo, 0), new vscode.Position(lineNo, line.length));
       onFeatureLine(range);
+      currentOutlineName = undefined;
+      inExamplesSection = false;
     }
 
   }

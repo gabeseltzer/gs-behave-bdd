@@ -4,8 +4,9 @@ import { WorkspaceSettings } from "../settings";
 import { runBehaveInstance } from './behaveRun';
 import { debugBehaveInstance } from './behaveDebug';
 import { QueueItem } from '../extension';
-import { WkspError } from '../common';
+import { WkspError, escapeRegex } from '../common';
 import { WkspRun } from './testRunHandler';
+import { ExampleRow } from '../parsers/testFile';
 
 
 
@@ -199,20 +200,32 @@ function getPipedFeaturePathsPattern(wr: WkspRun, parallelMode: boolean, filtere
 function getPipedScenarioNames(selectedScenarios: QueueItem[]) {
   const scenarioNames: string[] = [];
   selectedScenarios.forEach(x => {
-    scenarioNames.push(getScenarioRunName(x.scenario.scenarioName, x.scenario.isOutline));
+    scenarioNames.push(getScenarioRunName(x.scenario.scenarioName, x.scenario.isOutline, x.scenario.exampleRow));
   });
   const pipedScenarioNames = scenarioNames.join("|");
   return pipedScenarioNames;
 }
 
 
-function getScenarioRunName(scenName: string, isOutline: boolean) {
-  // escape double quotes and regex special characters
-  let scenarioName = scenName.replace(/[".*+?^${}()|[\]\\]/g, '\\$&');
+export function getScenarioRunName(scenName: string, isOutline: boolean, exampleRow?: ExampleRow) {
+  let scenarioName = escapeRegex(scenName);
+
+  // individual example row — match outline name (with <param> → .*) + row suffix
+  if (exampleRow) {
+    // Replace <param> placeholders with .* since behave substitutes actual values
+    if (scenarioName.includes("<"))
+      scenarioName = scenarioName.replace(/<[^>]*>/g, ".*");
+    // Build the row suffix: " -- @tableIndex.rowIndex [examplesName]"
+    const escapedExName = escapeRegex(exampleRow.examplesName);
+    const suffix = exampleRow.examplesName
+      ? ` -- @${exampleRow.tableIndex}\\.${exampleRow.rowIndex} ${escapedExName}`
+      : ` -- @${exampleRow.tableIndex}\\.${exampleRow.rowIndex}`;
+    return "^" + scenarioName + suffix + "$";
+  }
 
   // scenario outline with a <param> in its name
   if (isOutline && scenarioName.includes("<"))
-    scenarioName = scenarioName.replace(/<.*>/g, ".*");
+    scenarioName = scenarioName.replace(/<[^>]*>/g, ".*");
 
   return "^" + scenarioName + (isOutline ? " -- @" : "$");
 }

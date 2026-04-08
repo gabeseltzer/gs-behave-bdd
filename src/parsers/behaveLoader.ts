@@ -68,7 +68,8 @@ export async function loadFromBehave(
   pythonExec: string,
   projectPath: string,
   stepsPaths: string[],
-  bundledLibsPath?: string
+  bundledLibsPath?: string,
+  timeoutMs = 10000
 ): Promise<BehaveDiscoveryResult> {
   const startTime = performance.now();
 
@@ -77,7 +78,7 @@ export async function loadFromBehave(
     const args = [projectPath, JSON.stringify(stepsPaths)];
     if (bundledLibsPath)
       args.push('--bundled-libs', bundledLibsPath);
-    const { stdout: output, stderr: processStderr } = await spawnPython(pythonExec, scriptPath, args, projectPath);
+    const { stdout: output, stderr: processStderr } = await spawnPython(pythonExec, scriptPath, args, projectPath, timeoutMs);
 
     // Parse JSON output
     interface RawStepInfo {
@@ -156,7 +157,7 @@ export async function loadFromBehave(
     // If behave is not installed and we weren't already using bundled, fall back to bundled
     if (!bundledLibsPath && isBehaveNotInstalledError(errMsg)) {
       diagLog(`loadFromBehave: behave not found in environment, falling back to bundled behave`);
-      return loadFromBehave(pythonExec, projectPath, stepsPaths, getBundledBehavePath());
+      return loadFromBehave(pythonExec, projectPath, stepsPaths, getBundledBehavePath(), timeoutMs);
     }
 
     // If bundled was already tried and still failed, give a clearer message than "pip install behave"
@@ -206,7 +207,8 @@ function spawnPython(
   pythonExec: string,
   scriptPath: string,
   args: string[],
-  cwd: string
+  cwd: string,
+  timeoutMs = 10000
 ): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     let stdout = '';
@@ -221,14 +223,20 @@ function spawnPython(
       else resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
     };
 
-    const cp = spawn(pythonExec, [scriptPath, ...args], {
-      cwd
-    });
+    const allArgs = [scriptPath, ...args];
+    const cp = spawn(pythonExec, allArgs, { cwd });
 
+    const timeoutSecs = Math.round(timeoutMs / 1000);
     const timeoutId = setTimeout(() => {
       cp.kill();
-      settle(new Error('Python process timeout after 10 seconds'));
-    }, 10000);
+      const cmd = `cd ${shellQuote(cwd)} && ${shellQuote(pythonExec)} ${allArgs.map(shellQuote).join(' ')}`;
+      const debugInfo = [
+        `command: ${cmd}`,
+        stdout.trim() && `stdout:\n${stdout.trim()}`,
+        stderr.trim() && `stderr:\n${stderr.trim()}`,
+      ].filter(Boolean).join('\n');
+      settle(new Error(`Python process timeout after ${timeoutSecs} seconds\n${debugInfo}`));
+    }, timeoutMs);
 
     cp.stdout?.on('data', (chunk) => {
       stdout += chunk.toString();
@@ -263,6 +271,14 @@ function spawnPython(
       }
     });
   });
+}
+
+/**
+ * Wraps a string in POSIX single quotes, escaping any single quotes within.
+ * Exported for testing.
+ */
+export function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 /**

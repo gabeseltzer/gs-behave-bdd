@@ -288,7 +288,7 @@ suite('step load error notification', () => {
     await clock.tickAsync(500);
 
     assert.ok(logInfoStub.called, 'logInfo should be called to log to output channel');
-    const loggedText = logInfoStub.firstCall.args[0];
+    const loggedText = logInfoStub.getCalls().map((c: sinon.SinonSpyCall) => c.args[0] as string).join('\n');
     assert.ok(loggedText.includes('duplicate step'),
       'output channel should contain the error details');
   });
@@ -368,7 +368,7 @@ suite('step load error notification', () => {
     assert.ok(warnText.endsWith('...'), 'truncated warning should end with "..."');
 
     // Output channel should have the full error
-    const logText = logInfoStub.firstCall.args[0] as string;
+    const logText = logInfoStub.getCalls().map((c: sinon.SinonSpyCall) => c.args[0] as string).join('\n');
     assert.ok(logText.includes(longError), 'output channel should contain the full error');
   });
 

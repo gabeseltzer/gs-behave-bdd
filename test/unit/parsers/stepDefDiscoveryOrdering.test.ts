@@ -62,6 +62,7 @@ suite('stepDefDiscoveryOrdering', () => {
     sinon.stub(configModule.config, 'getPythonExecutable').resolves('python3');
     sinon.stub(configModule.config.logger, 'showError');
     sinon.stub(configModule.config.logger, 'showWarn');
+    sinon.stub(configModule.config.logger, 'logInfo');
   });
 
   teardown(() => {

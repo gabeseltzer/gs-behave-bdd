@@ -30,6 +30,16 @@ export class Uri {
     return new Uri('file', fsPath);
   }
 
+  static parse(value: string): Uri {
+    // Strip file:// or file:/// prefix and decode to a plain path
+    const stripped = value.replace(/^file:\/\/\/?/i, '');
+    // On Windows the path starts with a drive letter, e.g. /c:/foo -> c:/foo
+    const fsPath = stripped.startsWith('/') && /^\/[a-zA-Z]:/.test(stripped)
+      ? stripped.slice(1)
+      : stripped;
+    return new Uri('file', fsPath);
+  }
+
   static joinPath(base: Uri, ...pathSegments: string[]): Uri {
     const joined = path.join(base.fsPath, ...pathSegments);
     return Uri.file(joined);
@@ -136,6 +146,9 @@ export const workspace = {
       if (key === 'importStrategy') {
         return 'useBundled';
       }
+      if (key === 'stepDefinitionSearchTimeout') {
+        return 10;
+      }
       return undefined;
     },
     has: () => false,
@@ -235,6 +248,11 @@ export class Location {
     public readonly uri: Uri,
     public readonly range: Range
   ) { }
+}
+
+export class TestMessage {
+  public location?: Location;
+  constructor(public readonly message: string) { }
 }
 
 export class SemanticTokens {
