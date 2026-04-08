@@ -253,7 +253,7 @@ function getChildrenIds(children: vscode.TestItemCollection): string | undefined
 		return undefined;
 	const arrChildrenIds: string[] = [];
 	children.forEach(child => {
-		arrChildrenIds.push(child.id);
+		arrChildrenIds.push(standardisePath(child.id) ?? child.id);
 	});
 	return arrChildrenIds.join();
 }
