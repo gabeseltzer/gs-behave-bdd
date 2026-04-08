@@ -19,6 +19,9 @@ export const WIN_MAX_CMD = 8191; // 8192 - 1, see https://docs.microsoft.com/en-
 export const FOLDERNAME_CHARS_VALID_ON_ALLPLATFORMS = /[^ a-zA-Z0-9_.-]/g;
 export const BEHAVE_EXECUTION_ERROR_MESSAGE = "--- BEHAVE EXECUTION ERROR DETECTED ---"
 
+/** Escape regex special characters in a string so it can be used as a literal in a RegExp. */
+export const escapeRegex = (str: string) => str.replace(/[".*+?^${}()|[\]\\]/g, '\\$&');
+
 export const sepr = ":////:"; // separator that cannot exist in file paths, i.e. safe for splitting in a path context
 export const beforeFirstSepr = (str: string) => str.substring(0, str.indexOf(sepr));
 export const afterFirstSepr = (str: string) => str.substring(str.indexOf(sepr) + sepr.length, str.length);

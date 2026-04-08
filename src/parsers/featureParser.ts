@@ -193,7 +193,7 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
       examplesTableIndex++;
       examplesRowIndex = 0;
       examplesIsHeaderRow = true;
-      examplesName = examplesMatch[1].trim();
+      examplesName = examplesMatch[2].trim();
       if (onExamplesGroup && currentOutlineName !== undefined) {
         const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + line.length));
         onExamplesGroup(range, currentOutlineName, examplesTableIndex, examplesName);
