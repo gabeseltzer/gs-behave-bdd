@@ -355,7 +355,7 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
     if (queueItemResults.length === 0 && scenarioName.includes("<")) {
       queueItemResults = junitContents.testsuite.testcase.filter(tc => {
         const jScenName = tc.$.name.substring(0, tc.$.name.lastIndexOf(" -- @"));
-        const rx = new RegExp(scenarioName.replace(/<.*>/g, ".*"));
+        const rx = new RegExp("^" + escapeRegex(scenarioName).replace(/<[^>]*>/g, ".*") + "$");
         return tc.$.classname === className && rx.test(jScenName);
       });
     }
@@ -368,13 +368,15 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
 
     let queueItemResult = queueItemResults[0];
 
-    // scenario outline
+    // scenario outline — prefer failed, then non-skipped, then first
     if (queueItemResults.length > 1) {
-      for (const qir of queueItemResults) {
-        if (qir.$.status === "failed") {
-          queueItemResult = qir;
-          break;
-        }
+      const failed = queueItemResults.find(qir => qir.$.status === "failed");
+      if (failed) {
+        queueItemResult = failed;
+      } else {
+        const nonSkipped = queueItemResults.find(qir => qir.$.status !== "skipped");
+        if (nonSkipped)
+          queueItemResult = nonSkipped;
       }
     }
 
