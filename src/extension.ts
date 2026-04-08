@@ -24,6 +24,7 @@ import { SelectionRangeProvider } from './handlers/selectionRangeProvider';
 import { HoverProvider } from './handlers/hoverProvider';
 import { FixtureDefinitionProvider, FixtureHoverProvider, FixtureReferenceProvider } from './handlers/fixtureProviders';
 import { StepReferenceProvider } from './handlers/stepReferenceProvider';
+import { StepCodeLensProvider } from './handlers/codeLensProvider';
 import { validateFixtureTags } from './handlers/fixtureDiagnostics';
 import { validateStepDefinitions } from './handlers/stepDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
@@ -137,6 +138,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.commands.registerTextEditorCommand(`gs-behave-bdd.findStepReferences`, findStepReferencesHandler),
       vscode.commands.registerCommand(`gs-behave-bdd.stepReferences.prev`, prevStepReferenceHandler),
       vscode.commands.registerCommand(`gs-behave-bdd.stepReferences.next`, nextStepReferenceHandler),
+      vscode.commands.registerCommand(`gs-behave-bdd.codeLensReferences`, async (uri: vscode.Uri, lineNo: number) => {
+        const editor = vscode.window.activeTextEditor;
+        if (editor && urisMatch(editor.document.uri, uri)) {
+          const pos = new vscode.Position(lineNo, 0);
+          editor.selection = new vscode.Selection(pos, pos);
+        }
+        await vscode.commands.executeCommand('gs-behave-bdd.findStepReferences');
+      }),
       // Legacy command aliases for users migrating from behave-vsc — preserves custom keybindings
       vscode.commands.registerTextEditorCommand(`behave-vsc.gotoStep`, gotoStepHandler),
       vscode.commands.registerTextEditorCommand(`behave-vsc.findStepReferences`, findStepReferencesHandler),
@@ -152,7 +161,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new FixtureDefinitionProvider()),
       vscode.languages.registerHoverProvider({ language: "gherkin" }, new FixtureHoverProvider()),
       vscode.languages.registerReferenceProvider(["gherkin", "python"], new StepReferenceProvider()),
-      vscode.languages.registerReferenceProvider(["gherkin", "python"], new FixtureReferenceProvider())
+      vscode.languages.registerReferenceProvider(["gherkin", "python"], new FixtureReferenceProvider()),
+      vscode.languages.registerCodeLensProvider("python", new StepCodeLensProvider())
     );
 
 

@@ -135,7 +135,7 @@ export const workspace = {
   getWorkspaceFolder: (uri: Uri) => ({ uri, name: 'mock-workspace', index: 0 }),
   workspaceFolders: [],
   getConfiguration: (section?: string) => ({
-    get: (key: string) => {
+    get: (key: string, defaultValue?: unknown) => {
       // Return default values for known configuration keys
       if (section === 'gs-behave-bdd' || !section) {
         if (key === 'multiRootRunWorkspacesInParallel') return false;
@@ -149,7 +149,7 @@ export const workspace = {
       if (key === 'stepDefinitionSearchTimeout') {
         return 10;
       }
-      return undefined;
+      return defaultValue;
     },
     has: () => false,
     inspect: () => undefined,
@@ -173,7 +173,8 @@ export const languages = {
   registerHoverProvider: () => ({ dispose: () => { /* mock */ } }),
   registerDocumentSymbolProvider: () => ({ dispose: () => { /* mock */ } }),
   registerReferenceProvider: () => ({ dispose: () => { /* mock */ } }),
-  registerDocumentSemanticTokensProvider: (_selector: unknown, _provider: unknown, _legend: unknown) => ({ dispose: () => { /* mock */ } })
+  registerDocumentSemanticTokensProvider: (_selector: unknown, _provider: unknown, _legend: unknown) => ({ dispose: () => { /* mock */ } }),
+  registerCodeLensProvider: (_selector: unknown, _provider: unknown) => ({ dispose: () => { /* mock */ } })
 };
 
 export const window = {
@@ -263,4 +264,14 @@ export class SemanticTokens {
 export class SemanticTokensBuilder {
   push(..._args: unknown[]) { /* mock */ }
   build() { return new SemanticTokens(new Uint32Array(0)); }
+}
+
+export class CodeLens {
+  public command?: { title: string; command: string; arguments?: unknown[] };
+  constructor(
+    public readonly range: Range,
+    command?: { title: string; command: string; arguments?: unknown[] }
+  ) {
+    this.command = command;
+  }
 }
