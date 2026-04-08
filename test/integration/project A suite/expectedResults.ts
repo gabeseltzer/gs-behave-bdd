@@ -263,7 +263,8 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'passed',
       scenario_scenarioName: 'Blenders Success <thing>',
-      test_children: undefined,
+      test_children: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success <thing>/Amphibians-1,' +
+        '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success <thing>/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success <thing>',
@@ -279,7 +280,8 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'failed',
       scenario_scenarioName: 'Blenders Fail <thing>',
-      test_children: undefined,
+      test_children: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail <thing>/Amphibians-1,' +
+        '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail <thing>/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail <thing>',
@@ -295,7 +297,8 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'skipped',
       scenario_scenarioName: 'Blenders Skip <thing>',
-      test_children: undefined,
+      test_children: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Skip <thing>/Amphibians-1,' +
+        '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Skip <thing>/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Skip <thing>',
@@ -311,7 +314,8 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'passed',
       scenario_scenarioName: 'Blenders Success paramless',
-      test_children: undefined,
+      test_children: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success paramless/Amphibians-1,' +
+        '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success paramless/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success paramless',
@@ -327,7 +331,8 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'failed',
       scenario_scenarioName: 'Blenders Fail paramless',
-      test_children: undefined,
+      test_children: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail paramless/Amphibians-1,' +
+        '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail paramless/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Fail paramless',
@@ -343,7 +348,8 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'passed',
       scenario_scenarioName: 'Blenders Success "<thing>"',
-      test_children: undefined,
+      test_children: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success "<thing>"/Amphibians-1,' +
+        '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success "<thing>"/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project A/{{featurePath}}/group1_features/outline_mixed.feature/Blenders Success "<thing>"',
@@ -375,7 +381,8 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'passed',
       scenario_scenarioName: 'Blend Success',
-      test_children: undefined,
+      test_children: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success/Amphibians-1,' +
+        '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success',
@@ -391,7 +398,8 @@ export function getExpectedResults(wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'passed',
       scenario_scenarioName: 'Blend Success 2',
-      test_children: undefined,
+      test_children: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success 2/Amphibians-1,' +
+        '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success 2/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project A/{{featurePath}}/group1_features/outline_success.feature/Blend Success 2',

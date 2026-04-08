@@ -199,7 +199,8 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'passed',
       scenario_scenarioName: 'Blenders Success',
-      test_children: undefined,
+      test_children: '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Success/Amphibians-1,' +
+        '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Success/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Success',
@@ -215,7 +216,8 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'failed',
       scenario_scenarioName: 'Blenders Fail',
-      test_children: undefined,
+      test_children: '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Fail/Amphibians-1,' +
+        '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Fail/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Fail',
@@ -231,7 +233,8 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'failed',
       scenario_scenarioName: 'Blenders Fail 2',
-      test_children: undefined,
+      test_children: '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Fail 2/Amphibians-1,' +
+        '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Fail 2/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Fail 2',
@@ -247,7 +250,8 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'skipped',
       scenario_scenarioName: 'Blenders Skip',
-      test_children: undefined,
+      test_children: '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Skip/Amphibians-1,' +
+        '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Skip/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Skip',
@@ -263,7 +267,8 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'passed',
       scenario_scenarioName: 'Blenders Success 2',
-      test_children: undefined,
+      test_children: '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Success 2/Amphibians-1,' +
+        '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Success 2/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project B/{{featurePath}}/grouped/outline_mixed.feature/Blenders Success 2',
@@ -279,7 +284,8 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'passed',
       scenario_scenarioName: 'Blend Success',
-      test_children: undefined,
+      test_children: '.../project B/{{featurePath}}/grouped/outline_success.feature/Blend Success/Amphibians-1,' +
+        '.../project B/{{featurePath}}/grouped/outline_success.feature/Blend Success/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project B/{{featurePath}}/grouped/outline_success.feature/Blend Success',
@@ -295,7 +301,8 @@ export const getExpectedResults = (wkspUri: vscode.Uri, config: Configuration): 
       scenario_isOutline: true,
       scenario_result: 'passed',
       scenario_scenarioName: 'Blend Success 2',
-      test_children: undefined,
+      test_children: '.../project B/{{featurePath}}/grouped/outline_success.feature/Blend Success 2/Amphibians-1,' +
+        '.../project B/{{featurePath}}/grouped/outline_success.feature/Blend Success 2/Consumer Electronics-2',
       test_description: undefined,
       test_error: undefined,
       test_id: '.../project B/{{featurePath}}/grouped/outline_success.feature/Blend Success 2',
