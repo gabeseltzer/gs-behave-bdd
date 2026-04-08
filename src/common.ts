@@ -310,12 +310,13 @@ export const countTestItemsInCollection = (wkspId: string | null, testData: Test
 
 
 export const getScenarioTests = (testData: TestData, items: vscode.TestItem[]): vscode.TestItem[] => {
-  const scenarios = items.filter(item => {
+  return items.filter(item => {
     const data = testData.get(item);
-    if (data && (data as Scenario).scenarioName)
-      return true;
+    // Scenario has isOutline (boolean); ScenarioExamplesGroup and TestFile do not.
+    // We use duck-typing rather than instanceof because the bundled extension
+    // and integration test code may have separate class identities.
+    return data !== undefined && typeof (data as Scenario).isOutline === 'boolean';
   });
-  return scenarios;
 }
 
 
