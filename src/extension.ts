@@ -82,7 +82,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     junitWatcher.startWatchingJunitFolder();
 
     const statusItem = vscode.languages.createLanguageStatusItem('behave.status', { language: 'gherkin' });
-    statusItem.name = "Behave VSC Status";
+    statusItem.name = "Behave BDD Status";
     statusItem.text = "Behave: Parsing...";
     statusItem.busy = true;
 

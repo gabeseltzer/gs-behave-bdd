@@ -1,6 +1,6 @@
 // Unit tests for testRunHandler logWkspRunStarted and logWkspRunComplete functions
 // Verifies that run start/complete messages go to test results pane (run.appendOutput)
-// and NOT to the output channel (config.logger), and that "See Behave VSC" is not emitted.
+// and NOT to the output channel (config.logger), and that "See Behave BDD" is not emitted.
 
 import * as assert from 'assert';
 import * as sinon from 'sinon';
@@ -70,12 +70,12 @@ suite('testRunHandler', () => {
       assert.ok(/\d{4}-\d{2}-\d{2}T/.test(allOutput), 'Should contain ISO timestamp');
     });
 
-    test('does NOT write "See Behave VSC" to output', () => {
+    test('does NOT write "See Behave BDD" to output', () => {
       const wr = createMockWr();
       logWkspRunStarted(wr as unknown as Parameters<typeof logWkspRunStarted>[0]);
 
       const allOutput = appendOutputCalls.join('');
-      assert.ok(!allOutput.includes('See Behave VSC'), 'Should not contain "See Behave VSC" message');
+      assert.ok(!allOutput.includes('See Behave BDD'), 'Should not contain "See Behave BDD" message');
     });
 
     test('does not call config.logger.logInfo', () => {
@@ -107,13 +107,13 @@ suite('testRunHandler', () => {
       assert.ok(/\d+(\.\d+)?\s*secs/.test(allOutput), 'Should contain elapsed time in secs');
     });
 
-    test('does NOT write "See Behave VSC" to output', () => {
+    test('does NOT write "See Behave BDD" to output', () => {
       const wr = createMockWr();
       const start = performance.now() - 500;
       logWkspRunComplete(wr as unknown as Parameters<typeof logWkspRunComplete>[0], start);
 
       const allOutput = appendOutputCalls.join('');
-      assert.ok(!allOutput.includes('See Behave VSC'), 'Should not contain "See Behave VSC" message');
+      assert.ok(!allOutput.includes('See Behave BDD'), 'Should not contain "See Behave BDD" message');
     });
 
     test('does not call config.logger.logInfo', () => {

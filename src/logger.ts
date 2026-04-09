@@ -19,7 +19,7 @@ export class Logger {
 
     const wkspPaths = wkspUris.map(u => u.path);
     if (wkspPaths.length < 2) {
-      this.channels[wkspUris[0].path] = vscode.window.createOutputChannel("Behave VSC");
+      this.channels[wkspUris[0].path] = vscode.window.createOutputChannel("Behave BDD");
       return;
     }
 
@@ -27,7 +27,7 @@ export class Logger {
       const name = wkspPath.split("/").pop();
       if (!name)
         throw new Error("can't get workspace name from uri path");
-      this.channels[wkspPath] = vscode.window.createOutputChannel(`Behave VSC: ${name}`);
+      this.channels[wkspPath] = vscode.window.createOutputChannel(`Behave BDD: ${name}`);
     });
   }
 
@@ -175,7 +175,7 @@ export const diagLog = (message: string, wkspUri?: vscode.Uri, logType?: DiagLog
   if (wkspUri)
     message = `${wkspUri}: ${message}`;
 
-  message = `[Behave VSC] ${message}`;
+  message = `[Behave BDD] ${message}`;
 
   switch (logType) {
     case DiagLogType.error:

@@ -270,7 +270,7 @@ For tests, inject test config: `configurationChangedHandler(undefined, testCfg, 
 
 See `src/runners/behaveRun.ts` and `behaveDebug.ts`:
 
-- Command logged to "Behave VSC" output channel
+- Command logged to "Behave BDD" output channel
 - Workspace support: uses workspace-specific `projectPath`, `featuresPath`, Python interpreter
 - Smart `-i` regex to run multiple tests in one behave instance (unless `runParallel`)
 - Always includes `--junit` and `--show-skipped` for result parsing
