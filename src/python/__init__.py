@@ -1,1 +1,1 @@
-"""Behave VSC Python helpers."""
+"""Behave BDD Python helpers."""

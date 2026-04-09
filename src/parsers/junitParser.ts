@@ -59,7 +59,7 @@ type ParseResult = {
 export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseResult, item: QueueItem,
   reportedAncestors = new Set<string>()): void {
 
-  const window = debug ? "debug console" : `Behave VSC output window`;
+  const window = debug ? "debug console" : `Behave BDD output window`;
   let message: vscode.TestMessage;
 
   if (run.token.isCancellationRequested)
@@ -321,7 +321,7 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
       });
       if (queueItemResults.length === 0) {
         throw `could not match example row queueItem to junit result, when trying to match with $.classname="${className}", ` +
-          `outline pattern "${outlineRx.source}", suffix "${rowSuffix}" in file ${junitFileUri.fsPath}`;
+        `outline pattern "${outlineRx.source}", suffix "${rowSuffix}" in file ${junitFileUri.fsPath}`;
       }
 
       // When <param> outlines produce ambiguous matches (e.g. "Blend .*" matches both

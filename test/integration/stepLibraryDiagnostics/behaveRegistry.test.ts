@@ -22,7 +22,7 @@ function getWorkspaceUri(wkspName: string): vscode.Uri {
 async function ensureExtensionReady(): Promise<void> {
   const extension = vscode.extensions.getExtension('gabeseltzer.gs-behave-bdd');
   if (!extension) {
-    throw new Error('Behave VSC extension not found');
+    throw new Error('Behave BDD extension not found');
   }
   _testSupport = await extension.activate() as TestSupport;
 }
