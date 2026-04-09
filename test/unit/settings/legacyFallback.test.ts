@@ -22,7 +22,7 @@ function makeConfig(values: Record<string, unknown>, explicitKeys: string[] = []
   };
 }
 
-const NEW_DEFAULTS = { multiRootRunWorkspacesInParallel: true, xRay: false };
+const NEW_DEFAULTS = { multiRootRunWorkspacesInParallel: true, xRay: false, verboseLogging: false };
 
 suite('legacy settings fallback (getWithLegacyFallback)', () => {
 

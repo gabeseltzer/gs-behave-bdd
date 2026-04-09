@@ -143,6 +143,9 @@ export const workspace = {
       if (key === 'xRay') {
         return false;
       }
+      if (key === 'verboseLogging') {
+        return false;
+      }
       if (key === 'importStrategy') {
         return 'useBundled';
       }

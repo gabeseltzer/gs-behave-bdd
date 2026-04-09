@@ -87,6 +87,12 @@
 					"type": "boolean",
 					"markdownDescription": "Show reference counts above step definitions in Python files via CodeLens.",
 					"default": true
+				},
+				"gs-behave-bdd.verboseLogging": {
+					"scope": "window",
+					"type": "boolean",
+					"markdownDescription": "⚠️ **Warning:** Enabling this may log sensitive information to the output channel, including the full contents of your environment variable presets.\n\nWhen enabled, additional developer debugging information is written to the output channel.",
+					"default": false
 				}
 			}
 		},
@@ -228,7 +234,7 @@
 	"name": "gs-behave-bdd",
 	"displayName": "Behave BDD",
 	"description": "Full langague support for Behave feature files. Run and debug tests. Navigate between steps and definitions. Forked from jimasp's behave-vsc",
-	"version": "0.9.17",
+	"version": "0.9.18",
 	"icon": "images/gs-behave-bdd.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",
