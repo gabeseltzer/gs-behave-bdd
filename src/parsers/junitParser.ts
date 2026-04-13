@@ -277,13 +277,29 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
     return;
   }
 
-  const parser = new xml2js.Parser();
-  let junitContents: JunitContents;
-  try {
-    junitContents = await parser.parseStringPromise(junitXml);
-  }
-  catch {
-    throw new WkspError(`Unable to parse junit file ${junitFileUri.fsPath}`, wkspSettings.uri);
+  // Retry parsing to handle the case where the filesystem watcher fires while
+  // behave is still mid-write, producing truncated/corrupt XML.
+  const maxRetries = 3;
+  const retryDelayMs = 200;
+  let junitContents!: JunitContents;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const parser = new xml2js.Parser();
+    try {
+      junitContents = await parser.parseStringPromise(junitXml);
+      break;
+    }
+    catch {
+      if (attempt === maxRetries)
+        throw new WkspError(`Unable to parse junit file ${junitFileUri.fsPath}`, wkspSettings.uri);
+      await new Promise(r => setTimeout(r, retryDelayMs));
+      try {
+        junitXml = await getContentFromFilesystem(junitFileUri);
+      }
+      catch {
+        updateTestResultsForUnreadableJunitFile(wkspSettings, run, filteredQueue, junitFileUri);
+        return;
+      }
+    }
   }
 
 
