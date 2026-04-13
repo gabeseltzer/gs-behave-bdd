@@ -61,7 +61,7 @@ export const logExtensionVersion = (context: vscode.ExtensionContext): void => {
   const extensionVersion = context.extension.packageJSON.version;
   const releaseNotesUrl = `${context.extension.packageJSON.repository.url.replace(".git", "")}/releases/tag/v${extensionVersion}`;
   const outputVersion = extensionVersion.startsWith("0") ? extensionVersion + " pre-release" : extensionVersion;
-  config.logger.logInfoAllWksps(`Behave VSC v${outputVersion}`);
+  config.logger.logInfoAllWksps(`Behave BDD v${outputVersion}`);
   config.logger.logInfoAllWksps(`Release notes: ${releaseNotesUrl}`);
 }
 
@@ -154,11 +154,11 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
           ? ` Note: The path appears to be duplicated - "projectPath" should be relative to the workspace root, not an absolute path.`
           : "";
         vscode.window.showWarningMessage(
-          `Behave VSC: Project path not found.\n\n` +
+          `Behave BDD: Project path not found.\n\n` +
           `Workspace: "${folder.name}"\n` +
           `Configured projectPath: "${projectPath}"\n` +
           `Full path checked: "${fullPath}"${hint}\n\n` +
-          `Behave VSC will ignore this workspace until the path is corrected.`,
+          `Behave BDD will ignore this workspace until the path is corrected.`,
           "OK"
         );
         return false;
@@ -186,11 +186,11 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     // we don't use config.logger.showWarn here, because we may not have a logger yet
     const projectPathInfo = projectPath ? ` (relative to projectPath "${projectPath}")` : "";
     vscode.window.showWarningMessage(
-      `Behave VSC: Features path not found.\n\n` +
+      `Behave BDD: Features path not found.\n\n` +
       `Workspace: "${folder.name}"\n` +
       `Configured featuresPath: "${featuresPath}"${projectPathInfo}\n` +
       `Full path checked: "${featuresUri.fsPath}"\n\n` +
-      `Behave VSC will ignore this workspace until the path is corrected.`,
+      `Behave BDD will ignore this workspace until the path is corrected.`,
       "OK"
     );
 
@@ -214,7 +214,7 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
 
   if (workspaceFoldersWithFeatures.length === 0) {
     if (folders.length === 1 && folders[0].name === "gs-behave-bdd")
-      throw `Please disable the marketplace Behave VSC extension before beginning development!`;
+      throw `Please disable the marketplace Behave BDD extension before beginning development!`;
     else
       throw `Extension was activated because a '*.feature' file was found in a workspace folder, but ` +
       `none of the workspace folders contain either a root 'features' folder or a settings.json that specifies a valid 'gs-behave-bdd.featuresPath'.\n` +

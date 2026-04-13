@@ -1,4 +1,4 @@
-# Behave VSC - Copilot Instructions
+# Behave BDD - Copilot Instructions
 
 ## Shared Instructions
 

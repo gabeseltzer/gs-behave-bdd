@@ -18,6 +18,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   private multiRootRunWorkspacesInParallel: boolean | undefined;
   private runParallel: boolean | undefined;
   private xRay: boolean | undefined;
+  private verboseLogging: boolean | undefined;
   private importStrategy: string | undefined;
   private stepDefinitionSearchTimeout: number | undefined;
 
@@ -25,7 +26,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   constructor({
     envVarOverrides, envVarPresets, activeEnvVarPreset, projectPath, featuresPath: featuresPath, justMyCode,
     multiRootRunWorkspacesInParallel,
-    runParallel, xRay, importStrategy, stepDefinitionSearchTimeout
+    runParallel, xRay, verboseLogging, importStrategy, stepDefinitionSearchTimeout
   }: {
     envVarOverrides: { [name: string]: string } | undefined,
     envVarPresets?: { [presetName: string]: { [name: string]: string } } | undefined,
@@ -36,6 +37,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     multiRootRunWorkspacesInParallel: boolean | undefined,
     runParallel: boolean | undefined,
     xRay: boolean | undefined,
+    verboseLogging?: boolean | undefined,
     importStrategy?: string | undefined,
     stepDefinitionSearchTimeout?: number | undefined
   }) {
@@ -48,6 +50,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     this.runParallel = runParallel;
     this.multiRootRunWorkspacesInParallel = multiRootRunWorkspacesInParallel;
     this.xRay = xRay;
+    this.verboseLogging = verboseLogging;
     this.importStrategy = importStrategy;
     this.stepDefinitionSearchTimeout = stepDefinitionSearchTimeout;
   }
@@ -80,6 +83,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.runParallel === undefined ? false : this.runParallel);
       case "xRay":
         return <T><unknown>(this.xRay === undefined ? false : this.xRay);
+      case "verboseLogging":
+        return <T><unknown>(this.verboseLogging === undefined ? false : this.verboseLogging);
       case "importStrategy":
         return <T><unknown>(this.importStrategy === undefined ? "useBundled" : this.importStrategy);
       case "stepDefinitionSearchTimeout":
@@ -128,6 +133,9 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         break;
       case "xRay":
         response = <T><unknown>this.xRay;
+        break;
+      case "verboseLogging":
+        response = <T><unknown>this.verboseLogging;
         break;
       case "importStrategy":
         response = <T><unknown>this.importStrategy;

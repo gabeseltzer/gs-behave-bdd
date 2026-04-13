@@ -59,7 +59,7 @@ type ParseResult = {
 export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseResult, item: QueueItem,
   reportedAncestors = new Set<string>()): void {
 
-  const window = debug ? "debug console" : `Behave VSC output window`;
+  const window = debug ? "debug console" : `Behave BDD output window`;
   let message: vscode.TestMessage;
 
   if (run.token.isCancellationRequested)
@@ -277,13 +277,29 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
     return;
   }
 
-  const parser = new xml2js.Parser();
-  let junitContents: JunitContents;
-  try {
-    junitContents = await parser.parseStringPromise(junitXml);
-  }
-  catch {
-    throw new WkspError(`Unable to parse junit file ${junitFileUri.fsPath}`, wkspSettings.uri);
+  // Retry parsing to handle the case where the filesystem watcher fires while
+  // behave is still mid-write, producing truncated/corrupt XML.
+  const maxRetries = 3;
+  const retryDelayMs = 200;
+  let junitContents!: JunitContents;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const parser = new xml2js.Parser();
+    try {
+      junitContents = await parser.parseStringPromise(junitXml);
+      break;
+    }
+    catch {
+      if (attempt === maxRetries)
+        throw new WkspError(`Unable to parse junit file ${junitFileUri.fsPath}`, wkspSettings.uri);
+      await new Promise(r => setTimeout(r, retryDelayMs));
+      try {
+        junitXml = await getContentFromFilesystem(junitFileUri);
+      }
+      catch {
+        updateTestResultsForUnreadableJunitFile(wkspSettings, run, filteredQueue, junitFileUri);
+        return;
+      }
+    }
   }
 
 
@@ -321,7 +337,7 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
       });
       if (queueItemResults.length === 0) {
         throw `could not match example row queueItem to junit result, when trying to match with $.classname="${className}", ` +
-          `outline pattern "${outlineRx.source}", suffix "${rowSuffix}" in file ${junitFileUri.fsPath}`;
+        `outline pattern "${outlineRx.source}", suffix "${rowSuffix}" in file ${junitFileUri.fsPath}`;
       }
 
       // When <param> outlines produce ambiguous matches (e.g. "Blend .*" matches both
