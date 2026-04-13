@@ -195,18 +195,26 @@ suite('behaveDebug', () => {
 
   suite('debug session lifecycle', () => {
 
-    test('should register terminate listener before calling startDebugging', async () => {
+    test('should register listeners before calling startDebugging', async () => {
       const callOrder: string[] = [];
 
-      // Stub onDidTerminateDebugSession to track call order and fire immediately
-      const onDidTerminateStub = sinon.stub(vscode.debug, 'onDidTerminateDebugSession').callsFake(
-        (listener: () => void) => {
-          callOrder.push('onDidTerminateDebugSession');
-          setTimeout(listener, 0);
+      // Stub onDidStartDebugSession to track call order
+      sinon.stub(vscode.debug, 'onDidStartDebugSession').callsFake(
+        (listener: (session: { id: string; name: string }) => void) => {
+          callOrder.push('onDidStartDebugSession');
+          setTimeout(() => listener({ id: 'test-session', name: 'gs-behave-bdd-debug' }), 0);
           return { dispose: () => { /* mock */ } };
         }
       );
-      void onDidTerminateStub;
+
+      // Stub onDidTerminateDebugSession to track call order and fire immediately
+      sinon.stub(vscode.debug, 'onDidTerminateDebugSession').callsFake(
+        (listener: (session: { id: string }) => void) => {
+          callOrder.push('onDidTerminateDebugSession');
+          setTimeout(() => listener({ id: 'test-session' }), 0);
+          return { dispose: () => { /* mock */ } };
+        }
+      );
 
       // Override startDebugging to track call order
       startDebuggingStub.restore();
@@ -225,17 +233,31 @@ suite('behaveDebug', () => {
         'behave features/test.feature'
       );
 
-      assert.strictEqual(callOrder[0], 'onDidTerminateDebugSession',
+      assert.strictEqual(callOrder[0], 'onDidStartDebugSession',
+        'start session listener should be registered first');
+      assert.strictEqual(callOrder[1], 'onDidTerminateDebugSession',
         'terminate listener should be registered before startDebugging');
-      assert.strictEqual(callOrder[1], 'startDebugging',
-        'startDebugging should be called after listener registration');
+      assert.strictEqual(callOrder[2], 'startDebugging',
+        'startDebugging should be called after all listeners');
     });
 
 
-    test('should resolve and call stopDebugging on timeout when session does not terminate', async () => {
+    test('should resolve and call stopDebugging on timeout during integration test', async () => {
       const clock = sinon.useFakeTimers();
 
       try {
+        // Enable integration test mode (timeout only applies here)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (global as any).config.integrationTestRun = true;
+
+        // Stub onDidStartDebugSession
+        sinon.stub(vscode.debug, 'onDidStartDebugSession').callsFake(
+          (listener: (session: { id: string; name: string }) => void) => {
+            setTimeout(() => listener({ id: 'test-session', name: 'gs-behave-bdd-debug' }), 0);
+            return { dispose: () => { /* mock */ } };
+          }
+        );
+
         // Stub onDidTerminateDebugSession to NOT fire
         sinon.stub(vscode.debug, 'onDidTerminateDebugSession').callsFake(
           () => ({ dispose: () => { /* mock */ } })
@@ -255,8 +277,8 @@ suite('behaveDebug', () => {
           'behave features/test.feature'
         );
 
-        // Advance past the 120s timeout (non-integration test)
-        await clock.tickAsync(120001);
+        // Advance past the 20s integration test timeout
+        await clock.tickAsync(20001);
 
         await promise;
 
@@ -272,6 +294,14 @@ suite('behaveDebug', () => {
       const clock = sinon.useFakeTimers();
 
       try {
+        // Stub onDidStartDebugSession
+        sinon.stub(vscode.debug, 'onDidStartDebugSession').callsFake(
+          (listener: (session: { id: string; name: string }) => void) => {
+            setTimeout(() => listener({ id: 'test-session', name: 'gs-behave-bdd-debug' }), 0);
+            return { dispose: () => { /* mock */ } };
+          }
+        );
+
         // Stub onDidTerminateDebugSession to NOT fire
         sinon.stub(vscode.debug, 'onDidTerminateDebugSession').callsFake(
           () => ({ dispose: () => { /* mock */ } })
@@ -319,8 +349,13 @@ suite('behaveDebug', () => {
     });
 
 
-    test('should dispose terminate listener when startDebugging returns false', async () => {
+    test('should dispose listeners when startDebugging returns false', async () => {
+      let startDisposed = false;
       let terminateDisposed = false;
+
+      sinon.stub(vscode.debug, 'onDidStartDebugSession').callsFake(
+        () => ({ dispose: () => { startDisposed = true; } })
+      );
 
       sinon.stub(vscode.debug, 'onDidTerminateDebugSession').callsFake(
         () => ({ dispose: () => { terminateDisposed = true; } })
@@ -338,15 +373,24 @@ suite('behaveDebug', () => {
         'behave features/test.feature'
       );
 
+      assert.ok(startDisposed, 'start listener should be disposed when startDebugging returns false');
       assert.ok(terminateDisposed, 'terminate listener should be disposed when startDebugging returns false');
     });
 
 
     test('should not call stopDebugging on normal session termination', async () => {
-      // Stub onDidTerminateDebugSession to fire immediately
+      // Stub onDidStartDebugSession to fire immediately with matching session
+      sinon.stub(vscode.debug, 'onDidStartDebugSession').callsFake(
+        (listener: (session: { id: string; name: string }) => void) => {
+          setTimeout(() => listener({ id: 'test-session', name: 'gs-behave-bdd-debug' }), 0);
+          return { dispose: () => { /* mock */ } };
+        }
+      );
+
+      // Stub onDidTerminateDebugSession to fire immediately with matching session
       sinon.stub(vscode.debug, 'onDidTerminateDebugSession').callsFake(
-        (listener: () => void) => {
-          setTimeout(listener, 0);
+        (listener: (session: { id: string }) => void) => {
+          setTimeout(() => listener({ id: 'test-session' }), 0);
           return { dispose: () => { /* mock */ } };
         }
       );
@@ -361,6 +405,66 @@ suite('behaveDebug', () => {
       );
 
       assert.ok(!stopStub.called, 'stopDebugging should NOT be called on normal termination');
+    });
+
+
+    test('should not resolve when an unrelated debug session terminates', async () => {
+      const clock = sinon.useFakeTimers();
+
+      try {
+        // Capture the terminate listener so we can fire it manually
+        let terminateListener: ((session: { id: string }) => void) | undefined;
+
+        sinon.stub(vscode.debug, 'onDidStartDebugSession').callsFake(
+          (listener: (session: { id: string; name: string }) => void) => {
+            setTimeout(() => listener({ id: 'our-session', name: 'gs-behave-bdd-debug' }), 0);
+            return { dispose: () => { /* mock */ } };
+          }
+        );
+
+        sinon.stub(vscode.debug, 'onDidTerminateDebugSession').callsFake(
+          (listener: (session: { id: string }) => void) => {
+            terminateListener = listener;
+            return { dispose: () => { /* mock */ } };
+          }
+        );
+
+        const stopStub = sinon.stub(vscode.debug, 'stopDebugging').resolves();
+
+        startDebuggingStub.restore();
+        sinon.stub(vscode.debug, 'startDebugging').callsFake(async () => true);
+
+        let resolved = false;
+        const mockWr = createMockWr();
+        const promise = debugBehaveInstance(
+          mockWr as unknown as Parameters<typeof debugBehaveInstance>[0],
+          ['features/test.feature'],
+          'behave features/test.feature'
+        ).then(() => { resolved = true; });
+
+        // Let startDebugging resolve and onDidStartDebugSession fire
+        await clock.tickAsync(1);
+
+        // Fire terminate for a DIFFERENT session
+        assert.ok(terminateListener, 'terminate listener should be registered');
+        terminateListener!({ id: 'unrelated-session' });
+        await clock.tickAsync(0);
+
+        assert.ok(!resolved, 'should not resolve for unrelated session termination');
+        assert.ok(!stopStub.called, 'stopDebugging should not be called');
+
+        // Now fire terminate for OUR session
+        terminateListener!({ id: 'our-session' });
+        await clock.tickAsync(0);
+
+        await promise;
+
+        assert.ok(resolved, 'should resolve when our session terminates');
+        assert.ok(!stopStub.called, 'stopDebugging should NOT be called on normal termination');
+      }
+      finally {
+        clock.restore();
+      }
     });
   });
 });

@@ -32,6 +32,7 @@ export class WindowSettings {
   // (in a multi-root workspace they will be read from *.code-workspace, and greyed-out and disabled in settings.json)
   public readonly multiRootRunWorkspacesInParallel: boolean;
   public readonly xRay: boolean;
+  public readonly verboseLogging: boolean;
 
   constructor(winConfig: vscode.WorkspaceConfiguration, legacyConfig?: vscode.WorkspaceConfiguration) {
     const get = <T>(key: string): T | undefined =>
@@ -44,9 +45,13 @@ export class WindowSettings {
     const xRayCfg: boolean | undefined = get("xRay");
     if (xRayCfg === undefined)
       throw "xRay is undefined";
+    const verboseLoggingCfg: boolean | undefined = get("verboseLogging");
+    if (verboseLoggingCfg === undefined)
+      throw "verboseLogging is undefined";
 
     this.multiRootRunWorkspacesInParallel = multiRootRunWorkspacesInParallelCfg;
     this.xRay = xRayCfg;
+    this.verboseLogging = verboseLoggingCfg;
   }
 }
 
@@ -264,6 +269,13 @@ export class WorkspaceSettings {
     const wkspUris = getUrisOfWkspFoldersWithFeatures();
     if (wkspUris.length > 0 && this.uri === wkspUris[0])
       logger.logInfoAllWksps(`\ninstance settings:\n${JSON.stringify(winSettingsDic, null, 2)}`);
+
+    // By default, only log the number of presets rather than their full contents (which may be sensitive).
+    // The full contents can be re-enabled via the verboseLogging setting.
+    if (!winSettings.verboseLogging) {
+      const presetCount = Object.keys(this.envVarPresets).length;
+      rscSettingsDic["envVarPresets"] = `${presetCount} preset${presetCount !== 1 ? "s" : ""} loaded`;
+    }
 
     logger.logInfo(`\n${this.name} workspace settings:\n${JSON.stringify(rscSettingsDic, null, 2)}`, this.uri);
 

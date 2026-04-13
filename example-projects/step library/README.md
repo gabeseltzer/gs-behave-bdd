@@ -27,7 +27,7 @@ step library/
 
 ## Running Tests
 
-With Behave VSC extension:
+With Behave BDD extension:
 
 - Open this project in VS Code
 - View the step library example in the Test Explorer

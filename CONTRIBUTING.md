@@ -62,7 +62,7 @@
 
 ### Terminology
 
-- The "source" environment refers to the instance of vscode that contains the Behave VSC source code.
+- The "source" environment refers to the instance of vscode that contains the Behave BDD source code.
 - The "host" environment refers to the instance of vscode that that says "Extension Development Host" in the title bar, i.e. the instance that is spawned by clicking the run button in the source environment.
 
 ---
@@ -176,14 +176,14 @@ feature file formatting is provided by:
 - Entry point (event handlers/hooks) and background tasks (i.e. unawaited async functions/promises) should always contain a `try/catch` with a `config.showError`. Examples are `activate`,`deactivate` and any function called `...Handler` or `onDid...`, or just `on...` (e.g. `onCancellationRequested`). These are the top-level functions and so they need catches.
 - Elsewhere `showError` should be avoided. Instead you want to use either `throw "my message"` or `throw new WkspError(...)`. The second option (`wkspError`) should be used if: (a) there is no `catch` above that creates a `new WkspError` itself, and (b) you have a workspace context (i.e. `wr`, `wkspSettings` or `wskpUri` is available to the function). Either throw will then then get caught further up the stack, acted on if required and/or logged by the top-level function.
 - Any thrown errors are going to reach the user, so they should be things that either (a) the user can act upon to fix like a configuration problem or duplicate test, or (b) exceptions i.e. stuff that is never supposed to happen and should be raised as an issue on github.
-- Behave execution errors are not extension exceptions and should be handled, e.g. update test state to failed with a failure message that refers the user to look at the Behave VSC output window or the debug console as appropriate.
+- Behave execution errors are not extension exceptions and should be handled, e.g. update test state to failed with a failure message that refers the user to look at the Behave BDD output window or the debug console as appropriate.
 - Generally speaking, Info level events appear in the output window. Warnings and Errors appear in the output window and as a notification window. All of them will appear in console if `xRay` is enabled. See [Logging](#logging) for more information.
 
 ### Logging
 
 - In the case of errors, should not call the logger. You should `throw` for errors (see [Exception handling](#exception-handling)), and `showWarn` for warnings. This will automatically log the error/warning and open a notification window to alert the user.
-- Log info to the Behave VSC workspace context output window and any active debug window: `config.logger.logInfo("msg", wkspUri)`. Preferred over `logInfoAllWksps()` wherever possible.
-- Log info to all Behave VSC output windows (regardless of workspace): `config.logger.logInfoAllWksps`. *This should be used sparingly, i.e. only where a workspace context does not make sense.*
+- Log info to the Behave BDD workspace context output window and any active debug window: `config.logger.logInfo("msg", wkspUri)`. Preferred over `logInfoAllWksps()` wherever possible.
+- Log info to all Behave BDD output windows (regardless of workspace): `config.logger.logInfoAllWksps`. *This should be used sparingly, i.e. only where a workspace context does not make sense.*
 - Log info to the vscode test run output at the same time: specify the run parameter: `config.logger.logInfo("msg", wkspUri, run)`.
 - Log only to the vscode test run output: `run.appendOutput("msg\r\n")`.
 - Log only for extension developers (contributors) and users who want to see diagnostic output: `diagLog("msg")`.
@@ -342,8 +342,8 @@ Example: if you changed anything that affects any of step navigation/feature fil
   - G. delete `group1_features_foo/outline_success.feature` file, check it gets removed from `group1_features_foo` in the test tree
   - H. in file explorer UI, create a new feature file `scen_copy.feature`, then go to `basic.feature` and copy the `Feature: Foobar` and the first scenario, copy/paste that text into `scen_copy.feature` and then in the test UI check that a second `Foobar` feature gets added to the test tree under `group1_features_foo`
   - I. in file explorer UI, copy and paste the `scen_copy.feature` feature file itself into the same `group1_features_foo` folder, and and then in the test UI check the feature gets added to the test tree, i.e. you should see three `Foobar` features
-  - J. in the test ui, remove the filter, run `group2_features`. open the `Behave VSC: project A` output window and check that the behave command parameter is: `-i "behave tests/some tests/group2_features/"`
-  - K. in the test ui, in `group1_features_foo` under `Mixed outline` select `Blenders Success <thing>` and `Blenders Success "<thing>"`, then select `Table feature`, `Text block`. run the tests then open the `Behave VSC: project A` output window and check that the behave commands have their `i/n` parameters set as follows:
+  - J. in the test ui, remove the filter, run `group2_features`. open the `Behave BDD: project A` output window and check that the behave command parameter is: `-i "behave tests/some tests/group2_features/"`
+  - K. in the test ui, in `group1_features_foo` under `Mixed outline` select `Blenders Success <thing>` and `Blenders Success "<thing>"`, then select `Table feature`, `Text block`. run the tests then open the `Behave BDD: project A` output window and check that the behave commands have their `i/n` parameters set as follows:
     - `-i "behave tests/some tests/group1_features_foo/outline_mixed.feature$" -n "^Blenders Success ".*" -- @|^Blenders Success .* -- @"`
     - `-i "behave tests/some tests/group1_features_foo/foo.table.feature$|behave tests/some tests/group1_features_foo/textblock.feature$"`
   - L. in the
@@ -372,22 +372,22 @@ Example: if you changed anything that affects any of step navigation/feature fil
     - try clicking on a reference to check it navigates correctly
   - G. F12 on any `Given we have behave installed` line, then rename the step function `def step_inst(context):` to `def step_inst_foo(context):`. check the step references window is unchanged (shows the same results). then right-click and `Find All Step References` and again check the results are the same.
   - H. comment out the step function `def step_inst_foo(context):`, check there are now no results in the step references window. uncomment and check the results reappear.
-  - I. in the test ui, run `grouped`. open the `Behave VSC: project B` output window and check that separate behave instances are started for each feature, for example: `-i "features/grouped/table.feature$"`
-  - J. in the test ui, in `grouped` select `Duplicate` and `Table feature`, then under `Mixed outline` select `Blenders Success` and `Blenders Fail` and run the tests. open the `Behave VSC: project B` output window and check that there are thee behave commands with their `i/n` parameters set as follows (output order may vary because Project B runs in parallel):
+  - I. in the test ui, run `grouped`. open the `Behave BDD: project B` output window and check that separate behave instances are started for each feature, for example: `-i "features/grouped/table.feature$"`
+  - J. in the test ui, in `grouped` select `Duplicate` and `Table feature`, then under `Mixed outline` select `Blenders Success` and `Blenders Fail` and run the tests. open the `Behave BDD: project B` output window and check that there are thee behave commands with their `i/n` parameters set as follows (output order may vary because Project B runs in parallel):
   - `-i "features/grouped/outline_mixed.feature" -n "^Blenders Fail -- @|^Blenders Success -- @"`
   - `-i "features/grouped/duplicate.feature$"`
   - `-i "features/grouped/table.feature$"`
 
 - THEN:
 
-  - X. go to the output window `Behave VSC: project A`
+  - X. go to the output window `Behave BDD: project A`
   - Y. in the file explorer UI, right click `project A` a workspace folder (e.g. "project A") and click `Remove folder from workspace`.
     - the original `project A` output window should close
-    - check there are no error windows pop up. check that the dropdown has output windows for `Behave VSC: simple` and `Behave VSC: project B`(but not `project A`).
+    - check there are no error windows pop up. check that the dropdown has output windows for `Behave BDD: simple` and `Behave BDD: project B`(but not `project A`).
     - in the test UI, check that tests run as expected from `simple` and `project B`
-    - check that tests show their output in the output windows `Behave VSC: project B` and `Behave VSC: simple`
+    - check that tests show their output in the output windows `Behave BDD: project B` and `Behave BDD: simple`
   - Z. click vscode's "File" menu and "Add folder to workspace...", double click `project A` to add it back.
-    - check that you have output windows `Behave VSC: project A`, `Behave VSC: project B` and `Behave VSC: simple` (sometimes vscode can glitch and duplicate dropdown items temporarily, but selecting an item from the dropdown should remove any duplicates)
+    - check that you have output windows `Behave BDD: project A`, `Behave BDD: project B` and `Behave BDD: simple` (sometimes vscode can glitch and duplicate dropdown items temporarily, but selecting an item from the dropdown should remove any duplicates)
     - check that tests run from `simple` and `project B` and update their output windows
 
 - Lastly, we need to undo the file changes created by these manual tests

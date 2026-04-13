@@ -135,12 +135,15 @@ export const workspace = {
   getWorkspaceFolder: (uri: Uri) => ({ uri, name: 'mock-workspace', index: 0 }),
   workspaceFolders: [],
   getConfiguration: (section?: string) => ({
-    get: (key: string) => {
+    get: (key: string, defaultValue?: unknown) => {
       // Return default values for known configuration keys
       if (section === 'gs-behave-bdd' || !section) {
         if (key === 'multiRootRunWorkspacesInParallel') return false;
       }
       if (key === 'xRay') {
+        return false;
+      }
+      if (key === 'verboseLogging') {
         return false;
       }
       if (key === 'importStrategy') {
@@ -149,7 +152,7 @@ export const workspace = {
       if (key === 'stepDefinitionSearchTimeout') {
         return 10;
       }
-      return undefined;
+      return defaultValue;
     },
     has: () => false,
     inspect: () => undefined,
@@ -173,7 +176,8 @@ export const languages = {
   registerHoverProvider: () => ({ dispose: () => { /* mock */ } }),
   registerDocumentSymbolProvider: () => ({ dispose: () => { /* mock */ } }),
   registerReferenceProvider: () => ({ dispose: () => { /* mock */ } }),
-  registerDocumentSemanticTokensProvider: (_selector: unknown, _provider: unknown, _legend: unknown) => ({ dispose: () => { /* mock */ } })
+  registerDocumentSemanticTokensProvider: (_selector: unknown, _provider: unknown, _legend: unknown) => ({ dispose: () => { /* mock */ } }),
+  registerCodeLensProvider: (_selector: unknown, _provider: unknown) => ({ dispose: () => { /* mock */ } })
 };
 
 export const window = {
@@ -199,9 +203,14 @@ export const window = {
 export const debug = {
   startDebugging: async (_folder: unknown, _config: unknown): Promise<boolean> => true,
   stopDebugging: async (): Promise<void> => { /* mock */ },
-  onDidTerminateDebugSession: (listener: () => void): { dispose: () => void } => {
+  onDidStartDebugSession: (listener: (session: { id: string; name: string }) => void): { dispose: () => void } => {
+    // Immediately invoke to simulate session start (must fire before terminate)
+    setTimeout(() => listener({ id: 'mock-session-1', name: 'gs-behave-bdd-debug' }), 0);
+    return { dispose: () => { /* mock */ } };
+  },
+  onDidTerminateDebugSession: (listener: (session: { id: string }) => void): { dispose: () => void } => {
     // Immediately invoke to simulate session termination
-    setTimeout(listener, 0);
+    setTimeout(() => listener({ id: 'mock-session-1' }), 0);
     return { dispose: () => { /* mock */ } };
   }
 };
@@ -263,4 +272,14 @@ export class SemanticTokens {
 export class SemanticTokensBuilder {
   push(..._args: unknown[]) { /* mock */ }
   build() { return new SemanticTokens(new Uint32Array(0)); }
+}
+
+export class CodeLens {
+  public command?: { title: string; command: string; arguments?: unknown[] };
+  constructor(
+    public readonly range: Range,
+    command?: { title: string; command: string; arguments?: unknown[] }
+  ) {
+    this.command = command;
+  }
 }

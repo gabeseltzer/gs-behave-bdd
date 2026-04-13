@@ -1,4 +1,4 @@
-# Behave VSC
+# Behave BDD
 
 Forked from [jimasp's](https://github.com/jimasp) excellent [behave-vsc](https://github.com/jimasp/behave-vsc) extension, this one adds features!
 
@@ -29,7 +29,7 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
 
 - Run or Debug behave tests, either from the test side bar or from inside a feature file.
 - Select to run/debug all tests, a nested folder, or just a single feature or scenario.
-- See failed test run result inside the feature file. (Full run results are available in the Behave VSC output window.)
+- See failed test run result inside the feature file. (Full run results are available in the Behave BDD output window.)
 - Extensive run customisation settings (e.g. `runParallel`, `featuresPath`, `envVarOverrides`, etc.)
 - Two-way step navigation:
   - "Go to Step Definition" from inside a feature file (default F12).
@@ -41,7 +41,7 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
 - Smart test runs minimise behave instances by building an optimised `-i` regex param for behave based on the selected test nodes. (Unless `runParallel` is enabled.)
 - This extension supports multi-root workspaces, so you can run features from more than one project in a single instance of vscode. (Each project folder must have its own distinct features/steps folders.)
 
-![Behave VSC demo gif](https://github.com/jimasp/behave-vsc/raw/main/images/behave-vsc.gif)
+![Behave BDD demo gif](https://github.com/jimasp/behave-vsc/raw/main/images/behave-vsc.gif)
 
 ---
 
@@ -145,8 +145,8 @@ paths=my_tests/behave_features
 
 - The python path is obtained from the `ms-python.python` extension (exported settings) i.e. your `python.defaultInterpreterPath` or selected python interpreter override. This is read before each run, so it is kept in sync with your project.
 
-- For each run, the behave command to run the test manually appears in the `Behave VSC` output window.
-- The behave process is spawned, and behave output is written to the `Behave VSC` output window for the associated workspace.
+- For each run, the behave command to run the test manually appears in the `Behave BDD` output window.
+- The behave process is spawned, and behave output is written to the `Behave BDD` output window for the associated workspace.
 - The extension parses the junit file output and updates the test result in the UI, and any assertion failures and python exceptions are shown in the test run detail accessible in the feature file.
 - You can adjust the run behaviour via extension settings in your `settings.json` file (e.g. `runParallel` and `envVarOverrides`).
 - Tests runs are smart, so for example if you select to run three feature nodes it will build a behave `-i` regex to run them in a single behave instance rather than separate instances (unless you are using `runParallel`). If you choose a nested folder it will run that folder in a behave instance, etc.
@@ -163,7 +163,7 @@ paths=my_tests/behave_features
 
 ## Q&A
 
-- *How can I see all effective settings for the extension?* On starting vscode, look in the Behave VSC output window.
+- *How can I see all effective settings for the extension?* On starting vscode, look in the Behave BDD output window.
 - *How can I see the active behave configuration being used for behave execution?* In your behave config file, set `verbose=true`.
 - *How do I clear previous test results?* This isn't that obvious in vscode. Click the ellipsis `...` at the top of the test side bar and then click "Clear all results".
 - *Why does the behave command output contain `--show-skipped`?* This flag must be enabled for junit files (which the extension depends on) to be produced for skipped tests. It is enabled by default, so this override is there *just in case* your `behave.ini`/`.behaverc` file specifies `show_skipped=False`.
@@ -176,8 +176,8 @@ paths=my_tests/behave_features
 - *How do I enable automatic feature file formatting on save?* You can do this via a standard vscode setting: `"[gherkin]": { "editor.formatOnSave": true }`
 - *How do I disable feature file snippets?* You can do this via a standard vscode setting: `"[gherkin]": { "editor.suggest.showSnippets": false }`
 - *How do I disable autocomplete for feature file steps?* You can do this via a standard vscode setting: `"[gherkin]": { "editor.suggest.showFunctions": false }`
-- *Why can't I see print statements in the Behave VSC output window even though I have `stdout_capture=False` in my behave config file?* Because the extension depends on the `--junit` behave argument. As per the behave docs, with this flag set, all stdout and stderr will be redirected and dumped to the junit report, regardless of the capture/no-capture options. If you want to see print statements, copy/paste the outputted command and run it manually (or run `python -m behave` for all test output).
-- *Where is the behave junit output stored?* In a temp folder that is deleted (recycled) each time the extension is started. The path is displayed on startup in the Behave VSC output window. (Note that if your test run uses runParallel, then multiple files are created for the same feature via a separate folder for each scenario. This is a workaround to stop the same junit file being written multiple times for the same feature, which in runParallel mode would stop us from being able to know the result of the test because each parallel behave execution would rewrite the file and mark scenarios not included in that execution as "skipped".)
+- *Why can't I see print statements in the Behave BDD output window even though I have `stdout_capture=False` in my behave config file?* Because the extension depends on the `--junit` behave argument. As per the behave docs, with this flag set, all stdout and stderr will be redirected and dumped to the junit report, regardless of the capture/no-capture options. If you want to see print statements, copy/paste the outputted command and run it manually (or run `python -m behave` for all test output).
+- *Where is the behave junit output stored?* In a temp folder that is deleted (recycled) each time the extension is started. The path is displayed on startup in the Behave BDD output window. (Note that if your test run uses runParallel, then multiple files are created for the same feature via a separate folder for each scenario. This is a workaround to stop the same junit file being written multiple times for the same feature, which in runParallel mode would stop us from being able to know the result of the test because each parallel behave execution would rewrite the file and mark scenarios not included in that execution as "skipped".)
 - *When will this extension have a release version?* When the code is more stable. At the moment the code is subject to rewrites/refactoring which makes bugs more likely.
 
 ---
@@ -193,7 +193,7 @@ paths=my_tests/behave_features
 - Does your project meet the [workspace requirements](#workspace-requirements) and have the [required project directory structure](#required-project-directory-structure)?
 - If you have set the `featuresPath` in extension settings, make sure it matches the `paths` setting in your behave configuration file.
 - Did you set extension settings in your user settings instead of your workspace settings?
-- Have you tried *manually* running the behave command that is logged in the Behave VSC output window?
+- Have you tried *manually* running the behave command that is logged in the Behave BDD output window?
 - If you are getting different results running all tests vs running a test separately, then it is probably due to lack of test isolation.
 - If you are not seeing exceptions while debugging a test, do you have the appropriate breakpoint settings in vscode, e.g. do you have "Raised Exceptions" etc. turned off?
 - Do you have the correct extension [settings](#extension-settings) for your project? (See [Q&A](#qa) for information on how to see your effective settings.)
