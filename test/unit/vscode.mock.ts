@@ -203,9 +203,14 @@ export const window = {
 export const debug = {
   startDebugging: async (_folder: unknown, _config: unknown): Promise<boolean> => true,
   stopDebugging: async (): Promise<void> => { /* mock */ },
-  onDidTerminateDebugSession: (listener: () => void): { dispose: () => void } => {
+  onDidStartDebugSession: (listener: (session: { id: string; name: string }) => void): { dispose: () => void } => {
+    // Immediately invoke to simulate session start (must fire before terminate)
+    setTimeout(() => listener({ id: 'mock-session-1', name: 'gs-behave-bdd-debug' }), 0);
+    return { dispose: () => { /* mock */ } };
+  },
+  onDidTerminateDebugSession: (listener: (session: { id: string }) => void): { dispose: () => void } => {
     // Immediately invoke to simulate session termination
-    setTimeout(listener, 0);
+    setTimeout(() => listener({ id: 'mock-session-1' }), 0);
     return { dispose: () => { /* mock */ } };
   }
 };
