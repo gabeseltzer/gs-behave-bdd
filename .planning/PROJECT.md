@@ -20,23 +20,28 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 - ✓ INI config files parsed for `[behave]` section `paths` key (newline-separated values) — Validated in Phase 1: Config Parsing
 - ✓ TOML config files parsed for `[tool.behave]` `paths` key (native array) — Validated in Phase 1: Config Parsing
 - ✓ Unit tests for all config file formats, priority logic, path resolution, and edge cases — Validated in Phase 1: Config Parsing
+- ✓ Discovery priority: manual settings > config file > `features/` convention — Validated in Phase 2: Integration
+- ✓ Manual settings detected via `inspect()` checking `globalValue`, `workspaceValue`, and `workspaceFolderValue` — Validated in Phase 2: Integration
+- ✓ Discovery results cached in module-level Map; cache invalidated by workspace folder changes, settings changes, or manual refresh — Validated in Phase 2: Integration
+- ✓ `WorkspaceSettings` tracks `discoverySource` ("config-file" | "convention" | "settings") and `configFileUri` — Validated in Phase 2: Integration
+- ✓ Activation events expanded to include `workspaceContains:**/behave.ini` and `workspaceContains:**/.behaverc` — Validated in Phase 2: Integration
 
 ### Active
 
 - [ ] Extension reads behave config files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`) to discover project root and feature paths
 - [ ] INI config files parsed for `[behave]` section `paths` key (newline-separated values)
 - [ ] TOML config files parsed for `[tool.behave]` `paths` key (native array)
-- [ ] Discovery priority: manual settings > config file > `features/` convention
-- [ ] Manual settings detected via `inspect()` checking `globalValue`, `workspaceValue`, and `workspaceFolderValue`
+- [x] Discovery priority: manual settings > config file > `features/` convention
+- [x] Manual settings detected via `inspect()` checking `globalValue`, `workspaceValue`, and `workspaceFolderValue`
 - [ ] Subdirectory scanning (default depth 3, configurable via `gs-behave-bdd.discoveryDepth` setting) to find config files in nested project dirs
 - [ ] Multiple feature paths supported (`featuresUris: Uri[]`) when config specifies multiple `paths=` values
 - [ ] All downstream consumers (parsers, watchers, runners) updated to iterate over multiple feature paths
 - [ ] Backward-compatible `featuresUri` getter returns `featuresUris[0]`
-- [ ] Discovery results cached in module-level Map; cache invalidated by workspace folder changes, settings changes, or manual refresh
-- [ ] `WorkspaceSettings` tracks `discoverySource` ("config-file" | "convention" | "settings") and `configFileUri`
+- [x] Discovery results cached in module-level Map; cache invalidated by workspace folder changes, settings changes, or manual refresh
+- [x] `WorkspaceSettings` tracks `discoverySource` ("config-file" | "convention" | "settings") and `configFileUri`
 - [ ] Output channel logs discovery results (source, project root, features paths)
 - [ ] Status bar detail shows discovery source on hover
-- [ ] Activation events expanded to include `workspaceContains:**/behave.ini` and `workspaceContains:**/.behaverc`
+- [x] Activation events expanded to include `workspaceContains:**/behave.ini` and `workspaceContains:**/.behaverc`
 - [ ] Setting descriptions updated to frame `projectPath` and `featuresPath` as overrides
 - [ ] Config parse errors shown as warning notification + status bar warning state, with fallback to convention
 - [ ] `smol-toml` npm dependency added for correct TOML parsing (~5KB)
@@ -81,9 +86,9 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 | Include multi-path (`featuresUris[]`) in v1 | Behave supports multi-path natively via `paths=`; blocking to single path is artificial limitation | — Pending |
 | Depth 3 subdirectory scan with configurable setting | "Just works" philosophy — covers deeply nested monorepo layouts; configurable for users who want to limit scan | — Pending |
 | Add `smol-toml` dependency | Correct TOML parsing > hand-rolled regex; ~5KB bundle impact acceptable | — Pending |
-| Activation events for `behave.ini` and `.behaverc` only | Unambiguous behave signals; `setup.cfg`/`tox.ini`/`pyproject.toml` too generic for activation | — Pending |
+| Activation events for `behave.ini` and `.behaverc` only | Unambiguous behave signals; `setup.cfg`/`tox.ini`/`pyproject.toml` too generic for activation | Implemented in Phase 2 |
 | Skip home directory configs | Extension discovers project structure within workspace; `~/.behaverc` affects runtime, not layout | — Pending |
-| `inspect()` checks all 3 scope levels | Must detect explicit settings at global, workspace, AND workspaceFolder level to match `getWithLegacyFallback()` pattern | — Pending |
+| `inspect()` checks all 3 scope levels | Must detect explicit settings at global, workspace, AND workspaceFolder level to match `getWithLegacyFallback()` pattern | Implemented in Phase 2 |
 
 ## Evolution
 
@@ -103,4 +108,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-15 after Phase 1 completion*
+*Last updated: 2026-04-15 after Phase 2 completion*
