@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import {
   findHighestTargetParentDirectorySync, findSubdirectorySync, getUrisOfWkspFoldersWithFeatures,
-  getWorkspaceFolder, uriId, WkspError
+  getWorkspaceFolder, uriId, WkspError,
+  DiscoverySource, DiscoveryEntry, getDiscoveryEntry,
 } from './common';
 import { config } from './configuration';
 import { Logger } from './logger';
@@ -77,12 +78,15 @@ export class WorkspaceSettings {
   public readonly featuresUri: vscode.Uri;
   public readonly stepsSearchUri: vscode.Uri;
   public readonly workspaceRelativeFeaturesPath: string; // computed: projectPath + featuresPath
+  // Discovery metadata (Phase 2 -- INTG-06)
+  public readonly discoverySource: DiscoverySource;
+  public readonly configFileUri: vscode.Uri | undefined;
   // internal
   private readonly _warnings: string[] = [];
   private readonly _fatalErrors: string[] = [];
 
 
-  constructor(wkspUri: vscode.Uri, wkspConfig: vscode.WorkspaceConfiguration, winSettings: WindowSettings, logger: Logger, legacyConfig?: vscode.WorkspaceConfiguration) {
+  constructor(wkspUri: vscode.Uri, wkspConfig: vscode.WorkspaceConfiguration, winSettings: WindowSettings, logger: Logger, legacyConfig?: vscode.WorkspaceConfiguration, discoveryEntry?: DiscoveryEntry) {
     const get = <T>(key: string): T | undefined =>
       legacyConfig ? getWithLegacyFallback<T>(wkspConfig, legacyConfig, key) : wkspConfig.get<T>(key);
 
@@ -90,6 +94,11 @@ export class WorkspaceSettings {
     this.id = uriId(wkspUri);
     const wsFolder = getWorkspaceFolder(wkspUri);
     this.name = wsFolder.name;
+
+    // Discovery metadata -- read from passed-in entry or from cache (INTG-06)
+    const entry = discoveryEntry ?? getDiscoveryEntry(wkspUri);
+    this.discoverySource = entry?.source ?? "convention";
+    this.configFileUri = entry?.configFileUri;
 
     // note: undefined should never happen (or packages.json is wrong) as get will return a default value for packages.json settings
     const envVarOverridesCfg: { [name: string]: string } | undefined = get("envVarOverrides");
@@ -249,7 +258,7 @@ export class WorkspaceSettings {
     });
 
     // build sorted output dict of workspace settings
-    const nonUserSettableWkspSettings = ["name", "uri", "id", "projectUri", "featuresUri", "stepsSearchUri", "workspaceRelativeFeaturesPath"];
+    const nonUserSettableWkspSettings = ["name", "uri", "id", "projectUri", "featuresUri", "stepsSearchUri", "workspaceRelativeFeaturesPath", "configFileUri"];
     const rscSettingsDic: { [name: string]: string; } = {};
     let wkspEntries = Object.entries(this).sort();
     wkspEntries.push(["fullProjectPath", this.projectUri.fsPath]);
@@ -258,6 +267,8 @@ export class WorkspaceSettings {
     wkspEntries = wkspEntries.filter(([key]) => !key.startsWith("_") && !nonUserSettableWkspSettings.includes(key) && key !== "workspaceRelativeProjectPath" && key !== "projectRelativeFeaturesPath");
     wkspEntries.push(["projectPath", this.workspaceRelativeProjectPath || "(workspace root)"]);
     wkspEntries.push(["featuresPath", this.projectRelativeFeaturesPath]);
+    wkspEntries.push(["discoverySource", this.discoverySource]);
+    wkspEntries.push(["configFileUri", this.configFileUri?.fsPath ?? "(none)"]);
     wkspEntries = wkspEntries.sort();
     wkspEntries.forEach(([key, value]) => {
       rscSettingsDic[key] = value;
