@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md -- Config parser module and test fixtures
-- [ ] 01-02-PLAN.md -- Unit tests for all formats, path resolution, and edge cases
+- [x] 01-02-PLAN.md -- Unit tests for all formats, path resolution, and edge cases
 
 ### Phase 2: Integration
 **Goal**: Discovery results from config parsers drive WorkspaceSettings so the extension activates on behave projects with no settings.json
