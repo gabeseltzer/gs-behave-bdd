@@ -8,6 +8,7 @@ import { Scenario, TestData } from './parsers/testFile';
 import { WorkspaceSettings } from './settings';
 import { diagLog } from './logger';
 import { getJunitDirUri } from './watchers/junitWatcher';
+import { findBehaveConfig } from './parsers/configParser';
 
 
 
@@ -25,6 +26,18 @@ export const escapeRegex = (str: string) => str.replace(/[".*+?^${}()|[\]\\]/g, 
 export const sepr = ":////:"; // separator that cannot exist in file paths, i.e. safe for splitting in a path context
 export const beforeFirstSepr = (str: string) => str.substring(0, str.indexOf(sepr));
 export const afterFirstSepr = (str: string) => str.substring(str.indexOf(sepr) + sepr.length, str.length);
+
+export type DiscoverySource = "settings" | "config-file" | "convention";
+
+export interface DiscoveryEntry {
+  source: DiscoverySource;
+  configFileUri?: vscode.Uri;       // set when source = "config-file"
+  configError?: {                   // set when malformed config found (D-05)
+    configFileUri: vscode.Uri;
+    errorMessage: string;
+  };
+  featuresUri: vscode.Uri;          // the resolved features path used
+}
 
 
 // the main purpose of WkspError is that it enables us to have an error containing a workspace uri that 
@@ -123,9 +136,35 @@ export const getActualWorkspaceSetting = <T>(wkspConfig: vscode.WorkspaceConfigu
 }
 
 
-// THIS FUNCTION MUST BE FAST (ideally < 1ms) 
+// Returns true if the named setting has been explicitly set at ANY VS Code scope
+// (global, workspace, or workspace folder). Per D-01: implements INTG-02.
+// Does NOT modify getActualWorkspaceSetting (different callers, different return types).
+export function hasExplicitSetting(
+  wkspConfig: vscode.WorkspaceConfiguration,
+  name: string,
+  legacyConfig?: vscode.WorkspaceConfiguration
+): boolean {
+  const insp = wkspConfig.inspect(name);
+  if (insp && (insp.globalValue !== undefined || insp.workspaceValue !== undefined || insp.workspaceFolderValue !== undefined))
+    return true;
+  if (legacyConfig) {
+    const legacyInsp = legacyConfig.inspect(name);
+    if (legacyInsp?.workspaceFolderValue !== undefined) return true;
+  }
+  return false;
+}
+
+
+// THIS FUNCTION MUST BE FAST (ideally < 1ms)
 // (check performance if you change it)
 let workspaceFoldersWithFeatures: vscode.Uri[];
+const discoveryCache = new Map<string, DiscoveryEntry>();
+
+// Export getter so WorkspaceSettings can read discovery results without coupling to the Map
+export function getDiscoveryEntry(wkspUri: vscode.Uri): DiscoveryEntry | undefined {
+  return discoveryCache.get(uriId(wkspUri));
+}
+
 export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.Uri[] => {
 
   if (!forceRefresh && workspaceFoldersWithFeatures)
@@ -133,66 +172,121 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
 
   const start = performance.now();
   workspaceFoldersWithFeatures = [];
+  discoveryCache.clear();
 
   function hasFeaturesFolder(folder: vscode.WorkspaceFolder): boolean {
 
-    // check if projectPath and/or featuresPath specified in settings.json
-    // NOTE: this will return package.json defaults (or failing that, type defaults) if no settings.json found
     const wkspConfig = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri);
     const legacyWkspConfig = vscode.workspace.getConfiguration("behave-vsc", folder.uri);
-    const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath", legacyWkspConfig);
-    const featuresPath = getActualWorkspaceSetting<string>(wkspConfig, "featuresPath", legacyWkspConfig);
 
-    // Determine the project root (either custom projectPath or workspace root)
-    let projectUri = folder.uri;
-    if (projectPath) {
-      projectUri = vscode.Uri.joinPath(folder.uri, projectPath);
-      if (!fs.existsSync(projectUri.fsPath)) {
-        const fullPath = projectUri.fsPath;
-        // Check if the path looks like it was doubled (common mistake)
-        const hint = fullPath.includes(projectPath + path.sep + projectPath)
-          ? ` Note: The path appears to be duplicated - "projectPath" should be relative to the workspace root, not an absolute path.`
-          : "";
-        vscode.window.showWarningMessage(
-          `Behave BDD: Project path not found.\n\n` +
-          `Workspace: "${folder.name}"\n` +
-          `Configured projectPath: "${projectPath}"\n` +
-          `Full path checked: "${fullPath}"${hint}\n\n` +
-          `Behave BDD will ignore this workspace until the path is corrected.`,
-          "OK"
-        );
-        return false;
+    // === BRANCH A: Explicit settings detected (D-02, INTG-07) ===
+    // When explicit settings exist at any scope, skip config-file discovery entirely.
+    // Run existing settings-based logic unchanged for backward compatibility.
+    if (hasExplicitSetting(wkspConfig, "projectPath", legacyWkspConfig) ||
+        hasExplicitSetting(wkspConfig, "featuresPath", legacyWkspConfig)) {
+
+      const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath", legacyWkspConfig);
+      const featuresPath = getActualWorkspaceSetting<string>(wkspConfig, "featuresPath", legacyWkspConfig);
+
+      // Determine the project root (either custom projectPath or workspace root)
+      let projectUri = folder.uri;
+      if (projectPath) {
+        projectUri = vscode.Uri.joinPath(folder.uri, projectPath);
+        if (!fs.existsSync(projectUri.fsPath)) {
+          const fullPath = projectUri.fsPath;
+          // Check if the path looks like it was doubled (common mistake)
+          const hint = fullPath.includes(projectPath + path.sep + projectPath)
+            ? ` Note: The path appears to be duplicated - "projectPath" should be relative to the workspace root, not an absolute path.`
+            : "";
+          vscode.window.showWarningMessage(
+            `Behave BDD: Project path not found.\n\n` +
+            `Workspace: "${folder.name}"\n` +
+            `Configured projectPath: "${projectPath}"\n` +
+            `Full path checked: "${fullPath}"${hint}\n\n` +
+            `Behave BDD will ignore this workspace until the path is corrected.`,
+            "OK"
+          );
+          return false;
+        }
+      }
+
+      // default features path, no settings.json required
+      let featuresUri = vscode.Uri.joinPath(projectUri, "features");
+
+      // try/catch with await vwfs.stat(uri) is much too slow atm
+      const hasDefaultFeaturesFolder = fs.existsSync(featuresUri.fsPath);
+
+      if (!featuresPath && !hasDefaultFeaturesFolder) {
+        return false; // probably a workspace with no behave requirements
+      }
+
+      // default features folder and nothing specified in settings.json (or default specified)
+      if (hasDefaultFeaturesFolder && !featuresPath) {
+        discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUri });
+        return true;
+      }
+
+      featuresUri = vscode.Uri.joinPath(projectUri, featuresPath as string);
+      if (fs.existsSync(featuresUri.fsPath) && vscode.workspace.getWorkspaceFolder(featuresUri) === folder) {
+        discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUri });
+        return true;
+      }
+
+      // we don't use config.logger.showWarn here, because we may not have a logger yet
+      const projectPathInfo = projectPath ? ` (relative to projectPath "${projectPath}")` : "";
+      vscode.window.showWarningMessage(
+        `Behave BDD: Features path not found.\n\n` +
+        `Workspace: "${folder.name}"\n` +
+        `Configured featuresPath: "${featuresPath}"${projectPathInfo}\n` +
+        `Full path checked: "${featuresUri.fsPath}"\n\n` +
+        `Behave BDD will ignore this workspace until the path is corrected.`,
+        "OK"
+      );
+
+      return false;
+    }
+
+    // === BRANCH B: No explicit settings -- config-file discovery (INTG-01) ===
+    const configResult = findBehaveConfig(folder.uri);
+
+    if (configResult) {
+      if (configResult.ok) {
+        // Config file found with valid paths -- use it
+        const featuresUri = configResult.resolvedPath;
+        if (fs.existsSync(featuresUri.fsPath)) {
+          discoveryCache.set(uriId(folder.uri), {
+            source: "config-file",
+            configFileUri: configResult.configFileUri,
+            featuresUri,
+          });
+          return true;
+        }
+        // Config points to nonexistent directory -- fall through to convention
+      } else {
+        // ok:false -- malformed config file; capture error, fall through to convention (D-06)
+        // Store a partial entry so Phase 3 can read the configError
+        discoveryCache.set(uriId(folder.uri), {
+          source: "convention",
+          configError: {
+            configFileUri: configResult.configFileUri,
+            errorMessage: configResult.errorMessage,
+          },
+          featuresUri: vscode.Uri.joinPath(folder.uri, "features"), // placeholder, overwritten below if convention succeeds
+        });
       }
     }
 
-    // default features path, no settings.json required
-    let featuresUri = vscode.Uri.joinPath(projectUri, "features");
-
-    // try/catch with await vwfs.stat(uri) is much too slow atm
-    const hasDefaultFeaturesFolder = fs.existsSync(featuresUri.fsPath);
-
-    if (!featuresPath && !hasDefaultFeaturesFolder) {
-      return false; // probably a workspace with no behave requirements
+    // === BRANCH B fallthrough: features/ convention (INTG-01 last resort) ===
+    const conventionFeaturesUri = vscode.Uri.joinPath(folder.uri, "features");
+    if (fs.existsSync(conventionFeaturesUri.fsPath)) {
+      const existing = discoveryCache.get(uriId(folder.uri));
+      discoveryCache.set(uriId(folder.uri), {
+        ...existing,                  // preserves configError if set from malformed config above
+        source: "convention",
+        featuresUri: conventionFeaturesUri,
+      });
+      return true;
     }
-
-    // default features folder and nothing specified in settings.json (or default specified)
-    if (hasDefaultFeaturesFolder && !featuresPath)
-      return true;
-
-    featuresUri = vscode.Uri.joinPath(projectUri, featuresPath as string);
-    if (fs.existsSync(featuresUri.fsPath) && vscode.workspace.getWorkspaceFolder(featuresUri) === folder)
-      return true;
-
-    // we don't use config.logger.showWarn here, because we may not have a logger yet
-    const projectPathInfo = projectPath ? ` (relative to projectPath "${projectPath}")` : "";
-    vscode.window.showWarningMessage(
-      `Behave BDD: Features path not found.\n\n` +
-      `Workspace: "${folder.name}"\n` +
-      `Configured featuresPath: "${featuresPath}"${projectPathInfo}\n` +
-      `Full path checked: "${featuresUri.fsPath}"\n\n` +
-      `Behave BDD will ignore this workspace until the path is corrected.`,
-      "OK"
-    );
 
     return false;
   }
@@ -216,8 +310,9 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     if (folders.length === 1 && folders[0].name === "gs-behave-bdd")
       throw `Please disable the marketplace Behave BDD extension before beginning development!`;
     else
-      throw `Extension was activated because a '*.feature' file was found in a workspace folder, but ` +
-      `none of the workspace folders contain either a root 'features' folder or a settings.json that specifies a valid 'gs-behave-bdd.featuresPath'.\n` +
+      throw `Extension was activated but none of the workspace folders contain a root 'features' folder, ` +
+      `a behave config file (behave.ini, .behaverc, setup.cfg, tox.ini, pyproject.toml) with a [behave] paths setting, ` +
+      `or a settings.json that specifies a valid 'gs-behave-bdd.featuresPath'.\n` +
       `Please add a valid 'gs-behave-bdd.featuresPath' property to your workspace settings.json file and then restart vscode.`;
   }
 
