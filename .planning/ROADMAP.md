@@ -47,7 +47,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Config parser error variant (D-05) and activation events (INTG-05)
+- [x] 02-01-PLAN.md -- Config parser error variant (D-05) and activation events (INTG-05)
 - [ ] 02-02-PLAN.md -- Gatekeeper priority chain, discovery cache, WorkspaceSettings enrichment
 
 ### Phase 3: UX & Verification
