@@ -16,6 +16,10 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 - ✓ Extension activates on `workspaceContains:**/*.feature` — existing
 - ✓ Multi-root workspace support with per-workspace settings — existing
 - ✓ `getUrisOfWkspFoldersWithFeatures()` returns workspace folders with features in < 1ms — existing
+- ✓ Extension reads behave config files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`) to discover project root and feature paths — Validated in Phase 1: Config Parsing
+- ✓ INI config files parsed for `[behave]` section `paths` key (newline-separated values) — Validated in Phase 1: Config Parsing
+- ✓ TOML config files parsed for `[tool.behave]` `paths` key (native array) — Validated in Phase 1: Config Parsing
+- ✓ Unit tests for all config file formats, priority logic, path resolution, and edge cases — Validated in Phase 1: Config Parsing
 
 ### Active
 
@@ -99,4 +103,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-15 after initialization*
+*Last updated: 2026-04-15 after Phase 1 completion*
