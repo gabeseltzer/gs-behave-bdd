@@ -7,14 +7,11 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { parse as parseToml } from 'smol-toml';
 
-// Structured result returned by findBehaveConfig().
-// All fields are resolved at parse time; consumers need not re-read the config file.
-export interface BehaveConfigResult {
-  configFileUri: vscode.Uri;
-  format: 'ini' | 'toml';
-  rawPaths: string[];
-  resolvedPath: vscode.Uri;
-}
+// Discriminated union: ok:true = success, ok:false = config file found but malformed (D-05)
+// undefined return from findBehaveConfig = no config file found at all (not an error)
+export type BehaveConfigResult =
+  | { ok: true; configFileUri: vscode.Uri; format: 'ini' | 'toml'; rawPaths: string[]; resolvedPath: vscode.Uri }
+  | { ok: false; configFileUri: vscode.Uri; errorMessage: string };
 
 // Priority-ordered list of config filenames behave recognises, mapped to their format.
 // Source: bundled/libs/behave/configuration.py config_filenames() ~line 692
@@ -34,16 +31,21 @@ export function findBehaveConfig(wkspUri: vscode.Uri): BehaveConfigResult | unde
 }
 
 // Iterates CONFIG_FILES in priority order, returning the first that yields a non-undefined result.
+// If a malformed config is found, captures it as firstError and keeps searching for a valid one.
+// Returns firstError only if no successful config is found (D-06: malformed falls through to convention).
 function searchConfigFiles(wkspUri: vscode.Uri): BehaveConfigResult | undefined {
+  let firstError: BehaveConfigResult | undefined;
   for (const { filename, format } of CONFIG_FILES) {
     const fileUri = vscode.Uri.joinPath(wkspUri, filename);
     if (!fs.existsSync(fileUri.fsPath)) continue;
     const result = format === 'ini'
       ? parseIniConfig(fileUri)
       : parseTomlConfig(fileUri);
-    if (result !== undefined) return result;
+    if (result === undefined) continue;       // no [behave] section -- skip this file
+    if (result.ok) return result;             // success -- return immediately
+    if (!firstError) firstError = result;     // malformed -- capture first error, keep searching
   }
-  return undefined;
+  return firstError;  // return first error if no successful config found, or undefined
 }
 
 // Parses an INI-format config file (behave.ini, .behaverc, setup.cfg, tox.ini).
@@ -129,8 +131,10 @@ function parseTomlConfig(fileUri: vscode.Uri): BehaveConfigResult | undefined {
   let parsed: Record<string, unknown>;
   try {
     parsed = parseToml(content) as Record<string, unknown>;
-  } catch {
-    return undefined; // malformed TOML — silently skip (Phase 3 adds user-facing warning)
+  } catch (e: unknown) {
+    // Malformed TOML: config file exists but is invalid -- return error variant (D-05)
+    // Note: "no [tool.behave] section" still returns undefined (not an error -- Pitfall 3)
+    return { ok: false, configFileUri: fileUri, errorMessage: e instanceof Error ? e.message : String(e) };
   }
 
   // Navigate to [tool.behave]; silently skip if absent (DISC-06)
@@ -170,6 +174,7 @@ function buildResult(
   rawPaths: string[]
 ): BehaveConfigResult {
   return {
+    ok: true,
     configFileUri,
     format,
     rawPaths,
