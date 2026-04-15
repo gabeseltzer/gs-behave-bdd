@@ -271,7 +271,9 @@
 		"ms-python.python"
 	],
 	"activationEvents": [
-		"workspaceContains:**/*.feature"
+		"workspaceContains:**/*.feature",
+		"workspaceContains:**/behave.ini",
+		"workspaceContains:**/.behaverc"
 	],
 	"main": "./dist/extension.js",
 	"scripts": {
