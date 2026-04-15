@@ -44,7 +44,11 @@ Plans:
   3. `WorkspaceSettings` exposes `discoverySource` ("config-file" | "convention" | "settings") and `configFileUri` that reflect how the path was resolved
   4. The gatekeeper (`getUrisOfWkspFoldersWithFeatures()`) reads only from cache and completes in < 1ms after initial activation
   5. Changing workspace settings or adding/removing workspace folders invalidates the cache and triggers re-discovery
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 02-01-PLAN.md -- Config parser error variant (D-05) and activation events (INTG-05)
+- [ ] 02-02-PLAN.md -- Gatekeeper priority chain, discovery cache, WorkspaceSettings enrichment
 
 ### Phase 3: UX & Verification
 **Goal**: Users can see how the extension discovered their project, parse errors are surfaced gracefully, and all scenarios are validated by tests
@@ -61,10 +65,10 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3
+Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Config Parsing | 0/2 | Planned | - |
-| 2. Integration | 0/? | Not started | - |
+| 1. Config Parsing | 2/2 | Complete | 2026-04-15 |
+| 2. Integration | 0/2 | Planned | - |
 | 3. UX & Verification | 0/? | Not started | - |
