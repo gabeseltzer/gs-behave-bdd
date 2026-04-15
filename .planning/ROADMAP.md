@@ -28,7 +28,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. When multiple config files are present, the parser respects behave's priority order (behave.ini wins over .behaverc, etc.)
   4. Parsed paths are resolved as absolute URIs relative to the config file's directory
   5. Config files with no `[behave]` / `[tool.behave]` section are silently skipped without error
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md -- Config parser module and test fixtures
+- [ ] 01-02-PLAN.md -- Unit tests for all formats, path resolution, and edge cases
 
 ### Phase 2: Integration
 **Goal**: Discovery results from config parsers drive WorkspaceSettings so the extension activates on behave projects with no settings.json
@@ -61,6 +65,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Config Parsing | 0/? | Not started | - |
+| 1. Config Parsing | 0/2 | Planned | - |
 | 2. Integration | 0/? | Not started | - |
 | 3. UX & Verification | 0/? | Not started | - |
