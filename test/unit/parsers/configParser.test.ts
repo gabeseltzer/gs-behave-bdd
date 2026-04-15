@@ -19,6 +19,8 @@ suite('configParser', () => {
       const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'behave-ini'));
       const result = findBehaveConfig(wkspUri);
       assert.ok(result, 'should return a result');
+      assert.strictEqual(result.ok, true, 'should be ok:true');
+      if (!result.ok) return;  // TypeScript narrowing -- unreachable after assert but satisfies compiler
       assert.strictEqual(result.format, 'ini', 'format should be ini');
       assert.deepStrictEqual(result.rawPaths, ['features'], 'rawPaths should contain features');
       assert.ok(
@@ -39,6 +41,8 @@ suite('configParser', () => {
       const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'behaverc'));
       const result = findBehaveConfig(wkspUri);
       assert.ok(result, 'should return a result');
+      assert.strictEqual(result.ok, true, 'should be ok:true');
+      if (!result.ok) return;  // TypeScript narrowing
       assert.strictEqual(result.format, 'ini', 'format should be ini');
       assert.deepStrictEqual(result.rawPaths, ['features'], 'rawPaths should contain features');
       assert.ok(
@@ -55,6 +59,8 @@ suite('configParser', () => {
       const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'setup-cfg'));
       const result = findBehaveConfig(wkspUri);
       assert.ok(result, 'should return a result');
+      assert.strictEqual(result.ok, true, 'should be ok:true');
+      if (!result.ok) return;  // TypeScript narrowing
       assert.strictEqual(result.format, 'ini', 'format should be ini');
       assert.deepStrictEqual(result.rawPaths, ['features'], 'rawPaths should contain features');
     });
@@ -67,6 +73,8 @@ suite('configParser', () => {
       const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'tox-ini'));
       const result = findBehaveConfig(wkspUri);
       assert.ok(result, 'should return a result');
+      assert.strictEqual(result.ok, true, 'should be ok:true');
+      if (!result.ok) return;  // TypeScript narrowing
       assert.strictEqual(result.format, 'ini', 'format should be ini');
       assert.deepStrictEqual(result.rawPaths, ['features'], 'rawPaths should contain features');
     });
@@ -79,6 +87,8 @@ suite('configParser', () => {
       const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'pyproject-toml'));
       const result = findBehaveConfig(wkspUri);
       assert.ok(result, 'should return a result');
+      assert.strictEqual(result.ok, true, 'should be ok:true');
+      if (!result.ok) return;  // TypeScript narrowing
       assert.strictEqual(result.format, 'toml', 'format should be toml');
       assert.deepStrictEqual(result.rawPaths, ['features'], 'rawPaths should contain features');
       assert.ok(
@@ -95,6 +105,8 @@ suite('configParser', () => {
       const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'behave-ini'));
       const result = findBehaveConfig(wkspUri);
       assert.ok(result, 'should return a result');
+      assert.strictEqual(result.ok, true, 'should be ok:true');
+      if (!result.ok) return;  // TypeScript narrowing
       const expectedSuffix = path.join('behave-ini', 'features').replace(/\\/g, '/');
       assert.ok(
         result.resolvedPath.fsPath.replace(/\\/g, '/').endsWith(expectedSuffix),
@@ -139,6 +151,8 @@ suite('configParser', () => {
       const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'multi-path'));
       const result = findBehaveConfig(wkspUri);
       assert.ok(result, 'should return a result');
+      assert.strictEqual(result.ok, true, 'should be ok:true');
+      if (!result.ok) return;  // TypeScript narrowing
       assert.deepStrictEqual(
         result.rawPaths,
         ['features/auth', 'features/checkout', 'features/admin'],
@@ -158,10 +172,41 @@ suite('configParser', () => {
       const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'behave-ini'));
       const result = findBehaveConfig(wkspUri);
       assert.ok(result, 'should return a result');
+      assert.strictEqual(result.ok, true, 'should be ok:true');
+      if (!result.ok) return;  // TypeScript narrowing
       assert.ok(
         result.configFileUri.fsPath.replace(/\\/g, '/').endsWith('behave.ini'),
         `configFileUri ${result.configFileUri.fsPath} should point to behave.ini`
       );
+    });
+
+  });
+
+  suite('findBehaveConfig - error variant (D-05)', () => {
+
+    test('malformed TOML returns ok:false with errorMessage', () => {
+      const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'malformed-toml'));
+      const result = findBehaveConfig(wkspUri);
+      assert.ok(result, 'should return a result (not undefined)');
+      assert.strictEqual(result.ok, false, 'should be ok:false');
+      if (result.ok) return;  // TypeScript narrowing
+      assert.ok(result.errorMessage.length > 0, 'errorMessage should be non-empty');
+      assert.ok(
+        result.configFileUri.fsPath.replace(/\\/g, '/').endsWith('malformed-toml/pyproject.toml'),
+        `configFileUri ${result.configFileUri.fsPath} should point to the malformed file`
+      );
+    });
+
+    test('INI without [behave] section still returns undefined (not ok:false)', () => {
+      const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'no-behave-section'));
+      const result = findBehaveConfig(wkspUri);
+      assert.strictEqual(result, undefined, 'no [behave] section is not an error -- must be undefined');
+    });
+
+    test('TOML without [tool.behave] returns undefined (not ok:false)', () => {
+      const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'no-tool-behave'));
+      const result = findBehaveConfig(wkspUri);
+      assert.strictEqual(result, undefined, 'no [tool.behave] section is not an error -- must be undefined');
     });
 
   });
