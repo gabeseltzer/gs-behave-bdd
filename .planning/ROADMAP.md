@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Config parser module and test fixtures
+- [x] 01-01-PLAN.md -- Config parser module and test fixtures
 - [ ] 01-02-PLAN.md -- Unit tests for all formats, path resolution, and edge cases
 
 ### Phase 2: Integration
