@@ -60,7 +60,11 @@ Plans:
   3. The status bar item's hover detail identifies whether the project was discovered via config file, convention, or explicit settings
   4. An integration test using the `config-only/` example project (no settings.json) passes end-to-end in CI
   5. All existing example projects with `.vscode/settings.json` pass their existing tests without modification
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 03-01-PLAN.md -- Discovery UX: logging, notifications, diagnostics, status bar, setting descriptions
+- [ ] 03-02-PLAN.md -- Test infrastructure: example projects, integration suites, priority unit tests, backward compat
 
 ## Progress
 
@@ -71,4 +75,4 @@ Phases execute in numeric order: 1 -> 2 -> 3
 |-------|----------------|--------|-----------|
 | 1. Config Parsing | 2/2 | Complete | 2026-04-15 |
 | 2. Integration | 0/2 | Planned | - |
-| 3. UX & Verification | 0/? | Not started | - |
+| 3. UX & Verification | 0/2 | Planned | - |
