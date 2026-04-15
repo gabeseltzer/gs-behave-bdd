@@ -48,7 +48,7 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md -- Config parser error variant (D-05) and activation events (INTG-05)
-- [ ] 02-02-PLAN.md -- Gatekeeper priority chain, discovery cache, WorkspaceSettings enrichment
+- [x] 02-02-PLAN.md -- Gatekeeper priority chain, discovery cache, WorkspaceSettings enrichment
 
 ### Phase 3: UX & Verification
 **Goal**: Users can see how the extension discovered their project, parse errors are surfaced gracefully, and all scenarios are validated by tests
