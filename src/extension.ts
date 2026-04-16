@@ -4,8 +4,10 @@ import { BehaveTestData, Scenario, TestData, TestFile } from './parsers/testFile
 import {
   getContentFromFilesystem,
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, isFeatureFile,
-  logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile
+  logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile,
+  getDiscoveryEntry, basename
 } from './common';
+import { setConfigParseErrorDiagnostic, clearConfigParseErrorDiagnostic } from './handlers/configDiagnostics';
 import { StepFileStep } from './parsers/stepsParser';
 import { gotoStepHandler } from './handlers/gotoStepHandler';
 import { findStepReferencesHandler, nextStepReferenceHandler as nextStepReferenceHandler, prevStepReferenceHandler, treeView } from './handlers/findStepReferencesHandler';
@@ -36,6 +38,7 @@ const wkspWatchers = new Map<vscode.Uri, vscode.FileSystemWatcher[]>();
 export const parser = new FileParser();
 export interface QueueItem { test: vscode.TestItem; scenario: Scenario; }
 let initialParsingComplete = false;
+const notifiedConfigErrors = new Set<string>();
 
 
 export type TestSupport = {
@@ -49,6 +52,77 @@ export type TestSupport = {
   configurationChangedHandler: (event?: vscode.ConfigurationChangeEvent, testCfg?: TestWorkspaceConfigWithWkspUri, forceRefresh?: boolean) => Promise<void>
 };
 
+
+
+function updateDiscoveryUX(
+  statusItem: vscode.LanguageStatusItem,
+  wkspUris: vscode.Uri[],
+  clearNotifiedErrors: boolean
+): void {
+  if (clearNotifiedErrors) {
+    notifiedConfigErrors.clear();
+  }
+
+  const detailLines: string[] = [];
+
+  for (const wkspUri of wkspUris) {
+    const entry = getDiscoveryEntry(wkspUri);
+    if (!entry) continue;
+
+    // UX-01 / D-01: always-on one-line summary
+    const configPart = entry.configFileUri ? ` (${basename(entry.configFileUri)})` : '';
+    config.logger.logInfo(
+      `Discovered via ${entry.source}${configPart}: ${entry.featuresUri.fsPath}`,
+      wkspUri
+    );
+
+    // D-02: xRay full discovery chain
+    diagLog(
+      `Discovery detail: source=${entry.source}, config=${entry.configFileUri?.fsPath ?? 'none'}, features=${entry.featuresUri.fsPath}`,
+      wkspUri
+    );
+
+    // UX-02 / D-03 / D-04 / D-05: malformed config notification + diagnostic
+    if (entry.configError) {
+      const errorUri = entry.configError.configFileUri;
+      const rawMsg = entry.configError.errorMessage;
+      const msg = rawMsg.length > 200 ? rawMsg.substring(0, 200) + '...' : rawMsg;
+
+      // D-05: Problems panel diagnostic
+      setConfigParseErrorDiagnostic(errorUri, msg);
+
+      // D-03 / D-04: fire-and-forget warning notification (one per config file per session)
+      const key = errorUri.fsPath;
+      if (!notifiedConfigErrors.has(key)) {
+        notifiedConfigErrors.add(key);
+        vscode.window.showWarningMessage(
+          `Behave BDD: Could not parse "${basename(errorUri)}": ${msg}\n\nFalling back to "features/" convention.`,
+          'Open Config File',
+          'Open Settings'
+        ).then(action => {
+          if (action === 'Open Config File') {
+            vscode.commands.executeCommand('vscode.open', errorUri);
+          } else if (action === 'Open Settings') {
+            vscode.commands.executeCommand('workbench.action.openSettings', 'gs-behave-bdd');
+          }
+        });
+      }
+    } else if (entry.configFileUri) {
+      // Clear any stale diagnostic for this config file if it was previously malformed
+      clearConfigParseErrorDiagnostic(entry.configFileUri);
+    }
+
+    // UX-04 / D-06: status bar hover detail
+    const cfgLine = entry.configFileUri ? `\nConfig: ${basename(entry.configFileUri)}` : '';
+    detailLines.push(
+      `Source: ${entry.source}${cfgLine}\nFeatures: ${entry.featuresUri.fsPath}`
+    );
+  }
+
+  if (detailLines.length > 0) {
+    statusItem.detail = detailLines.join('  |  ');
+  }
+}
 
 
 // construction function called on extension activation OR the first time a new/unrecognised workspace gets added.
@@ -105,6 +179,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       }
     });
 
+    // Phase 3: Surface discovery results (UX-01 through UX-05)
+    updateDiscoveryUX(statusItem, getUrisOfWkspFoldersWithFeatures(), false);
+
+    // D-07: Status bar click opens the Behave BDD output channel
+    statusItem.command = {
+      title: 'Show Behave BDD Output',
+      command: 'gs-behave-bdd.openOutput'
+    };
+
     // After a Python step/env file debounce fires and step mappings are rebuilt, re-validate
     // diagnostics for all open feature files in the affected workspace. This handles the case
     // where files change via the disk (e.g. git branch switch) without going through
@@ -134,6 +217,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       cleanExtensionTempDirectoryCancelSource,
       junitWatcher,
       statusItem,
+      vscode.commands.registerCommand('gs-behave-bdd.openOutput', () => {
+        const wkspUris = getUrisOfWkspFoldersWithFeatures();
+        if (wkspUris.length > 0) {
+          config.logger.show(wkspUris[0]);
+        }
+      }),
       vscode.commands.registerTextEditorCommand(`gs-behave-bdd.gotoStep`, gotoStepHandler),
       vscode.commands.registerTextEditorCommand(`gs-behave-bdd.findStepReferences`, findStepReferencesHandler),
       vscode.commands.registerCommand(`gs-behave-bdd.stepReferences.prev`, prevStepReferenceHandler),
@@ -537,6 +626,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
 
         // we don't know which workspace was affected (see comment on affectsConfiguration above), so just reparse all workspaces
         // (also, when a workspace is added/removed/renamed (forceRefresh), we need to clear down and reparse all test nodes to rebuild the top level nodes)
+
+        // Phase 3: Re-surface discovery results after config change
+        updateDiscoveryUX(statusItem, getUrisOfWkspFoldersWithFeatures(), !!forceFullRefresh);
+
         parser.clearTestItemsAndParseFilesForAllWorkspaces(testData, ctrl, "configurationChangedHandler", false);
       }
       catch (e: unknown) {
