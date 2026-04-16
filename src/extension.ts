@@ -30,11 +30,13 @@ import { StepCodeLensProvider } from './handlers/codeLensProvider';
 import { validateFixtureTags } from './handlers/fixtureDiagnostics';
 import { validateStepDefinitions } from './handlers/stepDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
+import { startWatchingConfigFiles, clearConfigDebounceTimers } from './watchers/configWatcher';
 import { JunitWatcher } from './watchers/junitWatcher';
 
 
 const testData = new WeakMap<vscode.TestItem, BehaveTestData>();
 const wkspWatchers = new Map<vscode.Uri, vscode.FileSystemWatcher[]>();
+const wkspConfigWatchers = new Map<vscode.Uri, vscode.FileSystemWatcher[]>();
 export const parser = new FileParser();
 export interface QueueItem { test: vscode.TestItem; scenario: Scenario; }
 let initialParsingComplete = false;
@@ -140,6 +142,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       watchers.forEach(w => context.subscriptions.push(w));
     }
 
+    for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
+      const configWatchers = startWatchingConfigFiles(wkspUri, ctrl, testData, parser, updateDiscoveryUX);
+      wkspConfigWatchers.set(wkspUri, configWatchers);
+      configWatchers.forEach(w => context.subscriptions.push(w));
+    }
+
     const junitWatcher = new JunitWatcher();
     junitWatcher.startWatchingJunitFolder();
 
@@ -205,6 +213,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       cleanExtensionTempDirectoryCancelSource,
       junitWatcher,
       statusItem,
+      { dispose: () => clearConfigDebounceTimers() },
       vscode.commands.registerCommand('gs-behave-bdd.openOutput', () => {
         const wkspUris = getUrisOfWkspFoldersWithFeatures();
         if (wkspUris.length > 0) {
@@ -602,6 +611,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           const watchers = startWatchingWorkspace(wkspUri, ctrl, testData, parser);
           wkspWatchers.set(wkspUri, watchers);
           watchers.forEach(w => context.subscriptions.push(w));
+          const oldConfigWatchers = wkspConfigWatchers.get(wkspUri);
+          if (oldConfigWatchers)
+            oldConfigWatchers.forEach(w => w.dispose());
+          const configWatchers = startWatchingConfigFiles(wkspUri, ctrl, testData, parser, updateDiscoveryUX);
+          wkspConfigWatchers.set(wkspUri, configWatchers);
+          configWatchers.forEach(w => context.subscriptions.push(w));
         }
 
         // configuration has now changed, e.g. featuresPath, so we need to reparse files
