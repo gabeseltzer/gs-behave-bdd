@@ -32,13 +32,13 @@
 				"gs-behave-bdd.projectPath": {
 					"scope": "resource",
 					"type": "string",
-					"markdownDescription": "*workspace-relative* path to the root of your behave project. This is the directory where behave will be executed from (working directory). If not set (the default), the workspace root folder is used. Example: `myproject/backend`.",
+					"markdownDescription": "*workspace-relative* path to the root of your behave project (working directory for behave). **Override only:** Leave blank to use auto-discovery from `behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, or `pyproject.toml`. Set this only if auto-discovery does not detect the correct project root. Example: `myproject/backend`.",
 					"default": ""
 				},
 				"gs-behave-bdd.featuresPath": {
 					"scope": "resource",
 					"type": "string",
-					"markdownDescription": "*project-relative* path to the features subfolder. If not `features` (the default), then this must tie up with the `\"paths=\"` setting in your behave configuration file. This path is relative to `projectPath` (or workspace root if `projectPath` is not set). Example: `my_behave_tests`.",
+					"markdownDescription": "*project-relative* path to the features subfolder. **Override only:** Leave blank to use the path from your behave config file, or `features/` if no config file is found. Set this only if auto-discovery resolves the wrong features directory. This path is relative to `projectPath` (or workspace root if `projectPath` is not set). Example: `my_behave_tests`.",
 					"default": "features"
 				},
 				"gs-behave-bdd.justMyCode": {
