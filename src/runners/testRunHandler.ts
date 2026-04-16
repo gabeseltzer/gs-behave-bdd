@@ -6,7 +6,8 @@ import { Scenario, TestData, TestFile } from '../parsers/testFile';
 import { runOrDebugAllFeaturesInOneInstance, runOrDebugFeatures, runOrDebugFeatureWithSelectedScenarios } from './runOrDebug';
 import {
   countTestItems, getAllTestItems, getContentFromFilesystem, uriId,
-  getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, rndNumeric
+  getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, rndNumeric,
+  getDiscoveryEntry, basename
 } from '../common';
 import { QueueItem } from '../extension';
 import { FileParser } from '../parsers/fileParser';
@@ -52,6 +53,14 @@ export function testRunHandler(testData: TestData, ctrl: vscode.TestController, 
       return;
     }
 
+    // GUARD-01: Check for malformed config in queued workspaces
+    const guardOk = await checkRunGuard(request, ctrl);
+    if (!guardOk) {
+      if (config.integrationTestRun)
+        throw "Run guard: user cancelled due to config error";
+      return;
+    }
+
     // stop the temp directory removal function if it is still running
     removeTempDirectoryCancelSource.cancel();
 
@@ -76,6 +85,69 @@ export function testRunHandler(testData: TestData, ctrl: vscode.TestController, 
     diagLog(`testRunHandler: completed run ${run.name}`);
   };
 
+}
+
+
+export async function checkRunGuard(
+  request: vscode.TestRunRequest,
+  ctrl: vscode.TestController
+): Promise<boolean> {
+
+  // GUARD-04: Collect workspace URIs only for tests that are actually queued
+  const wkspUriSet = new Set<string>();
+  const items = request.include ?? convertToTestItemArray(ctrl.items);
+  for (const item of items) {
+    if (request.exclude?.includes(item)) continue;
+    const wkspSettings = getWorkspaceSettingsForFile(item.uri);
+    if (wkspSettings) {
+      wkspUriSet.add(uriId(wkspSettings.uri));
+    }
+  }
+
+  // GUARD-01: Check discovery cache for configError in each queued workspace
+  const brokenWorkspaces: { wkspUri: vscode.Uri; filename: string; configFileUri: vscode.Uri }[] = [];
+  for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
+    if (!wkspUriSet.has(uriId(wkspUri))) continue;
+    const entry = getDiscoveryEntry(wkspUri);
+    if (entry?.configError) {
+      brokenWorkspaces.push({
+        wkspUri,
+        filename: basename(entry.configError.configFileUri),
+        configFileUri: entry.configError.configFileUri,
+      });
+    }
+  }
+
+  if (brokenWorkspaces.length === 0) return true; // no issues — proceed
+
+  // GUARD-02: Show warning with three options (D-04 message format, D-06 multi-root behavior)
+  const filenames = brokenWorkspaces.map(b => `'${b.filename}'`).join(', ');
+  const msg = `Config file ${filenames} has parse errors. Tests may not discover correctly.`;
+
+  // D-14: Audit trail in output channel
+  for (const bw of brokenWorkspaces) {
+    config.logger.logInfo(`Run guard: config error in '${bw.filename}' — user prompted`, bw.wkspUri);
+  }
+
+  const choice = await vscode.window.showWarningMessage(
+    msg,
+    'Run Anyway',
+    'Open Config File',
+    'Cancel'
+  );
+
+  if (choice === 'Run Anyway') {
+    return true; // proceed with test execution
+  }
+
+  if (choice === 'Open Config File') {
+    // D-06: Open the first broken config file and cancel the run
+    await vscode.commands.executeCommand('vscode.open', brokenWorkspaces[0].configFileUri);
+    return false;
+  }
+
+  // 'Cancel' or dismiss (undefined) — cancel the run
+  return false;
 }
 
 
