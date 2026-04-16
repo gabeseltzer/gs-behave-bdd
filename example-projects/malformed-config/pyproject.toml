@@ -1,2 +1,5 @@
 [tool.behave]
-paths = ["features"
+# No paths key — our parser finds [tool.behave] but no paths array,
+# so it returns undefined (not ok:true), triggering convention fallback.
+# Behave reads the section but uses its default features/ directory.
+show_skipped = true
