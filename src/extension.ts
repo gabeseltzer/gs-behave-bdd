@@ -39,7 +39,6 @@ export const parser = new FileParser();
 export interface QueueItem { test: vscode.TestItem; scenario: Scenario; }
 let initialParsingComplete = false;
 const notifiedConfigErrors = new Set<string>();
-let lastDiscoveryDetail: string | undefined;
 
 
 export type TestSupport = {
@@ -56,15 +55,12 @@ export type TestSupport = {
 
 
 function updateDiscoveryUX(
-  statusItem: vscode.LanguageStatusItem,
   wkspUris: vscode.Uri[],
   clearNotifiedErrors: boolean
 ): void {
   if (clearNotifiedErrors) {
     notifiedConfigErrors.clear();
   }
-
-  const detailLines: string[] = [];
 
   for (const wkspUri of wkspUris) {
     const entry = getDiscoveryEntry(wkspUri);
@@ -113,16 +109,6 @@ function updateDiscoveryUX(
       clearConfigParseErrorDiagnostic(entry.configFileUri);
     }
 
-    // UX-04 / D-06: status bar hover detail
-    const cfgLine = entry.configFileUri ? `\nConfig: ${basename(entry.configFileUri)}` : '';
-    detailLines.push(
-      `Source: ${entry.source}${cfgLine}\nFeatures: ${entry.featuresUri.fsPath}`
-    );
-  }
-
-  if (detailLines.length > 0) {
-    lastDiscoveryDetail = detailLines.join('  |  ');
-    statusItem.detail = lastDiscoveryDetail;
   }
 }
 
@@ -177,12 +163,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       } else {
         statusItem.text = "Behave: Ready";
         statusItem.severity = vscode.LanguageStatusSeverity.Information;
-        statusItem.detail = lastDiscoveryDetail;
+        statusItem.detail = undefined;
       }
     });
 
     // Phase 3: Surface discovery results (UX-01 through UX-05)
-    updateDiscoveryUX(statusItem, getUrisOfWkspFoldersWithFeatures(), false);
+    updateDiscoveryUX(getUrisOfWkspFoldersWithFeatures(), false);
 
     // D-07: Status bar click opens the Behave BDD output channel
     statusItem.command = {
@@ -630,7 +616,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         // (also, when a workspace is added/removed/renamed (forceRefresh), we need to clear down and reparse all test nodes to rebuild the top level nodes)
 
         // Phase 3: Re-surface discovery results after config change
-        updateDiscoveryUX(statusItem, getUrisOfWkspFoldersWithFeatures(), !!forceFullRefresh);
+        updateDiscoveryUX(getUrisOfWkspFoldersWithFeatures(), !!forceFullRefresh);
 
         parser.clearTestItemsAndParseFilesForAllWorkspaces(testData, ctrl, "configurationChangedHandler", false);
       }
