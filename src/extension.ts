@@ -39,6 +39,7 @@ export const parser = new FileParser();
 export interface QueueItem { test: vscode.TestItem; scenario: Scenario; }
 let initialParsingComplete = false;
 const notifiedConfigErrors = new Set<string>();
+let lastDiscoveryDetail: string | undefined;
 
 
 export type TestSupport = {
@@ -120,7 +121,8 @@ function updateDiscoveryUX(
   }
 
   if (detailLines.length > 0) {
-    statusItem.detail = detailLines.join('  |  ');
+    lastDiscoveryDetail = detailLines.join('  |  ');
+    statusItem.detail = lastDiscoveryDetail;
   }
 }
 
@@ -175,7 +177,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       } else {
         statusItem.text = "Behave: Ready";
         statusItem.severity = vscode.LanguageStatusSeverity.Information;
-        statusItem.detail = undefined;
+        statusItem.detail = lastDiscoveryDetail;
       }
     });
 
