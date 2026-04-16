@@ -49,7 +49,7 @@ completed: 2026-04-16
 
 # Phase 03 Plan 01: UX Surfacing Summary
 
-**Discovery results surfaced via output channel log, fire-and-forget warning notification with Open Config File/Open Settings buttons, Problems panel diagnostics, and status bar hover detail — with package.json descriptions reframed as override-only**
+**Discovery results surfaced via output channel log (source, config file, features directory), fire-and-forget warning notification with Open Config File/Open Settings buttons, and Problems panel diagnostics — with package.json descriptions reframed as override-only**
 
 ## Performance
 
@@ -61,7 +61,7 @@ completed: 2026-04-16
 
 ## Accomplishments
 - Created `src/handlers/configDiagnostics.ts` with `setConfigParseErrorDiagnostic` / `clearConfigParseErrorDiagnostic` using the code-scoped DiagnosticCollection filter pattern (consistent with `stepDiagnostics.ts` and `fixtureDiagnostics.ts`)
-- Added `updateDiscoveryUX` function to `src/extension.ts` wiring all five UX surfaces: always-on output channel log (UX-01), xRay detail log (D-02), fire-and-forget warning notification with action buttons (UX-02, D-03, D-04), Problems panel diagnostic via `setConfigParseErrorDiagnostic` (D-05), and `statusItem.detail` hover tooltip (UX-04, D-06)
+- Added `updateDiscoveryUX` function to `src/extension.ts` wiring UX surfaces: output channel log with discovery source, config file path, and features directory as separate lines (UX-01), xRay detail log (D-02), fire-and-forget warning notification with action buttons (UX-02, D-03, D-04), Problems panel diagnostic via `setConfigParseErrorDiagnostic` (D-05)
 - Updated `gs-behave-bdd.projectPath` and `gs-behave-bdd.featuresPath` `markdownDescription` fields in `package.json` to clearly frame them as override-only settings with auto-discovery fallback (UX-05)
 - Added `gs-behave-bdd.openOutput` command for status bar click (D-07)
 - Implemented duplicate notification guard via `notifiedConfigErrors` Set (T-03-03 mitigation)
@@ -87,7 +87,7 @@ Each task was committed atomically:
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+- Removed `statusItem.detail` hover tooltip (UX-04/D-06) — the long detail string pushed the output channel button out of the way in the language status popover. Discovery info is better served by the output channel log, which the status bar button already links to.
 
 ## Issues Encountered
 
