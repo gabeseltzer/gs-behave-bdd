@@ -66,12 +66,12 @@ function updateDiscoveryUX(
     const entry = getDiscoveryEntry(wkspUri);
     if (!entry) continue;
 
-    // UX-01 / D-01: always-on one-line summary
-    const configPart = entry.configFileUri ? ` (${basename(entry.configFileUri)})` : '';
-    config.logger.logInfo(
-      `Discovered via ${entry.source}${configPart}: ${entry.featuresUri.fsPath}`,
-      wkspUri
-    );
+    // UX-01: discovery summary in output channel
+    config.logger.logInfo(`Discovery source: ${entry.source}`, wkspUri);
+    if (entry.configFileUri) {
+      config.logger.logInfo(`Config file: ${entry.configFileUri.fsPath}`, wkspUri);
+    }
+    config.logger.logInfo(`Features directory: ${entry.featuresUri.fsPath}`, wkspUri);
 
     // D-02: xRay full discovery chain
     diagLog(
