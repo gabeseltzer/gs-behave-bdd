@@ -128,6 +128,33 @@ async function runTestSuites() {
       launchArgs
     });
 
+    launchArgs = ["example-projects/config-only"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './config-only suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = ["example-projects/pyproject-config"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './pyproject-config suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = ["example-projects/malformed-config"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './malformed-config suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
     console.log("test run complete");
 
   } catch (err) {
