@@ -8,6 +8,16 @@ An enhancement to the gs-behave-bdd VS Code extension that automatically discove
 
 Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json.
 
+## Current Milestone: v1.1 Config File Watching
+
+**Goal:** The extension reacts to config file changes in real time and warns users before behave crashes on malformed configs.
+
+**Target features:**
+- File system watchers for behave config files (create/modify/delete)
+- Silent re-discovery on config file changes (update test tree + output log)
+- Cache invalidation via config file watchers (500ms debounce)
+- Malformed config run guard: warning popup when user tries to run tests in a workspace with a configError
+
 ## Requirements
 
 ### Validated
@@ -96,4 +106,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-16 after v1.0 milestone completion*
+*Last updated: 2026-04-16 after v1.1 milestone start*

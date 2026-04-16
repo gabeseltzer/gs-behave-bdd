@@ -1,34 +1,34 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-04-16T21:21:57.739Z"
+milestone: v1.1
+milestone_name: Config File Watching
+status: planning
+stopped_at: 
+last_updated: "2026-04-16T21:45:00.000Z"
 last_activity: 2026-04-16
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-15)
+See: .planning/PROJECT.md (updated 2026-04-16)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json.
-**Current focus:** Phase 03 — ux-verification
+**Current focus:** Defining requirements for v1.1 — Config File Watching
 
 ## Current Position
 
-Phase: 03
-Plan: Not started
-Status: Executing Phase 03
-Last activity: 2026-04-16
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-16 — Milestone v1.1 started
 
 Progress: [░░░░░░░░░░] 0%
 
