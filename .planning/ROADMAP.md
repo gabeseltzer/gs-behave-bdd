@@ -35,8 +35,8 @@
   5. In a multi-root workspace, a malformed config in one folder does not block test runs in healthy folders
 **Plans:** 2 plans
 Plans:
-- [ ] 04-01-PLAN.md — Config file watcher with debounce + extension.ts wiring + watcher unit tests
-- [ ] 04-02-PLAN.md — Run guard in testRunHandler + run guard unit tests
+- [x] 04-01-PLAN.md — Config file watcher with debounce + extension.ts wiring + watcher unit tests
+- [x] 04-02-PLAN.md — Run guard in testRunHandler + run guard unit tests
 
 ### Phase 5: Integration Verification
 **Goal**: The watcher + run guard behavior is verified end-to-end through an automated integration test so regressions are caught at CI time
