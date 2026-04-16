@@ -62,25 +62,25 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WATCH-01 | — | Pending |
-| WATCH-02 | — | Pending |
-| WATCH-03 | — | Pending |
-| WATCH-04 | — | Pending |
-| WATCH-05 | — | Pending |
-| WATCH-06 | — | Pending |
-| GUARD-01 | — | Pending |
-| GUARD-02 | — | Pending |
-| GUARD-03 | — | Pending |
-| GUARD-04 | — | Pending |
-| TEST-07 | — | Pending |
-| TEST-08 | — | Pending |
-| TEST-09 | — | Pending |
+| WATCH-01 | Phase 4 | Pending |
+| WATCH-02 | Phase 4 | Pending |
+| WATCH-03 | Phase 4 | Pending |
+| WATCH-04 | Phase 4 | Pending |
+| WATCH-05 | Phase 4 | Pending |
+| WATCH-06 | Phase 4 | Pending |
+| GUARD-01 | Phase 4 | Pending |
+| GUARD-02 | Phase 4 | Pending |
+| GUARD-03 | Phase 4 | Pending |
+| GUARD-04 | Phase 4 | Pending |
+| TEST-07 | Phase 4 | Pending |
+| TEST-08 | Phase 5 | Pending |
+| TEST-09 | Phase 4 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 13 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 13
+- Mapped to phases: 13
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-16*
-*Last updated: 2026-04-16*
+*Last updated: 2026-04-16 — traceability populated after roadmap creation*
