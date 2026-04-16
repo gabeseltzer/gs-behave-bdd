@@ -43,13 +43,13 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 - ✓ Integration tests with config-only, pyproject-config, malformed-config example projects — v1.0
 - ✓ Backward compat: existing example projects with settings.json pass unchanged — v1.0
 - ✓ `smol-toml` dependency added for TOML parsing — v1.0
+- ✓ File system watchers for config file changes (create/modify/delete) with 500ms debounce — v1.1 Phase 4
+- ✓ Malformed config run guard: warning popup with Run Anyway / Open Config File / Cancel — v1.1 Phase 4
 
 ### Active
 
-- [ ] Malformed config run guard: warn user before behave crashes on broken config file at runtime
 - [ ] Subdirectory scanning (depth 3, configurable) to find config files in nested project dirs
 - [ ] Multiple feature paths (`featuresUris[]`) from multi-value `paths=`
-- [ ] File system watchers for config file changes (create/modify/delete)
 
 ### Out of Scope
 
@@ -61,8 +61,9 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 ## Context
 
 Shipped v1.0 with 3 phases, 6 plans, ~950 new lines of TypeScript + test fixtures.
+Phase 4 complete — config file watchers + run guard, 539 unit tests passing.
 Tech stack: TypeScript, VS Code Extension API, Mocha/Sinon, smol-toml.
-521 unit tests passing, 17 integration test suites passing.
+539 unit tests passing, 17 integration test suites passing.
 
 Key files added:
 - `src/parsers/configParser.ts` — stateless parser for all 5 behave config formats
@@ -106,4 +107,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-16 after v1.1 milestone start*
+*Last updated: 2026-04-16 after Phase 4 completion*
