@@ -1,137 +1,211 @@
-# Domain Pitfalls: VS Code Extension Auto-Discovery with Multi-Path Support
+# Domain Pitfalls: Config File Watching and Run Guard
 
-**Domain:** VS Code extension — config file discovery, INI/TOML parsing, single-to-array refactor
-**Researched:** 2026-04-15
-**Codebase verified:** Yes — findings cross-referenced against actual source in `src/`
+**Domain:** VS Code extension — FileSystemWatcher for behave config files, cache invalidation, run guard
+**Researched:** 2026-04-16
+**Codebase verified:** Yes — all findings cross-referenced against `src/watchers/workspaceWatcher.ts`,
+`src/extension.ts`, `src/runners/testRunHandler.ts`, `src/parsers/configParser.ts`, `src/common.ts`
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause silent data loss, broken backward compat, or performance regressions.
+Mistakes that cause silent resource leaks, stale state, or broken extension behavior.
 
 ---
 
-### Pitfall 1: `featuresUri` Is a Collection Key — Not Just a Path
+### Pitfall 1: Config Watcher Disposal Leak in `configurationChangedHandler`
 
-**What goes wrong:** Every module-level store in the extension (`featureFileSteps`, `featureTags`, `stepFileSteps`, `stepMappings`) uses `uriId(featuresUri)` as a key prefix for filtering, deletion, and lookup. Changing `featuresUri` to `featuresUris[]` without updating _every_ store operation causes silent data leakage — old entries remain in the maps under the old key, new entries accumulate under a new key, and stale data is never purged.
+**What goes wrong:** `configurationChangedHandler` in `extension.ts` (lines 599–604) already handles
+_feature/steps_ watcher recycling correctly: it disposes old watchers from `wkspWatchers`, then calls
+`startWatchingWorkspace` and pushes the new ones into `context.subscriptions`. The new config file
+watchers must follow this exact same pattern. If config watchers are pushed to
+`context.subscriptions` without an equivalent `wkspConfigWatchers.get(wkspUri)?.forEach(w => w.dispose())`
+call before the push, every settings-change event creates a new undisposed watcher. On a long session
+with frequent settings changes, config files accumulate multiple active watchers for the same files.
 
-**Why it happens:** There are 108 occurrences of `featuresUri` across `src/`. The pattern is that `featuresUri` (a single `vscode.Uri`) is used as the "workspace bucket" identifier for all parsed data. When multiple paths exist, there is no single canonical URI to use as the bucket key. Developers often update the struct definition (`featuresUri → featuresUris`) but miss updating the store filter/delete functions.
+**Why it happens:** The `context.subscriptions.push(watcher)` API is designed for watchers that live
+for the entire extension lifetime. Config watchers are per-workspace and can change if the workspace
+folder set changes. When a watcher is pushed to subscriptions without disposing the previous one, the
+old watcher is not garbage-collected because VS Code holds a reference to it via subscriptions.
 
 **Consequences:**
-- Step mappings from a removed path survive in `stepMappings[]`, causing phantom step completions
-- Deleting and rebuilding step data for path A when path B changes — or rebuilding all when only one changed
-- `deleteFeatureFileSteps` / `deleteStepFileSteps` / `deleteStepMappings` all take a single `featuresUri`; calling them per-item in a loop with the wrong URI silently no-ops
+- Multiple `onDidChange` handlers fire for the same config file edit; `getUrisOfWkspFoldersWithFeatures(true)`
+  is called N times in rapid succession where N is the number of unrecycled watchers
+- `configurationChangedHandler` is called multiple times (already noted in its own comment as a known
+  issue); config watchers make this dramatically worse
+- On Linux, each leaked inotify watch consumes a file descriptor; large workspaces hit the system limit
+  (`/proc/sys/fs/inotify/max_user_watches`) and future watchers silently stop working
 
 **Prevention:**
-- Decide on the keying strategy before writing any code: either keep `featuresUri` as a store key (the "primary path" concept) OR change stores to key by workspace URI instead. The path of least resistance is: keep stores keyed by workspace URI (`wkspUri`), not features URI, since a workspace can now have multiple feature paths.
-- After any store function change, write a unit test that adds entries for path A and path B, then deletes only path A, and asserts path B entries survive.
+- Maintain a parallel `wkspConfigWatchers: Map<vscode.Uri, vscode.FileSystemWatcher[]>` (same shape as
+  the existing `wkspWatchers` map)
+- In `configurationChangedHandler`, before creating new config watchers, dispose old ones:
+  ```typescript
+  const oldConfigWatchers = wkspConfigWatchers.get(wkspUri);
+  if (oldConfigWatchers) oldConfigWatchers.forEach(w => w.dispose());
+  ```
+- Push new config watchers into `context.subscriptions` only when they are first created (activation),
+  OR manage lifetime entirely via the Map and explicit `dispose()` in a `context.subscriptions.push({
+  dispose() { ... } })` call at activation time
 
-**Warning signs:** Any test that calls `deleteFeatureFileSteps` or `deleteStepMappings` and then checks the count of remaining entries.
+**Detection:** Add `diagLog` inside `startWatchingConfigFiles` counting active watchers. Trigger a
+configuration change and check whether the count grows unboundedly.
 
-**Phase:** Implementation of `featuresUris[]` refactor in `fileParser.ts`, `featureParser.ts`, `stepsParser.ts`, `stepMappings.ts`.
+**Phase:** Watcher creation and `configurationChangedHandler` update.
 
 ---
 
-### Pitfall 2: INI `paths=` Is Newline-Split, Not Line-Split With Blank-Line Termination
+### Pitfall 2: Glob Pattern Required — Exact Filename Fails Silently
 
-**What goes wrong:** Python's `configparser` with default settings (`empty_lines_in_values=True`) treats indented lines after an option as continuations. Behave calls `splitlines()` on the result and strips each part. This means:
+**What goes wrong:** Using a bare filename (e.g., `new vscode.RelativePattern(wkspUri, 'behave.ini')`)
+in `createFileSystemWatcher` does NOT fire events in many VS Code versions. This is a confirmed VS Code
+bug (issue #164925). The watcher is created without error, subscriptions are registered without error,
+and the extension silently never reacts to config file changes.
 
-```ini
-[behave]
-paths = features/web
-        features/api
-```
+**Why it happens:** VS Code's watcher dispatch requires a pattern with a wildcard or path separator to
+be recognized as a "recursive watch request." A plain filename string fails the pattern-recognition check
+in the native watcher backend.
 
-…parses as TWO paths: `["features/web", "features/api"]`. But:
-
-```ini
-[behave]
-paths = features/web
-
-        features/api
-```
-
-…with an empty line between, `configparser` still sees one multiline value (blank line preserved), and `splitlines()` + `strip()` produces `["features/web", "", "features/api"]`. The empty string element is a valid-looking-but-wrong path.
-
-**Why it happens:** TypeScript INI parsers (like `ini` npm package) do NOT implement Python's multiline-value-via-indentation semantics. A naive line-by-line split would produce wrong results for indented continuations.
-
-**Consequences:** Extension misses paths (single-path result when multi-path expected), or passes empty strings to `vscode.Uri.joinPath`, producing a path that looks valid but resolves to the project root.
+**Consequences:** Config file editing never triggers re-discovery. The user edits `behave.ini`, nothing
+happens, they assume the extension is broken.
 
 **Prevention:**
-- Implement the INI parser to match Python `configparser` behavior exactly: collect all continuation lines (those that begin with whitespace after the first line), join them, then `splitlines()` + `trim()` each part, then filter out empty strings.
-- Test with: single path, multiple indented paths, blank line within multiline value, comment-only lines in the value block, Windows `\r\n` line endings.
-- Always filter out empty strings after splitting.
+- Always use a glob pattern: `**/behave.ini`, `**/.behaverc`, `**/setup.cfg`, `**/tox.ini`,
+  `**/pyproject.toml`
+- Alternatively: one watcher per workspace root covering all config files:
+  `new vscode.RelativePattern(wkspUri, '{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}')`
+  — this fires on any of the five files and is more efficient than five separate watchers
+- Test this: create a watcher in a dev host and save a `behave.ini` — confirm the handler fires
+  before writing any downstream logic
 
-**Warning signs:** A `paths=` value that, after parsing, is an array of length 1 when the config file has two indented entries.
+**Detection:** Add a `console.log` or `diagLog` inside the config watcher `onDidChange` handler during
+development and physically save a config file to confirm the event fires.
 
-**Phase:** Config file parser implementation.
+**Phase:** Watcher pattern construction.
 
 ---
 
-### Pitfall 3: Windows Backslash Paths in Config Files Break `vscode.Uri.joinPath`
+### Pitfall 3: `onDidChange` Fires Before File Content Is Updated on Disk
 
-**What goes wrong:** On Windows, users sometimes write config file paths with backslashes:
+**What goes wrong:** VS Code fires `FileSystemWatcher.onDidChange` to extensions _before_ the VS Code
+text model and in some cases the underlying file are fully committed. Reading the config file immediately
+inside the event handler (e.g., `fs.readFileSync(uri.fsPath)`) can return stale content — the previous
+version of the file (confirmed VS Code issue #72831).
 
-```ini
-[behave]
-paths = features\web
-        features\api
-```
+**Why it happens:** The OS file-write and the VS Code event dispatch are not atomic. The watcher event
+can arrive before the file buffer is flushed to disk.
 
-`vscode.Uri.joinPath` takes path segments assuming forward slashes. `vscode.Uri.file(backslashPath)` normalizes correctly on Windows but `vscode.Uri.joinPath(base, "features\\web")` does NOT — the backslash becomes a literal character in the URI path, producing a URI that points nowhere.
-
-**Why it happens:** VS Code URIs use forward slashes internally regardless of OS. The extension already normalizes user settings strings (`replace(/^\\|^\//,'')`) in `WorkspaceSettings`, but a new config-file parser path needs the same treatment.
-
-**Consequences:** `fs.existsSync(uri.fsPath)` returns false for a valid path, causing "features path not found" errors only on Windows.
+**Consequences:** The extension re-parses the config file, gets the old content, updates the discovery
+cache with the old result, and silently leaves the test tree in the pre-change state. The user edits
+`paths = features/api`, saves, sees no change, edits again, and the second save (which also re-reads
+old content) still does not update.
 
 **Prevention:**
-- After parsing any path string from an INI or TOML file, normalize backslashes to forward slashes before constructing a `vscode.Uri`: `p.replace(/\\/g, '/')`.
-- Also strip leading `/` or `\` characters (behave resolves paths relative to config dir, so absolute paths from `os.path.normpath` would include the drive letter on Windows — handle that case too by checking `path.isAbsolute()` and using `vscode.Uri.file()` instead of `joinPath`).
-- Test on Windows with backslash paths in a real `behave.ini`.
+- Debounce the handler with a 500ms delay (matching the existing Python step file debounce in
+  `fileParser.ts`) before calling `getUrisOfWkspFoldersWithFeatures(true)`. By 500ms the file is
+  always fully flushed
+- The debounce also collapses rapid-save events (e.g., auto-save on every keystroke) into a single
+  re-discovery call
+- Do NOT use `vscode.workspace.openTextDocument(uri)` inside the watcher handler — it can also return
+  cached pre-change content. Use `fs.readFileSync` inside the debounced callback instead (which
+  `configParser.ts` already does)
 
-**Warning signs:** "Features path not found" errors that only appear in Windows CI runs but not Linux/macOS.
-
-**Phase:** Config file parser and path resolution.
+**Phase:** Config watcher handler implementation.
 
 ---
 
-### Pitfall 4: `getUrisOfWkspFoldersWithFeatures` Subdirectory Scan Violates < 1ms Constraint
+### Pitfall 4: `getUrisOfWkspFoldersWithFeatures(true)` Called from Watcher — Must Not Block
 
-**What goes wrong:** The current `hasFeaturesFolder` function in `common.ts` is fast because it only calls `fs.existsSync` for two specific paths (projectUri and featuresUri). Adding a subdirectory scan (up to depth 3) inside this function to find `behave.ini` / `.behaverc` would call `fs.readdirSync` recursively — on a large monorepo this easily takes 100ms+, spiking to seconds on cold filesystem cache.
+**What goes wrong:** The config watcher handler, when fired, must call
+`getUrisOfWkspFoldersWithFeatures(true)` to invalidate and rebuild the discovery cache. That function
+calls `findBehaveConfig` which calls `fs.readFileSync` synchronously for up to 5 config files per
+workspace. This is acceptable for the initial load and for explicit `forceRefresh` calls. However, if
+the watcher handler runs on the extension host's main thread (which all VS Code extension code does),
+a slow synchronous read can briefly freeze the UI.
 
-**Why it happens:** The `< 1ms` constraint exists because `getUrisOfWkspFoldersWithFeatures` is called from hot code paths (watchers, event handlers, diagnostics). The existing function measures its own duration and logs it with `diagLog`. Synchronous directory traversal inside a loop over all workspace folders violates this.
+The bigger risk: the watcher fires `onDidChange` for _every_ keystroke if the user has auto-save
+enabled with a short delay. Without a debounce, this calls `fs.readFileSync` × N-config-files ×
+N-workspaces on every keypress in any of the five config files.
 
-**Consequences:** Extension host becomes unresponsive during workspace load; VS Code may kill the extension host process entirely on large workspaces.
+**Why it happens:** Auto-save in VS Code can be configured to save on every change event with a 100ms
+delay. Five rapid saves = five synchronous re-parse cycles.
+
+**Consequences:** Noticeable UI lag in a large workspace. More subtly: each synchronous call holds the
+extension host event loop, potentially causing `featureParseComplete` timeout in the test runner to
+expire prematurely (it waits 1000ms max).
 
 **Prevention:**
-- The subdirectory scan for config files MUST happen exactly once per workspace per session, outside `getUrisOfWkspFoldersWithFeatures`, in an async context (e.g., during workspace activation or on explicit refresh).
-- `getUrisOfWkspFoldersWithFeatures` should only read from the pre-populated discovery cache — never do filesystem work.
-- The cache must be populated before `getUrisOfWkspFoldersWithFeatures` is first called in non-`forceRefresh` mode; activation ordering matters.
-- For the scan itself: use `vwfs.readDirectory` (async VS Code FS API) rather than `fs.readdirSync` to avoid blocking. Apply `DEFAULT_EXCLUDE_DIRS` to skip `.git`, `node_modules`, `.venv`, etc. (already defined in `common.ts`).
+- 500ms debounce on the config watcher handler is mandatory, not optional
+- The debounce timer reference must be per-workspace (not a single module-level timer) to avoid
+  one workspace's rapid edits cancelling another workspace's pending re-discovery
+- Pattern: `const configDebounceTimers = new Map<string, NodeJS.Timeout>()`; clear+reset per wkspUri
 
-**Warning signs:** `perf info: getUrisOfWkspFoldersWithFeatures took X ms` log entries showing X > 5ms after this change is introduced.
-
-**Phase:** Discovery caching architecture — must be designed before implementing the scan.
+**Phase:** Config watcher handler implementation and per-workspace debounce design.
 
 ---
 
-### Pitfall 5: Backward Compat — `inspect()` Must Check All Three Scopes
+### Pitfall 5: Cache Invalidation Race — Run Guard Checks Stale Cache
 
-**What goes wrong:** The existing `getWithLegacyFallback` already checks all three `inspect()` scopes (`globalValue`, `workspaceValue`, `workspaceFolderValue`). Any new "is this setting explicitly set?" check that only looks at `workspaceFolderValue` will silently break users who set `projectPath` / `featuresPath` at global or workspace scope (not folder scope).
+**What goes wrong:** The run guard (checking `entry.configError` before allowing a test run) reads from
+the discovery cache. The config watcher fires, the 500ms debounce starts, and 300ms later the user
+clicks "Run Tests." The guard reads the cache which still holds the pre-change `configError: undefined`
+entry, and the run proceeds. Meanwhile, the debounce fires 200ms into the test run and overwrites
+`WorkspaceSettings` mid-run.
 
-**Why it happens:** VS Code has a known quirk (issue #34386): in a single-folder workspace, `workspaceValue` and `workspaceFolderValue` are both populated even when only one level of setting exists. Developers testing locally in single-folder workspaces may only test `workspaceFolderValue` and ship code that breaks multi-root workspace users.
+More dangerous scenario in reverse: user fixes a malformed config, cache not yet refreshed, guard
+incorrectly blocks a run that would now succeed.
 
-**Consequences:** A user with `featuresPath = "src/features"` in their global `settings.json` sees auto-discovery override their explicit setting — the exact backward compat guarantee that must hold.
+**Why it happens:** The debounce introduces a window between "file changed" and "cache updated." The
+run guard is synchronous (cache read, check `configError`, proceed), not awaitable.
+
+**Consequences:**
+- False negative guard: run proceeds with a broken config, behave crashes with a confusing error
+  instead of the helpful warning
+- False positive guard: user just fixed the config, guard still shows warning, user is confused
 
 **Prevention:**
-- Mirror the exact `inspect()` pattern from `getWithLegacyFallback`: `isExplicit = insp.globalValue !== undefined || insp.workspaceValue !== undefined || insp.workspaceFolderValue !== undefined`.
-- Test backward compat with settings at all three scopes in integration tests — not just folder-level settings.
-- The priority chain must be: explicit settings (any scope) > config file > convention. Never let config file discovery override an explicit setting.
+- Accept that a short window of stale-cache behavior is unavoidable without making the run guard
+  async (which would add 500ms+ latency to every test run). This is acceptable — the guard is a
+  "best effort" UX aid, not a hard blocker
+- Keep the debounce short (500ms) to minimize the stale window
+- The guard warning must say "the last-known config state has an error" not "your config is currently
+  broken" — framing that acknowledges the snapshot nature of the cache
+- When the guard is triggered and the user dismisses it, do NOT re-run automatically after debounce
+  completes — that would be surprising. Let the user click Run again
 
-**Warning signs:** Integration tests that only set settings at `workspaceFolderValue` level passing, while users with global-level settings report auto-discovery overriding their configuration.
+**Phase:** Run guard implementation in `testRunHandler.ts`.
 
-**Phase:** `WorkspaceSettings` constructor update and priority logic.
+---
+
+### Pitfall 6: `notifiedConfigErrors` Set Not Cleared on Config Watcher Re-Discovery
+
+**What goes wrong:** `extension.ts` maintains a `notifiedConfigErrors: Set<string>` to avoid showing
+the same malformed-config warning notification more than once per session (line 41). After a config
+file watcher fires and re-discovery runs, if the file is still malformed the notification is suppressed
+because the key is still in `notifiedConfigErrors`. The user edits `pyproject.toml`, introduces a
+syntax error, sees the warning, fixes it, introduces a different error — but the second error is silently
+swallowed.
+
+However, the set IS cleared when `updateDiscoveryUX` is called with `clearNotifiedErrors: true` (which
+`configurationChangedHandler` does when `forceFullRefresh === true`, but NOT when the config watcher
+triggers a soft re-discovery).
+
+**Why it happens:** `clearNotifiedErrors` is `false` in the normal config-change path (see line 619).
+The guard is intentionally designed to suppress repeated notifications — but a new error in a previously-
+errored file is a new, distinct user-visible event.
+
+**Consequences:** A user who fixes-then-breaks `pyproject.toml` in the same session sees no second
+warning. The Problems panel diagnostic IS updated (it calls `setConfigParseErrorDiagnostic`), but the
+popup notification is silently skipped.
+
+**Prevention:**
+- When a config watcher triggers re-discovery, pass `clearNotifiedErrors: true` to `updateDiscoveryUX`
+  for the affected workspace(s). The notification is per-file per-error-key, so clearing and re-checking
+  against the new parse result is correct
+- Alternative: key `notifiedConfigErrors` on `${filePath}:${errorMessage}` hash so a new error
+  message on the same file is always shown, while the exact same error on re-load is suppressed
+
+**Phase:** Config watcher handler → `updateDiscoveryUX` call site.
 
 ---
 
@@ -139,85 +213,121 @@ paths = features\web
 
 ---
 
-### Pitfall 6: TOML `paths` Must Be a Native Array — Type Mismatch Is a Hard Error
+### Pitfall 7: Run Guard False Positive — `configError` Survives After User Switches to Manual Settings
 
-**What goes wrong:** Behave's own TOML parser (`read_toml_config`) raises `ConfigParamTypeError` if `paths` is not a list. A user might write:
+**What goes wrong:** The discovery cache `DiscoveryEntry` is populated with `configError` when a config
+file is malformed. If the user then adds `featuresPath` to `settings.json` (switching to Branch A:
+explicit settings), `getUrisOfWkspFoldersWithFeatures(true)` takes Branch A and writes a new entry
+with `source: "settings"` and NO `configError`. But the old `configError` entry is gone only if
+`discoveryCache.clear()` was called first — which it IS (line 175 in `common.ts`).
 
-```toml
-[tool.behave]
-paths = "features"   # string, not array
-```
+The false-positive risk is NOT in the cache clear, but in `WorkspaceSettings`: the settings constructor
+reads `getDiscoveryEntry(wkspUri)` (line 99 of `settings.ts`). If `configurationChangedHandler` calls
+`config.reloadSettings(wkspUri)` (which constructs `WorkspaceSettings`) and the discovery cache has NOT
+been refreshed yet at that point, the old entry (with `configError`) is used. The run guard then reads
+`wkspSettings.configError` and shows a false positive even though the user has explicitly configured paths.
 
-`smol-toml` will parse this successfully and return a `string`, not `string[]`. Calling `.map()` or iterating over a string character-by-character produces garbage paths (`["f", "e", "a", "t", "u", "r", "e", "s"]`).
+**Why it happens:** `configurationChangedHandler` calls `config.reloadSettings(wkspUri)` inside the
+`getUrisOfWkspFoldersWithFeatures(true)` loop (lines 598–604). The `(true)` argument refreshes the
+cache before the loop executes, so the `WorkspaceSettings` constructor should see the fresh entry.
+However, if a _config watcher_ triggers re-discovery via a separate code path that does NOT call
+`config.reloadSettings`, `WorkspaceSettings.configFileUri` and `WorkspaceSettings.discoverySource`
+can be out of sync with the updated cache.
 
 **Prevention:**
-- After reading `paths` from TOML, always assert `Array.isArray(paths)`.
-- If it is a string, either throw a parse error (matching behave's behavior) or wrap it in an array as a lenient fallback and log a warning.
-- Write a unit test with `paths = "features"` (string) confirming the fallback/error path is exercised.
+- Config watcher re-discovery must call `configurationChangedHandler(undefined, undefined, false)` (or
+  an equivalent path that calls `config.reloadSettings`) — not just `getUrisOfWkspFoldersWithFeatures(true)`
+  alone. This ensures `WorkspaceSettings` is rebuilt from the fresh cache
+- The run guard must read `configError` from the _discovery cache_ directly via `getDiscoveryEntry(wkspUri)`,
+  not from the (potentially stale) `WorkspaceSettings` snapshot
 
-**Phase:** TOML parser implementation.
+**Phase:** Config watcher handler design — what it calls downstream.
 
 ---
 
-### Pitfall 7: Config File Not in Root — Path Resolution Is Relative to Config Dir, Not Workspace Root
+### Pitfall 8: Run Guard Fires for Every Workspace — Multi-Root Edge Case
 
-**What goes wrong:** Behave resolves `paths=` values relative to the directory containing the config file (`config_dir = os.path.dirname(path)`). If the config file is in a subdirectory (e.g., `backend/behave.ini` with `paths = features`), the resolved path is `backend/features`, not `features`.
-
-The extension's subdirectory scan will find `backend/behave.ini`. If path resolution uses the workspace root instead of the config file's directory, `vscode.Uri.joinPath(wkspUri, "features")` produces the wrong path.
+**What goes wrong:** In a multi-root workspace with three folders, one has a malformed config and two
+are fine. The guard checks `configError` on the specific workspace(s) in the test request. If the guard
+is implemented as "check all workspaces" rather than "check workspaces relevant to the test request,"
+the malformed-but-irrelevant workspace blocks runs in the healthy workspaces.
 
 **Prevention:**
-- Always resolve `paths=` entries relative to the URI of the config file itself: `vscode.Uri.joinPath(configFileUri, '..', pathEntry)`.
-- The discovered `configFileUri` must be stored in `WorkspaceSettings` (`discoverySource: "config-file"`, `configFileUri`) so path resolution uses the correct base.
-- Write an integration test where `behave.ini` is in a subdirectory.
+- Scope the guard check to the workspace URIs that contain the tests in the current `TestRunRequest`
+- Pattern: extract workspace URI from each `QueueItem.test` (use `getWorkspaceSettingsForFile`), then
+  check `getDiscoveryEntry(wkspUri)?.configError` only for those workspaces
+- Mirror how `testRunHandler.ts` already scopes `wskpsWithFeaturesSettings` to the current queue
 
-**Phase:** Path resolution in config parser; `WorkspaceSettings` construction.
+**Phase:** Run guard implementation in `testRunHandler.ts`.
 
 ---
 
-### Pitfall 8: File Watcher Pattern Needs One Pattern Per Feature Path
+### Pitfall 9: Config Watcher Fires for ALL Five File Types — `setup.cfg` and `tox.ini` Are Noisy
 
-**What goes wrong:** `workspaceWatcher.ts` creates a `RelativePattern` using `wkspSettings.workspaceRelativeFeaturesPath` — a single string. With multiple feature paths, only a single watcher is created, missing changes to the other paths.
+**What goes wrong:** Watching `setup.cfg` means the watcher fires on any save of that file — including
+changes to `[flake8]`, `[mypy]`, or other non-behave sections. Each save triggers a 500ms debounce,
+re-reads the file, re-runs `configParser.ts`, and potentially triggers re-discovery. For a project
+that frequently edits `setup.cfg` for unrelated tooling config, this is unnecessary churn.
 
-VS Code's `FileSystemWatcher` does not accept an array of patterns in a single call; separate watchers must be created per path and all returned in the watchers array (which is already array-typed).
+**Why it matters:** `configParser.ts` already handles "no `[behave]` section = skip" correctly, so the
+churn is harmless for _correctness_. The issue is performance and log noise: every `setup.cfg` save
+produces a discovery log in the output channel even if nothing changed.
 
 **Prevention:**
-- Iterate over `wkspSettings.featuresUris` and create one `vscode.workspace.createFileSystemWatcher` per path.
-- Ensure all watchers are pushed into the returned array so they can be properly disposed by the extension deactivation handler.
-- The `workspaceRelativeFeaturesPath` property (used by other code) needs to become a multi-value concept or be replaced by an array. The existing convenience getter `featuresUri` (returning `featuresUris[0]`) doesn't help the watcher case.
+- In the config watcher handler, after the debounce fires, compare the new discovery result to the
+  current cache entry before calling `updateDiscoveryUX` or triggering re-parsing
+- If the discovery entry is identical (same `source`, same `featuresUri`, no `configError`), skip the
+  downstream re-discovery calls entirely — this is a no-op refresh guard
+- Log at `diagLog` level only (not `logInfo`) when a re-discovery produces no change
 
-**Warning signs:** File changes to the second feature path not triggering test tree updates.
-
-**Phase:** `workspaceWatcher.ts` update.
+**Phase:** Config watcher handler — change-detection optimization.
 
 ---
 
-### Pitfall 9: `setup.cfg` and `tox.ini` Are Shared Config Files — Section Absent Is Not an Error
+### Pitfall 10: `onDidCreate` for Config Files Requires `forceRefresh` — Not Just `onDidChange`
 
-**What goes wrong:** `setup.cfg` and `tox.ini` are generic Python project files that often do NOT contain a `[behave]` section. The config discovery scan will find these files in many Python projects that don't use behave at all (e.g., projects using pytest). Treating their absence of a `[behave]` section as an error — or even as a signal that behave is configured — is wrong.
+**What goes wrong:** A user creates `behave.ini` in a workspace that was previously using convention
+discovery. The watcher must fire `onDidCreate` and trigger a full re-discovery with `forceRefresh`.
+But `onDidCreate` may not fire if the watcher pattern only covers `onDidChange`.
+
+All three watcher events (create, change, delete) are relevant:
+- `onDidCreate`: new config file added → re-discover (may switch source from `convention` to `config-file`)
+- `onDidChange`: config file edited → re-parse and update cache
+- `onDidDelete`: config file removed → re-discover (may fall back to `convention`)
+
+The existing `workspaceWatcher.ts` sets all three. A config watcher must do the same.
 
 **Prevention:**
-- For `setup.cfg` / `tox.ini`: only proceed if the `[behave]` section is present. If the section is absent, treat the file as if it wasn't found and continue scanning for the next candidate.
-- Never show a parse error notification for a missing `[behave]` section in `setup.cfg` — this is expected and normal.
-- Mirror behave's priority: `behave.ini` > `.behaverc` > `setup.cfg` > `tox.ini` > `pyproject.toml`. Stop at the first file that yields config (matches behave's `load_configuration` which calls `defaults.update(...)` in reverse order, but the first match wins in practice when using a single config file).
+- Register handlers for all three events on every config watcher
+- `onDidDelete` specifically must call `getUrisOfWkspFoldersWithFeatures(true)` since deleting
+  `behave.ini` means the discovery source changes (falls back to `.behaverc`, then convention)
+- Do NOT assume the watcher fires `onDidDelete` when a user runs `git checkout HEAD -- behave.ini`
+  (git branch switches): VS Code may fire `onDidChange` instead, depending on git's atomic rename
+  strategy (known inconsistency, issue #56549). Handle both events as "re-discover"
 
-**Warning signs:** Users with pytest-only projects seeing unexpected extension activation or discovery attempts.
-
-**Phase:** Config file scanner and parser.
+**Phase:** Config watcher setup — all three event handlers.
 
 ---
 
-### Pitfall 10: smol-toml Throws on DoS-Vector Input; Must Be Wrapped in Try/Catch
+### Pitfall 11: Run Guard Must Not Block the Debug Path
 
-**What goes wrong:** smol-toml has two known DoS advisories: deeply nested inline tables (pre-1.3.1) and thousands of consecutive commented lines (separate advisory). Even with a patched version, throwing an uncaught error from the TOML parser inside the extension host can crash the extension.
+**What goes wrong:** The run guard in `testRunHandler.ts` (lines 45–53) currently only guards the
+`featureParseComplete` check. A new `configError` guard inserted in the same function will also run
+for debug runs. Blocking a debug run (which spawns a debug adapter and may have already attached a
+debug server) with a warning popup is more disruptive than blocking a regular run.
+
+**Why it happens:** The `runHandler` returned by `testRunHandler()` is registered for both "Run Tests"
+and "Debug Tests" profiles (lines 407–418 in `extension.ts`). Both call the same `runHandler(debug,
+request)` function.
 
 **Prevention:**
-- Always wrap `parse(tomlContent)` in a `try/catch`. On parse error: show a warning notification (matching the requirement "Config parse errors shown as warning notification"), log the error, and fall back to convention-based discovery.
-- Pin `smol-toml` to a version >= 1.3.1 which includes the DoS depth limit.
-- Unit test the error path with deliberately malformed TOML (truncated, invalid key-value, etc.).
+- The guard warning may still make sense for debug runs since a malformed config causes behave to exit
+  immediately (same as a regular run), but give the debug case special treatment: show the warning but
+  default the dismiss action to "Run Anyway" rather than requiring explicit confirmation
+- Alternatively, allow the run through for debug always (debug is typically used by advanced users who
+  know what they're doing) and only block/warn for non-debug runs
 
-**Warning signs:** Extension crash (extension host exited) when opening a workspace with a malformed `pyproject.toml`.
-
-**Phase:** TOML parser error handling.
+**Phase:** Run guard implementation — handling `debug` parameter.
 
 ---
 
@@ -225,42 +335,60 @@ VS Code's `FileSystemWatcher` does not accept an array of patterns in a single c
 
 ---
 
-### Pitfall 11: Windows Drive Letter Case Inconsistency in URI-Based Keys
+### Pitfall 12: `files.watcherExclude` May Silently Exclude Config Files
 
-**What goes wrong:** The extension already documents this in `common.ts` comments: `uri.path` and `uri.fsPath` give inconsistent drive letter casing (`C:` vs `c:`) on Windows depending on how the URI was constructed. New code that constructs URIs from INI/TOML path strings (e.g., via `vscode.Uri.file(absolutePath)`) may produce keys that don't match workspace folder URIs constructed by VS Code's API.
+**What goes wrong:** VS Code allows users to configure `files.watcherExclude` to prevent the file
+watcher from monitoring certain paths. A user who has `"**/setup.cfg": true` in this setting will
+not receive events for `setup.cfg` changes. The extension watcher respects this setting silently.
 
 **Prevention:**
-- All URI comparisons must go through `uriId(uri)` (which calls `uri.toString()` for consistent encoding) or `urisMatch(uri1, uri2)` — both already exist in `common.ts`.
-- Never compare `uri.fsPath === otherUri.fsPath` directly. Never compare `uri.path === otherUri.path` directly.
-- When constructing a `vscode.Uri` from a parsed config path on Windows, use `vscode.Uri.file(normalizedPath)` then compare via `uriId()`.
+- This is expected behavior, not a bug to work around
+- Document in the output channel (at `diagLog` level) which config files are being watched on activation
+- If initial discovery found a config file, log it at startup so the user knows which file the extension
+  found and is monitoring
 
-**Phase:** Throughout — any new URI construction.
+**Phase:** Config watcher logging at startup.
 
 ---
 
-### Pitfall 12: Empty `paths=` in Config File Should Fall Through to Convention
+### Pitfall 13: Watcher Pattern Must Use `RelativePattern(wkspUri, ...)` Not `RelativePattern(configFileUri, ...)`
 
-**What goes wrong:** A config file may contain `paths =` with no value (user deleted the paths, relying on defaults). Behave itself treats an empty/missing paths list as "use the `features/` directory by default." The extension must replicate this fallback, not treat an empty array as "no feature paths found."
+**What goes wrong:** A tempting shortcut: create a `RelativePattern` using the specific `configFileUri`
+(e.g., `new vscode.RelativePattern(configFileUri, '*')`). This creates a watcher scoped to the directory
+_containing_ the config file, not the workspace root. For workspace-root config files this is equivalent,
+but for config files found via subdirectory scan (future milestone), the pattern scope would be wrong —
+it would watch only that subdirectory and miss sibling config files that might be created at a different
+level.
 
 **Prevention:**
-- After parsing `paths`, if the result is an empty array (or all entries resolve to non-existent directories), fall through to the `features/` convention check.
-- `discoverySource` should reflect which path actually provided usable data.
+- Always anchor config watchers to `wkspUri` (the workspace root):
+  `new vscode.RelativePattern(wkspUri, '{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}')`
+- This also means one watcher per workspace (not one per config file), which is more efficient
+- Keep the watcher count aligned with the existing `startWatchingWorkspace` convention: one call per
+  workspace, returning an array of watchers
 
-**Phase:** Priority fallback logic in discovery.
+**Phase:** Config watcher construction.
 
 ---
 
-### Pitfall 13: Activation Events Cover Only Two Config Files
+### Pitfall 14: Integration Test `integrationTestRun` Guard Bypasses Watcher Re-Discovery
 
-**What goes wrong:** The PROJECT.md decision is to activate only on `workspaceContains:**/behave.ini` and `workspaceContains:**/.behaverc`, not on `pyproject.toml` / `setup.cfg` / `tox.ini`. This means a project with only a `pyproject.toml` config (and no `*.feature` file at the workspace root level that triggers `workspaceContains:**/*.feature`) will NOT activate the extension automatically.
+**What goes wrong:** `configurationChangedHandler` has an early exit for integration tests:
+`if (config.integrationTestRun && !testCfg) return;` (line 570). A config watcher handler that calls
+`configurationChangedHandler` directly will be silently skipped during integration test runs.
 
-This is a documented conscious decision — NOT a bug in the discovery logic. However, it must be consistently applied: the discovery scan must still support all five file types once the extension IS activated, even if activation itself only covers two.
+**Consequences:** Integration tests that test config file watching behavior will pass vacuously unless
+the watcher handler invokes the re-discovery logic directly rather than routing through
+`configurationChangedHandler`.
 
 **Prevention:**
-- Do not conflate "activation triggers" with "config files to scan." Once activated (by any trigger), scan for all five config file types.
-- Document this limitation clearly in logs: if only a `pyproject.toml` is found and no `behave.ini`/`.behaverc`, log that the extension was already activated by a `*.feature` file trigger.
+- Config watcher re-discovery should call `getUrisOfWkspFoldersWithFeatures(true)` and
+  `parser.parseFilesForWorkspace(...)` directly (like a targeted refresh), not delegate through
+  `configurationChangedHandler`. This also avoids the integration test bypass
+- The run guard read path is unaffected (it reads the cache directly) but tests for the watcher should
+  verify the cache is updated, not that `configurationChangedHandler` was called
 
-**Phase:** Discovery scanner (not activation manifest changes).
+**Phase:** Config watcher handler — routing to re-discovery logic.
 
 ---
 
@@ -268,24 +396,27 @@ This is a documented conscious decision — NOT a bug in the discovery logic. Ho
 
 | Phase Topic | Likely Pitfall | Mitigation |
 |-------------|---------------|------------|
-| Collection store refactor (`featureParser`, `stepsParser`, `stepMappings`) | Pitfall 1: stale keys after featuresUri→featuresUris | Decide key strategy first; add deletion unit tests before refactoring store functions |
-| INI parser implementation | Pitfall 2: multiline continuation semantics | Implement Python configparser indentation rules; filter empty strings |
-| Path resolution | Pitfall 3 + 7: backslash normalization, relative-to-config-dir | Normalize all path strings; resolve relative to `configFileUri/../` not workspace root |
-| Gatekeeper performance | Pitfall 4: scan inside hot function | Cache must be pre-populated; gatekeeper reads cache only |
-| Backward compat check | Pitfall 5: inspect() scope completeness | Mirror `getWithLegacyFallback` exactly; test all three scopes |
-| TOML parser | Pitfall 6 + 10: string-not-array, uncaught parse error | Assert `Array.isArray`; wrap in try/catch; pin smol-toml >= 1.3.1 |
-| File watcher update | Pitfall 8: single watcher for multiple paths | One watcher per featuresUri; all added to returned array |
-| Config file scanner | Pitfall 9: setup.cfg/tox.ini without [behave] | Skip gracefully if section absent; never error on missing section |
-| URI construction in new code | Pitfall 11: drive letter case | Use `uriId()`/`urisMatch()` exclusively; never compare `.fsPath` or `.path` directly |
-| Discovery fallback logic | Pitfall 12: empty paths array | Treat empty parsed paths as "fall through to convention" |
+| Watcher creation | Pitfall 2: exact filename fails | Use `{behave.ini,.behaverc,...}` glob pattern |
+| Watcher disposal | Pitfall 1: leak on config reload | Mirror `wkspWatchers` Map pattern; dispose before replacing |
+| Watcher event handler | Pitfall 3: stale file content on `onDidChange` | 500ms debounce before reading file |
+| Debounce design | Pitfall 4: per-workspace timer required | `Map<string, NodeJS.Timeout>` keyed by `wkspUri` path |
+| Run guard implementation | Pitfall 5: race between debounce and run | Accept best-effort; guard message frames it as last-known state |
+| Run guard implementation | Pitfall 7: stale `WorkspaceSettings` | Read guard from cache via `getDiscoveryEntry`, not `wkspSettings` |
+| Run guard multi-root | Pitfall 8: blocks healthy workspaces | Scope check to queue's workspace URIs only |
+| `notifiedConfigErrors` handling | Pitfall 6: second error suppressed | Clear set on watcher-triggered re-discovery |
+| Config file create/delete | Pitfall 10: all three events required | Register `onDidCreate`, `onDidChange`, `onDidDelete` |
+| Integration tests | Pitfall 14: `integrationTestRun` bypass | Route watcher handler to direct cache+parser calls, not `configurationChangedHandler` |
 
 ---
 
 ## Sources
 
-- Behave source code: `bundled/libs/behave/configuration.py` (verified line-by-line for `read_configparser`, `read_toml_config`, `format_outfiles_coupling`, `config_filenames`)
-- Extension source: `src/common.ts`, `src/settings.ts`, `src/parsers/featureParser.ts`, `src/parsers/stepsParser.ts`, `src/parsers/stepMappings.ts`, `src/watchers/workspaceWatcher.ts`, `src/parsers/fileParser.ts`
-- smol-toml advisories: GHSA-pqhp-25j4-6hq9 (deeply nested tables), GHSA-v3rj-xjv7-4jmq (commented lines DoS)
-- VS Code issue #34386: `workspaceValue` and `workspaceFolderValue` both set in single-folder workspace
-- Python configparser docs: `empty_lines_in_values` behavior for multiline option continuation
-- VS Code Extension Host docs: synchronous operations blocking the extension host
+- VS Code issue #164925: FileSystemWatcher not firing with complete filename (no wildcard)
+- VS Code issue #72831: FileSystemWatcher fires before text documents are updated (stale read race)
+- VS Code issue #56549: FileSystemWatcher behavior differs in workspace vs folder case for renames
+- VS Code File Watcher Issues wiki: platform-specific limitations, `files.watcherExclude` behavior
+- Roo-Code issue #4230: FileSystemWatcher leak from broken disposal chain
+- Extension source: `src/extension.ts` lines 138–141, 598–604 (watcher lifecycle patterns)
+- Extension source: `src/extension.ts` lines 41, 619 (`notifiedConfigErrors` and `clearNotifiedErrors`)
+- Extension source: `src/runners/testRunHandler.ts` lines 45–53 (existing run guard pattern)
+- Extension source: `src/common.ts` lines 160–175 (discovery cache and `forceRefresh` mechanics)

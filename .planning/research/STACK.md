@@ -1,166 +1,160 @@
-# Technology Stack: Config File Auto-Discovery
+# Technology Stack
 
-**Project:** gs-behave-bdd — behave config file auto-discovery milestone
-**Researched:** 2026-04-15
-**Scope:** Stack decisions for INI + TOML parsing and filesystem discovery in a VS Code extension
+**Project:** gs-behave-bdd — v1.1 Config File Watching + Malformed Config Run Guard
+**Researched:** 2026-04-16
+**Scope:** ADDITIONS ONLY for v1.1. v1.0 stack (smol-toml, hand-rolled INI parser, synchronous fs) remains unchanged and is not re-documented here.
 
 ---
 
-## Recommended Stack
+## No New Dependencies
 
-### TOML Parsing
+Zero new npm packages are needed for v1.1. Everything required is already available.
 
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|------------|
-| smol-toml | 1.6.0 (installed), 1.6.1 (latest) | Parse `pyproject.toml` for `[tool.behave]` section | HIGH |
+| Requirement | Source | Status |
+|-------------|--------|--------|
+| File system watching | `vscode.workspace.createFileSystemWatcher` | Built into VS Code API (engine ^1.82.0) |
+| Glob scoping to workspace root | `vscode.RelativePattern` | Built into VS Code API |
+| Discovery cache read | `getDiscoveryEntry()` in `src/common.ts` | Already exported |
+| Config error state | `DiscoveryEntry.configError` in `src/common.ts` | Already defined |
+| Warning popup with actions | `vscode.window.showWarningMessage()` | Already used in `extension.ts` |
+| Debounce timer | Native `setTimeout` / `clearTimeout` | Pattern already in `src/parsers/fileParser.ts` lines 612-630 |
 
-**Why smol-toml:**
+---
 
-- Already installed in `node_modules` at v1.6.0 (the milestone plan already calls for it)
-- Ships both ESM (`dist/index.js`) and CJS (`dist/index.cjs`) with proper `exports` field — webpack resolves `"require": "./dist/index.cjs"` automatically with no config changes
-- TypeScript types included (`dist/index.d.ts`) — no `@types/` package needed
-- TOML 1.1.0 spec-compliant — correct for `pyproject.toml` parsing
-- 6.8M weekly npm downloads; most popular TOML parser on npm (MEDIUM confidence, WebSearch source)
-- BSD-3-Clause license
-- Zero runtime dependencies
-- ~20KB tarball (confirmed from local pack); well within the "~5KB" budget mentioned in PROJECT.md (that estimate likely refers to gzipped, which the tgz confirms is reasonable)
+## VS Code APIs to Use
 
-**API surface needed:**
+### `vscode.workspace.createFileSystemWatcher`
 
-```typescript
-import { parse } from 'smol-toml';
-
-const doc = parse(fileContent); // returns typed object
-const paths = (doc as any)?.tool?.behave?.paths as string[] | undefined;
+**Signature** (from installed `@types/vscode@1.82.0` — HIGH confidence):
+```ts
+createFileSystemWatcher(
+  globPattern: GlobPattern,
+  ignoreCreateEvents?: boolean,
+  ignoreChangeEvents?: boolean,
+  ignoreDeleteEvents?: boolean
+): FileSystemWatcher
 ```
 
-**Upgrade note:** v1.6.1 patches a stack overflow on recursive comment parsing. Pin to `^1.6.1` in package.json (not the currently installed 1.6.0) to get the security fix.
+**Events on `FileSystemWatcher`:**
+- `onDidCreate: Event<Uri>` — new file created (or renamed-in)
+- `onDidChange: Event<Uri>` — file saved/modified
+- `onDidDelete: Event<Uri>` — file deleted (or renamed-out)
+
+**Disposal:** `FileSystemWatcher` extends `Disposable`. Must be pushed into `context.subscriptions` or manually disposed. The existing pattern in `extension.ts` lines 599-604 disposes old watchers before creating replacements during `configurationChangedHandler`.
+
+**Why VS Code's watcher over chokidar or Node.js `fs.watch`:** VS Code's watcher runs out-of-process. It is more reliable than `fs.watch` (which has known platform inconsistencies on Windows), has no bundle cost, and is the established pattern in this codebase.
 
 ---
 
-### INI Parsing
+### `vscode.RelativePattern`
 
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|------------|
-| Hand-rolled parser (inline, ~30 lines) | N/A | Parse `behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini` | HIGH |
-
-**Why NOT an npm INI package:**
-
-- `npm/ini` v6.0.0: Does NOT support Python configparser-style continuation lines. Splits input on `[\r\n]+` treating each line independently. `paths =\n  ./features\n  ./more_features` would not be parsed as a single multiline value.
-- `config-ini-parser`, `@jedmao/ini-parser`, `js-ini`: Same limitation — none replicate Python configparser's indented continuation line behavior (verified by inspecting `npm/ini` source; others have similar line-by-line architectures based on their documentation).
-- The feature to be implemented needs to match behave's own parsing exactly. Behave calls `configparser.ConfigParser`, which reads indented continuation lines as a single string value and then calls `.splitlines()` + `.strip()` on each part.
-
-**What the hand-rolled parser must do:**
-
-Behave's `read_configparser` for `paths` does exactly this:
-```python
-value_parts = config.get("behave", dest).splitlines()
-this_config[param_name] = [value_type(part.strip()) for part in value_parts if part.strip()]
+**Signature** (from `@types/vscode/index.d.ts` lines 2082-2135 — HIGH confidence):
+```ts
+constructor(base: WorkspaceFolder | Uri | string, pattern: string)
 ```
 
-Python's ConfigParser folds indented continuation lines into the previous key's value with a `\n` prefix. So `paths =\n  ./features\n  ./more_features` becomes the string `\n./features\n./more_features` after ConfigParser reads it.
-
-The TypeScript parser must:
-1. Read only the `[behave]` section (ignore all other sections)
-2. Recognize continuation lines: a line starting with whitespace that follows a key-value pair is appended to that value with `\n`
-3. After extracting the raw value for `paths`, split on `\n` and strip each part, filtering empty strings
-4. Handle `#` and `;` inline comments on the section header lines
-5. Stop processing once `[behave]` section ends (next `[section]` header encountered)
-
-This is ~30 lines of TypeScript. No third-party dependency is justified.
-
----
-
-### Filesystem Operations
-
-| Approach | Use Case | Why |
-|----------|----------|-----|
-| `fs.readFileSync` (Node.js built-in) | Reading config file contents | Synchronous; consistent with how `common.ts` already uses `fs.existsSync` in the performance-critical `getUrisOfWkspFoldersWithFeatures()` path |
-| `fs.existsSync` (Node.js built-in) | Checking file presence during discovery scan | Already in use; confirmed < 1ms per call |
-| `vscode.workspace.fs.readFile` (async) | NOT used for discovery | Too slow for the < 1ms path; existing code comment explicitly says "try/catch with await vwfs.stat(uri) is much too slow atm" |
-
-**Why synchronous `fs` over `vscode.workspace.fs` for the hot path:**
-
-The existing codebase is unambiguous about this. In `common.ts`:
-
-```typescript
-// try/catch with await vwfs.stat(uri) is much too slow atm
-const hasDefaultFeaturesFolder = fs.existsSync(featuresUri.fsPath);
+**Config file glob pattern:**
+```ts
+new vscode.RelativePattern(wkspUri, '{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}')
 ```
 
-Config file discovery runs inside `getUrisOfWkspFoldersWithFeatures()`, which has a < 1ms hard requirement. The discovery result is cached in a module-level `Map` after first run — `fs.readFileSync` is only called once per config file per workspace session. Subsequent calls hit the cache and are pure in-memory.
+The `{}` brace expansion is supported in VS Code's glob syntax (documented in the `GlobPattern` type definition). This matches all 5 behave config filenames at the workspace root only — no `**` prefix, so subdirectories are not watched. This is correct for v1.1 scope (subdirectory scanning is a separate out-of-scope Active requirement).
 
-`vscode.workspace.fs` is appropriate for non-critical-path async operations (file watchers, one-time async operations). It is not appropriate here.
-
-**Remote development note (LOW confidence):** `vscode.workspace.fs` is recommended for SSH/remote development scenarios because `fs` doesn't work over SSH. However, behave runs locally (it's a Python subprocess), so remote development is not a realistic scenario for this extension. The existing architecture already makes this tradeoff.
+The existing `workspaceWatcher.ts` uses `new vscode.RelativePattern(wkspSettings.uri, ...)` with a `Uri` base, confirming this constructor overload works in production.
 
 ---
 
-### Directory Scanning
+### `vscode.window.showWarningMessage` (run guard)
 
-| Technology | Purpose | Why |
-|------------|---------|-----|
-| Node.js built-in `fs.readdirSync` + `fs.statSync` | Subdirectory scan at depth 1-3 | Already in codebase pattern; synchronous; no new dependency |
-
-The `findSubdirectorySync` utility already exists in `common.ts` and uses `fs.readdirSync`. The discovery scan should follow the same pattern: recursive descent up to `discoveryDepth` (default 3), checking for config filenames at each level.
-
----
-
-## Alternatives Considered
-
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| TOML parsing | smol-toml | `@iarna/toml` | Unmaintained; last release 2019; TOML 0.5 only |
-| TOML parsing | smol-toml | `toml` (npm) | TOML 0.5 only; 600KB+ bundle |
-| TOML parsing | smol-toml | Hand-rolled regex | TOML is too complex for regex (nested tables, inline arrays, quoted strings) |
-| INI parsing | Hand-rolled | `npm/ini` v6 | Doesn't handle Python configparser continuation lines |
-| INI parsing | Hand-rolled | `config-ini-parser` | No continuation line support; adds unnecessary dependency |
-| File I/O (hot path) | `fs.readFileSync` | `vscode.workspace.fs.readFile` | Async; incompatible with < 1ms requirement |
-
----
-
-## Installation
-
-```bash
-# smol-toml is already installed at v1.6.0
-# Upgrade to patch the stack overflow security fix:
-npm install smol-toml@^1.6.1
-
-# No other new dependencies required
+**Signature** (already used in this codebase):
+```ts
+showWarningMessage(message: string, ...items: string[]): Thenable<string | undefined>
 ```
 
----
-
-## Webpack Compatibility
-
-No webpack config changes needed. smol-toml's `package.json` has:
-```json
-"exports": {
-  "require": "./dist/index.cjs"
-}
-```
-
-Webpack 5 resolves `"require"` exports when targeting `commonjs2`, matching the existing `libraryTarget: 'commonjs2'` in `webpack.config.js`.
+The run guard uses `await` on this to get the user's button choice before deciding whether to proceed. This is the same pattern as `testRunHandler.ts` line 49 (existing `"OK"` warning), but extended with a "Run Anyway" / "Open Config File" choice.
 
 ---
 
-## TypeScript Compatibility
+## Integration Points With Existing Infrastructure
 
-smol-toml ships `dist/index.d.ts`. The existing `tsconfig.json` uses `"module": "commonjs"` + `"strict": true`. smol-toml's types are compatible. Import as:
+### Where the config file watcher lives
 
-```typescript
-import { parse } from 'smol-toml';
+Add it inside `src/watchers/workspaceWatcher.ts`, within `startWatchingWorkspace()`. The function already builds an array of watchers and returns them. The config watcher is added to this array as a third watcher (alongside the existing features-folder watcher and optional steps-outside-features watcher).
+
+**Why here, not a new file:** The config watcher has one job (trigger re-discovery on config file events) and fits in ~25 lines. A new `configWatcher.ts` module would be unnecessary abstraction.
+
+**Why this array, not a separate map:** `extension.ts` already disposes and replaces the entire `wkspWatchers` array on workspace folder changes (lines 599-604). Config watchers must participate in this lifecycle or they will leak.
+
+### What the config watcher handler calls
+
+On any config file event (create/change/delete), the handler needs to:
+
+1. Call `getUrisOfWkspFoldersWithFeatures(true)` — the `forceRefresh: true` overload clears and rebuilds the discovery cache. Used at line 590 of `extension.ts` during `configurationChangedHandler`.
+2. Call `updateDiscoveryUX()` — already in `extension.ts`, re-logs discovery output and re-fires the malformed config notification if still broken.
+3. Call `parser.parseFilesForWorkspace(...)` — triggers test tree rebuild.
+
+`updateDiscoveryUX` is not currently exported from `extension.ts`. Pass it as a callback parameter to `startWatchingWorkspace` to avoid circular coupling.
+
+**Updated signature:**
+```ts
+export function startWatchingWorkspace(
+  wkspUri: vscode.Uri,
+  ctrl: vscode.TestController,
+  testData: TestData,
+  parser: FileParser,
+  onConfigChange?: () => void   // new optional callback
+): vscode.FileSystemWatcher[]
 ```
 
-TypeScript resolves to `dist/index.d.ts` via the `"types"` field in smol-toml's package.json.
+### Debounce
+
+Use a closure-scoped `let configDebounceTimer: NodeJS.Timeout | undefined` inside `startWatchingWorkspace`. On each config file event, clear the previous timer and set a new 500ms one. This matches the existing debounce pattern in `fileParser.ts` lines 612-630 exactly.
+
+500ms rationale: config changes are rare and expensive (full reparse), and editors emit multiple events on a single file save. 500ms is the established value for Python file debouncing in this codebase — use the same value for consistency.
+
+### Run guard location
+
+**File:** `src/runners/testRunHandler.ts`
+
+**Position:** After the existing parse-readiness guard (lines 45-53), before `ctrl.createTestRun`. The run guard reads from `getDiscoveryEntry()` — which is already exported from `common.ts` (line 164) but not yet imported in `testRunHandler.ts`.
+
+**One new import needed** in `testRunHandler.ts`:
+```ts
+import {
+  countTestItems, getAllTestItems, getContentFromFilesystem, uriId,
+  getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, rndNumeric,
+  getDiscoveryEntry  // ADD THIS
+} from '../common';
+```
+
+`getUrisOfWkspFoldersWithFeatures` is already imported there (line 9), so iterating workspaces to check each `DiscoveryEntry.configError` requires no additional infrastructure.
+
+**Why read from `getDiscoveryEntry()` and not `WorkspaceSettings.configError`:** `WorkspaceSettings` does not expose `configError` — it only exposes `configFileUri` (verified in `src/settings.ts` lines 82-101). The config error lives only in `DiscoveryEntry` in `common.ts`. No changes to `WorkspaceSettings` are needed.
+
+---
+
+## What NOT to Add
+
+| Temptation | Why to Avoid |
+|------------|--------------|
+| New `src/watchers/configWatcher.ts` file | 25 lines of watcher code does not justify a new module |
+| Watching inside subdirectories | Out of scope for v1.1; subdirectory scan is a separate Active requirement |
+| A separate watcher tracking map in `extension.ts` | Config watcher goes in the existing `wkspWatchers` array — no new state |
+| `chokidar` or `fs.watch` | VS Code's built-in watcher is more reliable and has zero bundle cost |
+| Making `updateDiscoveryUX` a public export | Expose as a callback parameter instead; keeps coupling explicit |
+| Hard-blocking the run on config error | Non-blocking warning with "Run Anyway" matches VS Code UX conventions; users may have valid reasons to run |
+| Exposing `configError` on `WorkspaceSettings` | Unnecessary; `getDiscoveryEntry()` is already the right access point |
 
 ---
 
 ## Sources
 
-- smol-toml GitHub: https://github.com/squirrelchat/smol-toml (version 1.6.1 confirmed March 2026)
-- smol-toml npm: https://www.npmjs.com/package/smol-toml (6.8M weekly downloads)
-- npm/ini source: https://github.com/npm/ini (confirmed no continuation line support via source inspection)
-- behave configuration.py: bundled at `bundled/libs/behave/configuration.py` — primary source for parsing semantics
-- Python configparser docs: https://docs.python.org/3/library/configparser.html (continuation line spec)
-- VS Code remote extensions guide: https://code.visualstudio.com/api/advanced-topics/remote-extensions
+- `node_modules/@types/vscode/index.d.ts` lines 2082-2148 — `RelativePattern` constructor, `GlobPattern` glob syntax (HIGH confidence, installed package)
+- `node_modules/@types/vscode/index.d.ts` — `createFileSystemWatcher` signature and `FileSystemWatcher` interface (HIGH confidence)
+- `src/watchers/workspaceWatcher.ts` lines 14-15 — existing `RelativePattern(wkspSettings.uri, ...)` usage confirming `Uri` base works (HIGH confidence)
+- `src/extension.ts` lines 37, 139, 590, 595-604 — watcher array tracking, disposal, and `forceRefresh` patterns (HIGH confidence)
+- `src/extension.ts` lines 57-113 — `updateDiscoveryUX()` function — what the config watcher callback must trigger (HIGH confidence)
+- `src/runners/testRunHandler.ts` lines 45-53 — parse-readiness guard pattern used as model for run guard (HIGH confidence)
+- `src/common.ts` lines 32-40, 161-168 — `DiscoveryEntry` interface with `configError` field and `getDiscoveryEntry()` export (HIGH confidence)
+- `src/settings.ts` lines 82-101 — `WorkspaceSettings.configFileUri` present, `configError` absent — confirms run guard must use `getDiscoveryEntry`, not `WorkspaceSettings` (HIGH confidence)
+- `src/parsers/fileParser.ts` lines 612-630 — closure-scoped debounce timer pattern (HIGH confidence)
