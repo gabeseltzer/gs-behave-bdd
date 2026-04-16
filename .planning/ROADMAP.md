@@ -64,7 +64,7 @@ Plans:
 
 Plans:
 - [x] 03-01-PLAN.md -- Discovery UX: logging, notifications, diagnostics, status bar, setting descriptions
-- [ ] 03-02-PLAN.md -- Test infrastructure: example projects, integration suites, priority unit tests, backward compat
+- [x] 03-02-PLAN.md -- Test infrastructure: example projects, integration suites, priority unit tests, backward compat
 
 ## Progress
 
