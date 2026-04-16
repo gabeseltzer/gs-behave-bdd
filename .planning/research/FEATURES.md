@@ -1,51 +1,55 @@
-# Feature Landscape: VS Code Test Extension Auto-Discovery
+# Feature Landscape: Config File Watching and Malformed Config Run Guard
 
-**Domain:** VS Code test runner extension — project/config auto-discovery
-**Researched:** 2026-04-15
-**Scope:** What features users expect when a test extension adds zero-config project discovery
+**Domain:** VS Code test runner extension — mid-session config reactivity
+**Researched:** 2026-04-16
+**Scope:** NEW features only for v1.1 milestone. Existing features (auto-discovery, cache, diagnostics, warning
+notifications, convention fallback) are already shipped and out of scope here.
 
 ---
 
 ## Context
 
-The gs-behave-bdd extension currently requires users to manually set `projectPath` and `featuresPath`
-in settings.json. This milestone adds automatic discovery of behave project structure from native config
-files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`).
+v1.0 shipped static auto-discovery: the extension reads behave config files once at activation, caches the
+result, and surfaces errors. v1.1 adds two reactive features:
 
-Evidence base: Python (pytest/unittest), Jest, Vitest, Go test, Ruby LSP, and VS Code testing API docs.
-Confidence: MEDIUM-HIGH (official docs + verified GitHub sources).
+1. **Config file watchers** — the extension reacts to `behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`,
+   and `pyproject.toml` create/modify/delete events in real time.
+2. **Malformed config run guard** — when a user clicks "Run Tests" in a workspace whose config file failed
+   to parse, the extension warns before behave crashes.
+
+Evidence base: VS Code `FileSystemWatcher` API, existing `workspaceWatcher.ts` + `extension.ts` in this
+repo, ESLint extension config watch pattern (github.com/microsoft/vscode-eslint), `testRunHandler.ts`
+`featureParseComplete` guard as direct analogue. Confidence: HIGH for both features — both map cleanly to
+established patterns already in the codebase.
 
 ---
 
 ## Table Stakes
 
-Features users expect when any test extension claims "zero-config" discovery. Missing = product feels
-incomplete or broken.
+Features users expect for a reactive test extension. Missing = the extension feels unfinished after v1.0.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Reads framework's native config file | Pytest reads `pytest.ini`/`pyproject.toml`, Jest reads `jest.config.*` — behave users expect behave config files to drive the extension too | Medium | Core of this milestone. All five behave config files must be covered. |
-| Tests appear in Test Explorer on folder open, no settings.json required | Defined as zero-config. VS Code Python extension does this after framework selection; Jest does it fully automatically | Medium | The milestone's core value proposition. |
-| Activation without manual enable step | Jest auto-activates on detecting config files; VS Code Python requires one click to select framework. Users expect behave to auto-activate like Jest when a `behave.ini` or `.behaverc` is present | Low | Already partially handled via `workspaceContains:**/*.feature`. Expanding activation events to `behave.ini` and `.behaverc` covers the rest. |
-| Manual settings override auto-discovery | Pytest extension settings override `pytest.ini`; Jest settings override `jest.config`. Users who already configured the extension expect zero behavior change | Low | Already designed in PROJECT.md: `settings > config file > convention`. `inspect()` checks all three scope levels. |
-| Fallback to convention when no config found | Pytest defaults to `tests/` or current dir; Jest defaults to `__tests__/`. Users expect a sensible fallback even without config | Low | `features/` convention fallback already specified. |
-| Error notification when config is malformed | VS Code Python shows "Test discovery error, please check configuration settings." Jest extension shows warnings in output channel. Users expect clear guidance, not silent failure | Low | Warning notification + status bar warning state + fallback to convention. Already in PROJECT.md. |
-| Output channel logs what was discovered | All major extensions (Python, Jest, Go) log discovery results to an output channel. Users troubleshoot by reading that log | Low | Log discovery source, project root, and features paths. Already in PROJECT.md. |
-| Refresh / re-discover on demand | VS Code Python provides "Test: Refresh Tests" command. Jest re-runs discovery on file change. Users expect a manual trigger when auto-discovery misses something | Low | `vscode.workspace.onDidOpenTextDocument` or a refresh command. Already a VS Code Testing API standard pattern. |
+| Re-discover when config file is modified | Every major test extension (ESLint, Jest, vscode-python) re-runs discovery/validation when their config file changes. Users expect behave config edits (e.g. changing `paths=`) to appear in Test Explorer without a window reload. | Low | Uses `vscode.workspace.createFileSystemWatcher` with a per-workspace glob pattern. On `onDidChange` / `onDidCreate`: invalidate `discoveryCache`, call `getUrisOfWkspFoldersWithFeatures(true)`, then `updateDiscoveryUX()`, then trigger full reparse via `configurationChangedHandler(undefined, undefined, true)`. The `configurationChangedHandler` path already handles all three (settings reload, watcher restart, reparse). |
+| Re-discover when config file is created | User adds `behave.ini` to a project that previously had none (was using convention fallback). Tests should move from convention-discovered to config-discovered path without any action. | Low | Same handler as modify. The 5-second polling fallback in VS Code's `FileSystemWatcher` handles the "file didn't exist at watcher creation" case natively. |
+| Re-discover when config file is deleted | User removes `behave.ini`. Extension should fall back to convention and update Test Explorer. No stale "config file" badge or diagnostics. | Low | Same handler. Requires clearing the config-file diagnostics (`clearConfigParseErrorDiagnostic`) and invalidating cache before re-running discovery. |
+| 500ms debounce on config file changes | Rapid file saves (e.g. format-on-save with multiple writes) must not thrash discovery. The existing Python steps watcher uses 500ms. Users notice jank when the Test Explorer flickers on each keystroke save. | Low | Implement debounce with `setTimeout`/`clearTimeout` at the watcher level, same as the `FileParser` debounce already in the codebase. Do NOT rely on VS Code's internal coalescing — it is not guaranteed. |
+| Output log entry on config-driven re-discovery | Every time discovery re-runs from a config file event, the output channel should say "Config file changed, re-running discovery…" before the normal discovery summary. Users troubleshoot by reading the log. | Low | One `config.logger.logInfo(...)` call at the top of the handler, before `updateDiscoveryUX()`. |
+| Clear stale config-error diagnostic when file is fixed | User fixes a previously malformed `behave.ini`. The Problems panel warning should disappear immediately after the fixed file is saved. | Low | `clearConfigParseErrorDiagnostic(configFileUri)` is already implemented. Call it when the re-discovery result is `ok: true`. Already happens inside `updateDiscoveryUX()` via the existing `else if (entry.configFileUri)` branch — verify this path is exercised on re-discovery. |
+| Malformed config run guard — warn before run | When `testRunHandler` is invoked for a workspace whose `discoveryEntry.configError` is set, show `vscode.window.showWarningMessage` with "Run Anyway" and "Open Config File" buttons. Do not silently let behave crash with a Python traceback. | Low | Direct analogue to the existing `featureParseComplete` guard at the top of `testRunHandler`. Read `getDiscoveryEntry(wkspUri)` for each workspace in the run queue. If any has `configError`, warn and return unless user selects "Run Anyway". |
+| Run guard does not block "Run Anyway" | The warning is a gate, not a hard block. Users with a partially broken config (e.g. bad `paths=` but valid behave sections elsewhere) may still want to run tests. "Run Anyway" bypasses the guard for this run only. | Low | `showWarningMessage` returns the selected action. If "Run Anyway", continue. Otherwise `return undefined` (consistent with existing `featureParseComplete` guard). |
 
 ---
 
 ## Differentiators
 
-Features not universally expected, but that meaningfully improve the experience and reflect behave's own design.
+Features that exceed the baseline but meaningfully improve the experience.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Multi-path features support (`paths=` with multiple values) | Behave natively supports multiple feature directories in one project. No other VS Code test extension handles this because their frameworks don't have an equivalent. This reflects behave's true behavior. | High | Requires `featuresUris[]` refactor rippling through parser, watcher, runner. Worth doing in v1 because retrofitting later is harder. |
-| Subdirectory scan for config files (configurable depth) | Monorepo layouts nest the behave project inside a subdirectory. Vitest scans with glob patterns; Python extension requires explicit `rootdir` config. Auto-scanning up to depth 3 covers the majority of real layouts without extra config. | Medium | `gs-behave-bdd.discoveryDepth` setting. Default 3. Configurable for performance-sensitive users. |
-| `discoverySource` tracking in status bar hover | Users are confused when discovery doesn't match expectations. Showing "Discovered from behave.ini" vs "Using convention (features/)" in status bar hover gives instant feedback without requiring output channel inspection. | Low | `discoverySource: "config-file" | "convention" | "settings"`. Unique to this extension. |
-| Config file URI tracked for future watchers | Storing `configFileUri` in `WorkspaceSettings` enables file-system watchers in Milestone 2 (mid-session re-discovery) without a settings refactor. Other extensions (Vitest, Jest) support live config reload — users come to expect this. | Low | No watcher in v1, but the groundwork makes Milestone 2 incremental rather than structural. |
-| TOML parsing via `smol-toml` (not regex) | `pyproject.toml` is increasingly the preferred Python project config file. Jest and Vitest both parse their TOML/JSON configs with proper parsers, not regex. Using `smol-toml` means correct handling of multi-line arrays, inline tables, and escape sequences that a hand-rolled parser would miss. | Low | ~5KB bundle cost. Acceptable. |
+| Per-workspace watcher lifecycle (create/dispose on config change) | If the discovered features path changes when a config file is modified, the existing feature/steps watchers (in `workspaceWatcher.ts`) are watching the OLD path. Those must be disposed and recreated. `configurationChangedHandler` already does this (disposes old watchers, starts new ones). The config file watcher just needs to call into the same path. | Low | No new logic needed — `configurationChangedHandler(undefined, undefined, true)` already handles watcher lifecycle. The config watcher's only job is to trigger it. |
+| Watcher registered per workspace folder (multi-root safe) | In a multi-root workspace, each folder may have its own config file. A single glob across all folders would fire on the wrong workspace's config file. Using one `RelativePattern(wkspUri, ...)` per workspace folder keeps events scoped. | Low | Mirror the existing pattern in `workspaceWatcher.ts` which creates one watcher per workspace. Store config watchers in a parallel Map in `extension.ts`. |
+| Re-notify on malformed config after fix-then-break cycle | `notifiedConfigErrors` (a `Set<string>`) prevents duplicate popups within a session. When a config file is fixed and then broken again in the same session, the key should be re-added so the user gets notified again. Clearing `notifiedConfigErrors` on re-discovery (same as the existing `clearNotifiedErrors: true` path in `updateDiscoveryUX`) handles this. | Low | Already partially handled. Confirm `clearNotifiedErrors=true` is passed when re-discovery is triggered by a file event (vs. `false` at initial activation). |
 
 ---
 
@@ -55,83 +59,63 @@ Things to explicitly NOT build in this milestone.
 
 | Anti-Feature | Why Avoid | What to Do Instead |
 |--------------|-----------|-------------------|
-| File system watchers for config file changes (mid-session re-discovery) | Adds meaningful complexity (watcher lifecycle, event debouncing, cache invalidation timing) that belongs in its own milestone. Vitest and Jest both ship this, but as a distinct feature from initial discovery. Bundling it here risks delaying Milestone 1 delivery. | Milestone 2. `configFileUri` is already stored in `WorkspaceSettings` to make watcher attachment trivial then. |
-| Multiple behave projects per workspace folder | Behave's own `paths=` is multi-path within one project, not multi-project. Supporting "multiple independent behave projects in a single workspace folder" (e.g., `projectA/` and `projectB/` each with their own `behave.ini`) is a different problem requiring a project selection UX (`Behave BDD: Select Project` quick pick). Complex enough to be Milestone 3. | Multi-root VS Code workspaces cover most multi-project cases today. Recommend that pattern to users in setting descriptions. |
-| Home directory config (`~/.behaverc`) | Affects runtime behavior (default tags, timeouts), not project structure (paths). Extension discovers project layout within the workspace. Reading `~/.behaverc` would give false path signals. | Explicitly skip. Document why in code comments. |
-| Auto-install of behave or Python | VS Code Python extension attempts background install of pytest. This causes confusion when the wrong environment is used or install fails silently. Behave's CLI execution path is the user's responsibility. | Emit a clear error if behave is not found on the configured Python path. Do not attempt install. |
-| Interactive setup wizard | Jest extension ships a setup wizard for complex monorepo configs. For behave, the config file IS the setup — if `behave.ini` exists, the extension should just work. A wizard adds UI complexity without equivalent payoff given behave's simpler project model. | The output channel log + status bar hover tooltip replaces the wizard's diagnostic function. |
-| Config file editing / generation | Some extensions offer to create `jest.config.js` or `pytest.ini`. Behave users already have these files (they're what triggers discovery). Generating them is outside test-runner scope and creates maintenance burden. | Document behave config file format in README (Milestone 3). |
+| "Reload window" prompt on config change | The ESLint extension does NOT ask users to reload the window when `.eslintrc` changes — it re-validates inline. Asking users to reload for a `behave.ini` change would be regressive UX given the extension already supports live reparse of feature files. | Silent re-discovery (update Test Explorer + output log). |
+| Watcher for `~/.behaverc` (home dir) | Home directory config affects runtime behavior, not project structure. Watching a path outside the workspace is outside VS Code's standard FileSystemWatcher scope and requires absolute paths, which do not survive workspace portability. | Documented out-of-scope. Already in PROJECT.md. |
+| Debounce at the `FileParser` level for config events | `FileParser`'s existing 500ms debounce is for Python step files (high-frequency edits). Config files change rarely and their discovery is heavier than step parsing. Sharing the debounce timer conflates two concerns and risks one cancelling the other. | Separate `debounceTimer: NodeJS.Timeout | undefined` local to the config watcher handler. |
+| "Fix config" inline code action | Offering a quick fix for TOML/INI syntax errors is out of scope for a test runner. It would require a language server and understanding of behave's full config grammar. | The existing "Open Config File" button in the warning notification is sufficient. |
+| Hard-blocking run on malformed config (no "Run Anyway") | Behave might still run correctly if the malformed section is `pyproject.toml`'s `[tool.other]` not `[tool.behave]`. A hard block punishes users with partially valid configs. | Modal warning with "Run Anyway" option. |
+| Watching `package.json` or other non-behave config files | ESLint watches `package.json` because ESLint config can live there. Behave has no such relationship with `package.json`. Watching it adds noise. | Only the five files in `CONFIG_FILES` from `configParser.ts`. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-Activation events (behave.ini, .behaverc)
-  → must fire before any discovery runs
+Config file watcher (create + modify + delete)
+  → requires: discoveryCache invalidation API (getUrisOfWkspFoldersWithFeatures(forceRefresh=true)) — EXISTING
+  → requires: updateDiscoveryUX() — EXISTING
+  → requires: configurationChangedHandler() — EXISTING
+  → produces: fresh DiscoveryEntry in cache for each workspace
+  → produces: updated Test Explorer tree
 
-Config file parsing (INI + TOML)
-  → required before featuresUris[] can be populated
+Watcher lifecycle management (dispose old, create new on path change)
+  → already handled by: configurationChangedHandler(forceFullRefresh=true) — EXISTING
+  → no new logic required
 
-featuresUris[] refactor (featuresUri → featuresUris[])
-  → blocks: fileParser, stepMappings, featureParser, workspaceWatcher, testRunHandler, runOrDebug
-  → backward compat: featuresUri getter = featuresUris[0]
+Config watcher disposable registration
+  → add to: context.subscriptions (same as workspaceWatcher pattern) — Low complexity
 
-Subdirectory scan
-  → depends on config file parsing (need to know WHAT to scan for)
-  → feeds: featuresUris[]
+Malformed config run guard
+  → requires: getDiscoveryEntry(wkspUri) — EXISTING
+  → requires: DiscoveryEntry.configError field — EXISTING (set in common.ts discovery logic)
+  → insertion point: testRunHandler.ts, after featureParseComplete guard, before run.createTestRun()
+  → uses: vscode.window.showWarningMessage — Low complexity
 
-Discovery priority logic (settings > config-file > convention)
-  → depends on: inspect() at all 3 scopes, config file parsing, subdirectory scan
-  → gates: WorkspaceSettings construction
-
-discoverySource + configFileUri tracking
-  → depends on: discovery priority logic
-  → feeds: status bar display, Milestone 2 watcher attachment
-
-Error handling (malformed config → warning + fallback)
-  → depends on: config file parsing
-  → feeds: notification UX, output channel logging
-
-Unit tests
-  → depend on: all of the above
-  → covers: each config format, priority logic, path resolution, edge cases
-
-Integration tests (config-only/, pyproject-config/, multi-features/ example projects)
-  → depend on: all of the above
-  → verifies: backward compat with existing settings-driven example projects
+Run guard "per workspace" check
+  → must iterate: getUrisOfWkspFoldersWithFeatures() filtered to queue workspaces
+  → can use: existing wkspSettings loop in testRunHandler
 ```
 
 ---
 
-## MVP Recommendation
+## Complexity Assessment
 
-The PROJECT.md already defines a well-scoped v1. From a features perspective, the priority ordering is:
+Both features are LOW implementation complexity because:
 
-1. **Config file parsing** (INI + TOML) — without this, nothing else works
-2. **Discovery priority logic + `WorkspaceSettings` updates** — this is the core behavioral change
-3. **`featuresUris[]` refactor** — required for multi-path support and honoring behave's own semantics
-4. **Error handling + output logging** — table stakes for a production-quality extension
-5. **Status bar discoverySource display** — low effort, high trust signal for users
-6. **Unit tests** — required before shipping any parsing logic
-7. **Integration tests** — validates the end-to-end flow
+- The config file watcher has no novel logic — it reuses `configurationChangedHandler(undefined, undefined, true)` which already handles cache invalidation, watcher restart, reparse, and UX update. The watcher is essentially a 20-30 line function in `extension.ts` that creates one `FileSystemWatcher` per workspace and calls the existing handler on events.
+- The run guard inserts 10-15 lines into `testRunHandler.ts` above an existing guard, reads from an already-populated cache entry, and calls a well-understood VS Code API (`showWarningMessage` with modal-style "Run Anyway" / "Open Config File" buttons).
 
-Defer to Milestone 2:
-- File system watchers for config file changes
-- `discoveryDepth` setting (subdirectory scan) — the scan itself is in scope, but making depth user-configurable can ship after the core works
+Neither feature requires new modules, new abstractions, or new test infrastructure beyond standard Sinon stubs for the new watcher events and run guard.
 
-Defer to Milestone 3:
-- Multi-project per workspace folder
-- README documentation
+**Risk area:** The glob pattern for named config files. Using exact filenames (e.g. `new RelativePattern(wkspUri, "behave.ini")`) has a known VS Code bug (issue #164925, ~2022) where events do not fire. The safe pattern is a brace-alternation glob: `{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}`. This is a one-line choice at watcher creation time — MEDIUM confidence (VS Code fixed the exact-filename issue in later releases, but the brace glob is safer and should be used regardless).
 
 ---
 
 ## Sources
 
-- [Python testing in Visual Studio Code (official docs)](https://code.visualstudio.com/docs/python/testing)
-- [VS Code Testing API — extension guide](https://code.visualstudio.com/api/extension-guides/testing)
-- [jest-community/vscode-jest — GitHub](https://github.com/jest-community/vscode-jest)
-- [vitest-dev/vscode — Monorepo and Workspace Configuration (DeepWiki)](https://deepwiki.com/vitest-dev/vscode/5.2-monorepo-and-workspace-configuration)
-- [Multi-Project Testing in VS Code — Python extension wiki](https://github.com/microsoft/vscode-python/wiki/Multi%E2%80%90Project-Testing-in-VS-Code)
-- [VS Code Activation Events API reference](https://code.visualstudio.com/api/references/activation-events)
-- [jimasp/behave-vsc — GitHub (comparable extension)](https://github.com/jimasp/behave-vsc)
+- [VS Code FileSystemWatcher API — Haxe externs docs](https://vshaxe.github.io/vscode-extern/vscode/FileSystemWatcher.html)
+- [File Watcher Internals — microsoft/vscode Wiki](https://github.com/microsoft/vscode/wiki/File-Watcher-Internals)
+- [API: FileSystemWatcher not firing when complete filename used without wildcards — issue #164925](https://github.com/microsoft/vscode/issues/164925)
+- [FileSystemWatcher fires events before text documents are updated — issue #72831](https://github.com/microsoft/vscode/issues/72831)
+- [microsoft/vscode-eslint client.ts — config file watcher via synchronize.fileEvents](https://github.com/microsoft/vscode-eslint/blob/main/client/src/client.ts)
+- Existing codebase: `src/watchers/workspaceWatcher.ts`, `src/runners/testRunHandler.ts`, `src/extension.ts` (`configurationChangedHandler`, `updateDiscoveryUX`), `src/common.ts` (`getUrisOfWkspFoldersWithFeatures`, `discoveryCache`, `getDiscoveryEntry`)
