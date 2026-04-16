@@ -33,7 +33,10 @@
   3. User clicks "Run Tests" in a workspace whose config file has a parse error and sees a warning popup with "Run Anyway", "Open Config File", and "Cancel" options — the run does not proceed until the user chooses
   4. Warning popup fires for both regular test runs and debug sessions (GUARD-03)
   5. In a multi-root workspace, a malformed config in one folder does not block test runs in healthy folders
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 04-01-PLAN.md — Config file watcher with debounce + extension.ts wiring + watcher unit tests
+- [ ] 04-02-PLAN.md — Run guard in testRunHandler + run guard unit tests
 
 ### Phase 5: Integration Verification
 **Goal**: The watcher + run guard behavior is verified end-to-end through an automated integration test so regressions are caught at CI time
@@ -51,5 +54,5 @@
 | 1. Config Parsing | v1.0 | 2/2 | Complete | 2026-04-15 |
 | 2. Integration | v1.0 | 2/2 | Complete | 2026-04-15 |
 | 3. UX & Verification | v1.0 | 2/2 | Complete | 2026-04-16 |
-| 4. Watcher & Run Guard | v1.1 | 0/? | Not started | - |
+| 4. Watcher & Run Guard | v1.1 | 0/2 | Not started | - |
 | 5. Integration Verification | v1.1 | 0/? | Not started | - |
