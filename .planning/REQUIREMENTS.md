@@ -75,9 +75,41 @@ The following features would require `WorkspaceSettings` to become per-project r
 
 ## Requirement → Phase Traceability
 
-| Phase | Name | Requirements |
-|-------|------|--------------|
-| (filled by roadmapper) |  |  |
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| MP-01 | Phase 8 | Pending |
+| MP-02 | Phase 7 | Pending |
+| MP-03 | Phase 10 | Pending |
+| MP-04 | Phase 8 | Pending |
+| MP-05 | Phase 8 | Pending |
+| MP-06 | Phase 8 | Pending |
+| SD-01 | Phase 9 | Pending |
+| SD-02 | Phase 9 | Pending |
+| SD-03 | Phase 9 | Pending |
+| SD-04 | Phase 9 | Pending |
+| INT-01 | Phase 8 | Pending |
+| INT-02 | Phase 8 | Pending |
+| INT-03 | Phase 9 | Pending |
+| INT-04 | Phase 9 | Pending |
+| TEST-10 | Phase 8 | Pending |
+| TEST-11 | Phase 9 | Pending |
+| TEST-12 | Phase 7 | Pending |
+| TEST-13 | Phase 11 | Pending |
+| TEST-14 | Phase 11 | Pending |
+| TEST-15 | Phase 11 | Pending |
+
+**Coverage:** 20/20 requirements mapped. No orphans, no duplicates.
+
+### Phase → Requirements (reverse lookup)
+
+| Phase | Name | Requirements | Count |
+|-------|------|--------------|-------|
+| 7 | Internal Multi-Path Types | MP-02, TEST-12 | 2 |
+| 8 | Parser / Test-Tree / Watcher Multi-Root Iteration | MP-01, MP-04, MP-05, MP-06, INT-01, INT-02, TEST-10 | 7 |
+| 9 | Subdirectory Config Scan | SD-01, SD-02, SD-03, SD-04, INT-03, INT-04, TEST-11 | 7 |
+| 10 | `featuresPaths` User-Facing Settings Key | MP-03 | 1 |
+| 11 | UX Polish + Regression Hardening | TEST-13, TEST-14, TEST-15 | 3 |
+| **Total** | | | **20** |
 
 ---
 
