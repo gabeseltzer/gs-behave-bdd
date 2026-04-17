@@ -11,18 +11,27 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 ## Current State
 
 **Shipped:** v1.1 Config File Watching (2026-04-17)
+**In flight:** v1.2 Multi-Path & Monorepo-Aware Discovery (started 2026-04-17)
 
 - v1.0: Config parsing, discovery cache, UX (3 phases, 6 plans)
 - v1.1: Real-time config watching, malformed-config run guard, E2E integration coverage (3 phases, 9 plans)
 - 539 unit tests passing; 14 integration suites passing (3-run flakiness gate cleared on Windows)
 
-## Next Milestone Goals
+## Current Milestone: v1.2 Multi-Path & Monorepo-Aware Discovery
 
-No milestone scoped yet. Strong candidates from the deferred list:
+**Goal:** Extend auto-discovery to support behave projects with multiple feature paths and configs nested inside monorepo subdirectories — without touching multi-project scope.
 
-- **Multi-path features** — `featuresUris[]` from multi-value `paths=` (DISC-08)
-- **Subdirectory scanning** — depth-3 scan with configurable `discoveryDepth` setting (DISC-07)
-- **Multiple behave projects per workspace** + `Behave BDD: Select Project` quick-pick (MULTI-01, MULTI-02 — Milestone 3 candidate)
+**Target features:**
+
+- **Multi-path features (DISC-08)** — Parse `paths=` as array; internal `featuresUris[]`; downstream consumers (test tree, feature parser, watchers, find-step-refs, discovery cache) updated; new `featuresPaths[]` settings.json key added (legacy singular `featuresPath` still honored).
+- **Subdirectory config scanning (DISC-07)** — Depth-3 scan by default (opt-out via `discoveryDepth`); first-match-wins when multiple configs found; warning + notification guides the user toward `projectPath` override.
+- **Watcher + run-guard compatibility** — Config watcher glob covers subdirectory paths; run guard still works per-workspace with multi-path test trees.
+
+**Key scoping decisions:**
+
+- First-match + warn when subdir scan finds >1 config (MULTI-01/02 stays deferred to Milestone 3 / v2.0)
+- Depth 3, opt-out (monorepo-friendly by default; `discoveryDepth` setting tunes scope)
+- Add `featuresPaths[]` settings.json key (both singular `featuresPath` and plural supported; plural wins if both set)
 
 ## Requirements
 
@@ -56,7 +65,7 @@ No milestone scoped yet. Strong candidates from the deferred list:
 
 ### Active
 
-(No active requirements — awaiting v1.2 scoping)
+(v1.2 requirements drafted during this milestone cycle; see `.planning/REQUIREMENTS.md`.)
 
 ### Out of Scope
 
@@ -131,4 +140,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-17 after v1.1 milestone completion*
+*Last updated: 2026-04-17 — v1.2 milestone started (multi-path + monorepo-aware discovery)*

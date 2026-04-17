@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: null
-milestone_name: null
-status: v1.1 archived — awaiting next milestone scope
-stopped_at: v1.1 shipped + tagged 2026-04-17; ready for /gsd-new-milestone
-last_updated: "2026-04-17T19:35:00.000Z"
+milestone: v1.2
+milestone_name: Multi-Path & Monorepo-Aware Discovery
+status: Defining requirements
+stopped_at: v1.2 started 2026-04-17; running research before requirements
+last_updated: "2026-04-17T20:00:00.000Z"
 progress:
   total_phases: 0
   completed_phases: 0
@@ -17,14 +17,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-17 after v1.1 milestone completion)
+See: .planning/PROJECT.md (updated 2026-04-17 — v1.2 milestone started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** v1.1 archived; awaiting next milestone scope (`/gsd-new-milestone`).
+**Current focus:** v1.2 Multi-Path & Monorepo-Aware Discovery — multi-value `paths=` support + depth-3 subdirectory scan with first-match-wins.
 
 ## Current Position
 
-No active milestone. v1.0 + v1.1 shipped (6 phases, 15 plans total). Candidates for v1.2 scoping: multi-path features (DISC-08), subdirectory config scanning (DISC-07), or v2 multi-project support (MULTI-01/02).
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-17 — Milestone v1.2 started
 
 ## Performance Metrics
 
@@ -47,7 +50,13 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 
 ### Key Architecture Constraints
 
-(Cleared at milestone close — re-populated as next milestone's phases surface new constraints.)
+Carried into v1.2 from v1.0 + v1.1:
+
+- `getUrisOfWkspFoldersWithFeatures()` < 1ms hard budget — discovery results MUST stay cached.
+- Backward compat: explicit `projectPath` / `featuresPath` settings see zero behavior change.
+- Config-watcher routes through `configurationChangedHandler(undefined, undefined, true)` — single choke point for log clear + watcher rebuild + `clearNotifiedErrors=true`.
+- Discovery cache is single source of truth (run guard + watcher + gatekeeper all read `getDiscoveryEntry()`).
+- INI/TOML parsing must match behave's own behavior for the `paths` key (continuation-line semantics for INI; native array for TOML).
 
 ### Pending Todos
 
@@ -61,12 +70,12 @@ None.
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| Multi-path | featuresUris[] array + downstream consumer updates (DISC-08) | v1.2 candidate | v1.0 init |
-| Subdirectory scan | depth-3 scan + discoveryDepth setting (DISC-07) | v1.2 candidate | v1.0 init |
-| Multi-project | Project quick-pick + multi-project-per-workspace (MULTI-01/02) | Milestone 3 | v1.0 init |
+| Multi-project | Project quick-pick + multi-project-per-workspace (MULTI-01/02) | Milestone 3 / v2.0 | v1.0 init, reaffirmed v1.2 |
+| Home configs | `~/.behaverc` support | Out of scope | v1.0 init |
+| Code action | Inline "Fix Config" quick-fix | Out of scope | v1.0 init |
 
 ## Session Continuity
 
-Last session: 2026-04-17T19:35:00Z
-Stopped at: v1.1 archived + tagged
-Resume file: none — run `/gsd-new-milestone` to scope v1.2 (or a major v2 if multi-project is the next priority).
+Last session: 2026-04-17T20:00:00Z
+Stopped at: v1.2 started — running research before requirements
+Resume file: none — `/gsd-new-milestone` in progress.
