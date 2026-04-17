@@ -66,7 +66,10 @@ Plans:
   3. `.planning/phases/04-watcher-run-guard/04-02-SUMMARY.md` has `requirements_completed: [GUARD-01, GUARD-02, GUARD-03, GUARD-04, TEST-09]` in YAML frontmatter
   4. `.planning/REQUIREMENTS.md` traceability table shows 12 satisfied v1.1 requirements as `[x]` / Complete (only TEST-08 remains Pending until Phase 5 executes)
   5. `npx eslint src --ext ts` and `npm run test:unit` both pass clean after code fixes
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 06-01-PLAN.md — Code fixes: WR-01, WR-02, IN-01, IN-02 in testRunHandler.ts + configWatcher.ts
+- [ ] 06-02-PLAN.md — Admin: requirements_completed frontmatter + REQUIREMENTS.md traceability updates
 
 ## Progress
 
@@ -77,4 +80,4 @@ Plans:
 | 3. UX & Verification | v1.0 | 2/2 | Complete | 2026-04-16 |
 | 4. Watcher & Run Guard | v1.1 | 2/2 | Code-complete (UAT pending; obsoleted by Phase 5) | - |
 | 5. Integration Verification | v1.1 | 0/5 | Planned | - |
-| 6. v1.1 Tech Debt & Admin Cleanup | v1.1 | 0/? | Not started | - |
+| 6. v1.1 Tech Debt & Admin Cleanup | v1.1 | 0/2 | Planned | - |
