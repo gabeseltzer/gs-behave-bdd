@@ -12,7 +12,7 @@ import { StepFileStep } from './parsers/stepsParser';
 import { gotoStepHandler } from './handlers/gotoStepHandler';
 import { findStepReferencesHandler, nextStepReferenceHandler as nextStepReferenceHandler, prevStepReferenceHandler, treeView } from './handlers/findStepReferencesHandler';
 import { FileParser } from './parsers/fileParser';
-import { testRunHandler } from './runners/testRunHandler';
+import { testRunHandler, checkRunGuard } from './runners/testRunHandler';
 import { TestWorkspaceConfigWithWkspUri } from './testWorkspaceConfig';
 import { diagLog } from './logger';
 import { performance } from 'perf_hooks';
@@ -51,7 +51,10 @@ export type TestSupport = {
   getStepMappingsForStepsFileFunction: (stepsFileUri: vscode.Uri, lineNo: number) => StepMapping[],
   getStepFileStepForFeatureFileStep: (featureFileUri: vscode.Uri, line: number) => StepFileStep | undefined,
   testData: TestData,
-  configurationChangedHandler: (event?: vscode.ConfigurationChangeEvent, testCfg?: TestWorkspaceConfigWithWkspUri, forceRefresh?: boolean) => Promise<void>
+  configurationChangedHandler: (event?: vscode.ConfigurationChangeEvent, testCfg?: TestWorkspaceConfigWithWkspUri, forceRefresh?: boolean) => Promise<void>,
+  getDiscoveryEntry: typeof getDiscoveryEntry,
+  getUrisOfWkspFoldersWithFeatures: typeof getUrisOfWkspFoldersWithFeatures,
+  checkRunGuard: typeof checkRunGuard,
 };
 
 
@@ -657,7 +660,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       getStepMappingsForStepsFileFunction: getStepMappingsForStepsFileFunction,
       getStepFileStepForFeatureFileStep: getStepFileStepForFeatureFileStep,
       testData: testData,
-      configurationChangedHandler: configurationChangedHandler
+      configurationChangedHandler: configurationChangedHandler,
+      getDiscoveryEntry: getDiscoveryEntry,
+      getUrisOfWkspFoldersWithFeatures: getUrisOfWkspFoldersWithFeatures,
+      checkRunGuard: checkRunGuard,
     };
 
   }
