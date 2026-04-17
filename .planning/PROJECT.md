@@ -45,6 +45,7 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 - ✓ `smol-toml` dependency added for TOML parsing — v1.0
 - ✓ File system watchers for config file changes (create/modify/delete) with 500ms debounce — v1.1 Phase 4
 - ✓ Malformed config run guard: warning popup with Run Anyway / Open Config File / Cancel — v1.1 Phase 4
+- ✓ End-to-end integration test verifying config-edit → debounce → cache-invalidate → re-parse → tree update (TEST-08) — v1.1 Phase 5
 
 ### Active
 
@@ -62,8 +63,9 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 
 Shipped v1.0 with 3 phases, 6 plans, ~950 new lines of TypeScript + test fixtures.
 Phase 4 complete — config file watchers + run guard, 539 unit tests passing.
+Phase 5 complete — automated end-to-end integration coverage (3 watcher tests + 4 run-guard tests, 14 total integration suites), TEST-08 closed.
 Tech stack: TypeScript, VS Code Extension API, Mocha/Sinon, smol-toml.
-539 unit tests passing, 17 integration test suites passing.
+539 unit tests passing, 14 integration test suites passing.
 
 Key files added:
 - `src/parsers/configParser.ts` — stateless parser for all 5 behave config formats
@@ -107,4 +109,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-16 after Phase 4 completion*
+*Last updated: 2026-04-17 after Phase 5 completion*
