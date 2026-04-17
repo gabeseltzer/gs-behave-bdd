@@ -10,25 +10,25 @@ Requirements for config file watching and malformed config run guard. Each maps 
 
 ### Config File Watching
 
-- [ ] **WATCH-01**: FileSystemWatcher monitors all 5 behave config files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`) at each workspace root
-- [ ] **WATCH-02**: Watcher fires on create, change, and delete events
-- [ ] **WATCH-03**: Config file changes debounced at 500ms before triggering re-discovery
-- [ ] **WATCH-04**: Re-discovery silently updates test tree and logs to output channel (no notification on normal changes)
-- [ ] **WATCH-05**: Per-workspace watcher lifecycle: watchers disposed and recreated when workspace folders change
-- [ ] **WATCH-06**: Notification dedup cleared per-workspace on watcher-triggered re-discovery so fix-then-break cycles re-notify
+- [x] **WATCH-01**: FileSystemWatcher monitors all 5 behave config files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`) at each workspace root
+- [x] **WATCH-02**: Watcher fires on create, change, and delete events
+- [x] **WATCH-03**: Config file changes debounced at 500ms before triggering re-discovery
+- [x] **WATCH-04**: Re-discovery silently updates test tree and logs to output channel (no notification on normal changes)
+- [x] **WATCH-05**: Per-workspace watcher lifecycle: watchers disposed and recreated when workspace folders change
+- [x] **WATCH-06**: Notification dedup cleared per-workspace on watcher-triggered re-discovery so fix-then-break cycles re-notify
 
 ### Malformed Config Run Guard
 
-- [ ] **GUARD-01**: Test run checks discovery cache (`getDiscoveryEntry`) for `configError` before executing behave
-- [ ] **GUARD-02**: Warning shown with "Run Anyway" / "Open Config File" / "Cancel" options (non-blocking)
-- [ ] **GUARD-03**: Guard applies to both regular test runs and debug sessions
-- [ ] **GUARD-04**: Guard scoped to workspaces whose tests are actually queued, not all workspaces
+- [x] **GUARD-01**: Test run checks discovery cache (`getDiscoveryEntry`) for `configError` before executing behave
+- [x] **GUARD-02**: Warning shown with "Run Anyway" / "Open Config File" / "Cancel" options (non-blocking)
+- [x] **GUARD-03**: Guard applies to both regular test runs and debug sessions
+- [x] **GUARD-04**: Guard scoped to workspaces whose tests are actually queued, not all workspaces
 
 ### Testing
 
-- [ ] **TEST-07**: Unit tests for watcher debounce logic and lifecycle management (dispose/recreate)
+- [x] **TEST-07**: Unit tests for watcher debounce logic and lifecycle management (dispose/recreate)
 - [x] **TEST-08**: Integration test verifying config file change triggers test tree rebuild
-- [ ] **TEST-09**: Unit test for run guard configError check and user response handling
+- [x] **TEST-09**: Unit test for run guard configError check and user response handling
 
 ## Future Requirements
 
@@ -62,19 +62,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WATCH-01 | Phase 4 | Pending |
-| WATCH-02 | Phase 4 | Pending |
-| WATCH-03 | Phase 4 | Pending |
-| WATCH-04 | Phase 4 | Pending |
-| WATCH-05 | Phase 4 | Pending |
-| WATCH-06 | Phase 4 | Pending |
-| GUARD-01 | Phase 4 | Pending |
-| GUARD-02 | Phase 4 | Pending |
-| GUARD-03 | Phase 4 | Pending |
-| GUARD-04 | Phase 4 | Pending |
-| TEST-07 | Phase 4 | Pending |
+| WATCH-01 | Phase 4 | Complete |
+| WATCH-02 | Phase 4 | Complete |
+| WATCH-03 | Phase 4 | Complete |
+| WATCH-04 | Phase 4 | Complete |
+| WATCH-05 | Phase 4 | Complete |
+| WATCH-06 | Phase 4 | Complete |
+| GUARD-01 | Phase 4 | Complete |
+| GUARD-02 | Phase 4 | Complete |
+| GUARD-03 | Phase 4 | Complete |
+| GUARD-04 | Phase 4 | Complete |
+| TEST-07 | Phase 4 | Complete |
 | TEST-08 | Phase 5 | Complete |
-| TEST-09 | Phase 4 | Pending |
+| TEST-09 | Phase 4 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 13 total
