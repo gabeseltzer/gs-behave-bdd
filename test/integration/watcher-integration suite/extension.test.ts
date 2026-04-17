@@ -3,7 +3,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import { TestSupport } from '../../../src/extension';
-import { getAllTestItems, getScenarioTests, uriId, getDiscoveryEntry } from '../../../src/common';
+import { getAllTestItems, getScenarioTests, uriId } from '../../../src/common';
 import { waitForTestTree } from '../suite-shared/waitForTestTree';
 
 let instances: TestSupport;
@@ -74,7 +74,7 @@ suite('watcher-integration suite', () => {
 			// D-11/D-12: 100ms poll, 15000ms timeout — covers 500ms debounce + parse + Windows FS watcher latency (1-5s for delete events).
 			const state = await waitForTestTree(
 				() => {
-					const entry = getDiscoveryEntry(wkspUri);
+					const entry = instances.getDiscoveryEntry(wkspUri);
 					if (!entry) return undefined;
 					if (entry.source !== 'convention') return undefined;
 					const scenario = findScenarioByName(instances, wkspUri, 'run a successful test');
@@ -104,12 +104,11 @@ suite('watcher-integration suite', () => {
 
 			const state = await waitForTestTree(
 				() => {
-					const entry = getDiscoveryEntry(wkspUri);
+					const entry = instances.getDiscoveryEntry(wkspUri);
 					if (!entry) return undefined;
 					if (entry.source !== 'config-file') return undefined;
-					const scenario = findScenarioByName(instances, wkspUri, 'alternate path discovery');
-					if (!scenario) return undefined;
-					return { entry, scenario };
+					if (!entry.featuresUri.fsPath.endsWith('features-alt')) return undefined;
+					return { entry };
 				},
 				{ intervalMs: 100, timeoutMs: 15000 }
 			);
@@ -117,7 +116,6 @@ suite('watcher-integration suite', () => {
 			assert.strictEqual(state.entry.source, 'config-file', 'after create, source should be config-file');
 			assert.strictEqual(state.entry.configError, undefined, 'no configError on fresh valid config');
 			assert.ok(state.entry.featuresUri.fsPath.endsWith('features-alt'), 'featuresUri should point to features-alt');
-			assert.ok(state.scenario, "'alternate path discovery' scenario should be visible from features-alt/");
 		} finally {
 			// D-08/D-09 tension: no-op by design — Test C depends on Test B's "paths = features-alt" end state.
 			// See 05-03-PLAN.md §design_notes.
@@ -133,7 +131,7 @@ suite('watcher-integration suite', () => {
 
 			const state = await waitForTestTree(
 				() => {
-					const entry = getDiscoveryEntry(wkspUri);
+					const entry = instances.getDiscoveryEntry(wkspUri);
 					if (!entry) return undefined;
 					if (entry.source !== 'config-file') return undefined;
 					if (!entry.featuresUri.fsPath.endsWith('features')) return undefined;

@@ -57,6 +57,7 @@ suite('configWatcher', () => {
     sinon.stub(configModule.config.logger, 'showError');
     sinon.stub(configModule.config.logger, 'logInfo');
     sinon.stub(loggerModule, 'diagLog');
+    sinon.stub(configModule.config, 'reloadSettings');
 
     onConfigChangedSpy = sinon.spy();
   });

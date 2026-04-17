@@ -54,6 +54,7 @@ export function startWatchingConfigFiles(
         // configurationChangedHandler has an integrationTestRun early-exit guard that would
         // silently skip re-discovery during integration tests.
         getUrisOfWkspFoldersWithFeatures(true);
+        config.reloadSettings(wkspUri);
         onConfigChanged([wkspUri], true);  // clearNotifiedErrors=true per WATCH-06
         parser.parseFilesForWorkspace(wkspUri, testData, ctrl, 'configWatcher', false);
       } catch (e: unknown) {
