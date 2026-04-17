@@ -79,10 +79,9 @@ export function testRunHandler(testData: TestData, ctrl: vscode.TestController, 
       config.logger.showError(e, undefined);
     }
     finally {
+      diagLog(`testRunHandler: completed run ${run.name}`);
       run.end();
     }
-
-    diagLog(`testRunHandler: completed run ${run.name}`);
   };
 
 }
@@ -215,7 +214,7 @@ async function runTestQueue(ctrl: vscode.TestController, run: vscode.TestRun, re
     if (run.token.isCancellationRequested)
       break;
 
-    const wkspQueue = allWkspsQueueMap.filter(x => x.wkspSettings.id == wkspSettings.id).map(q => q.queueItem);
+    const wkspQueue = allWkspsQueueMap.filter(x => x.wkspSettings.id === wkspSettings.id).map(q => q.queueItem);
     if (wkspQueue.length === 0)
       continue;
 
@@ -389,8 +388,8 @@ async function runFeaturesParallel(wr: WkspRun) {
 function allTestsForThisWkspAreIncluded(request: vscode.TestRunRequest, wkspSettings: WorkspaceSettings,
   ctrl: vscode.TestController, testData: TestData) {
 
-  let allTestsForThisWkspIncluded = (!request.include || request.include.length == 0)
-    && (!request.exclude || request.exclude.length == 0);
+  let allTestsForThisWkspIncluded = (!request.include || request.include.length === 0)
+    && (!request.exclude || request.exclude.length === 0);
 
   if (!allTestsForThisWkspIncluded) {
     const wkspGrandParentItemIncluded = request.include?.filter(item => item.id === wkspSettings.id).length === 1;
@@ -461,7 +460,7 @@ function getIncludedFeaturesForWksp(wkspUri: vscode.Uri, req: vscode.TestRunRequ
 function getChildScenariosForParentFeature(wr: WkspRun, scenarioQueueItem: QueueItem) {
   const parentFeature = scenarioQueueItem.test.parent;
   if (!parentFeature)
-    throw `parent feature not found for scenario ${scenarioQueueItem.scenario.scenarioName}}`;
+    throw `parent feature not found for scenario ${scenarioQueueItem.scenario.scenarioName}`;
   return getChildScenariosForFeature(wr, parentFeature);
 }
 

@@ -3,7 +3,7 @@ import { config } from '../configuration';
 import { diagLog } from '../logger';
 import { FileParser } from '../parsers/fileParser';
 import { TestData } from '../parsers/testFile';
-import { getUrisOfWkspFoldersWithFeatures } from '../common';
+import { getUrisOfWkspFoldersWithFeatures, uriId } from '../common';
 
 
 const CONFIG_GLOB = '{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}';
@@ -35,11 +35,11 @@ export function startWatchingConfigFiles(
     if (eventUri.scheme !== 'file') return;
     diagLog(`configWatcher: ${eventType} detected for ${eventUri.fsPath}`);
 
-    const key = wkspUri.path;
+    const key = uriId(wkspUri);
     const existing = configDebounceTimers.get(key);
     if (existing) {
       clearTimeout(existing);
-      diagLog(`configWatcher: debounce timer reset for ${wkspUri.path}`);
+      diagLog(`configWatcher: debounce timer reset for ${key}`);
     }
 
     const timer = setTimeout(async () => {
