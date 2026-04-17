@@ -155,6 +155,15 @@ async function runTestSuites() {
       launchArgs
     });
 
+    launchArgs = ["example-projects/watcher-integration"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './watcher-integration suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
     console.log("test run complete");
 
   } catch (err) {
