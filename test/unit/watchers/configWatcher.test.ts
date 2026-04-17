@@ -310,4 +310,116 @@ suite('configWatcher', () => {
 
   });
 
+  // Gap 1 — WATCH-01: watcher glob covers all 5 behave config files
+  suite('config glob coverage', () => {
+
+    test('WATCH-01: RelativePattern passed to createFileSystemWatcher contains all 5 behave config filenames', () => {
+      const ctrlStub = {} as vscode.TestController;
+      const testData = new WeakMap();
+      const parserStub = { parseFilesForWorkspace: parseFilesForWorkspaceStub };
+
+      startWatchingConfigFiles(wkspUri, ctrlStub, testData, parserStub as never, onConfigChangedSpy);
+
+      assert.ok(createFileSystemWatcherStub.calledOnce,
+        'createFileSystemWatcher should be called once');
+
+      const patternArg = createFileSystemWatcherStub.firstCall.args[0] as vscode.RelativePattern;
+      const patternStr = patternArg.pattern;
+
+      assert.ok(patternStr.includes('behave.ini'),
+        `Pattern should include 'behave.ini', got: ${patternStr}`);
+      assert.ok(patternStr.includes('.behaverc'),
+        `Pattern should include '.behaverc', got: ${patternStr}`);
+      assert.ok(patternStr.includes('setup.cfg'),
+        `Pattern should include 'setup.cfg', got: ${patternStr}`);
+      assert.ok(patternStr.includes('tox.ini'),
+        `Pattern should include 'tox.ini', got: ${patternStr}`);
+      assert.ok(patternStr.includes('pyproject.toml'),
+        `Pattern should include 'pyproject.toml', got: ${patternStr}`);
+    });
+
+  });
+
+  // Gap 2 — WATCH-04: re-discovery is silent (no showInformationMessage popup)
+  suite('silent re-discovery', () => {
+
+    test('WATCH-04: watcher-triggered re-discovery does not call showInformationMessage', async () => {
+      const ctrlStub = {} as vscode.TestController;
+      const testData = new WeakMap();
+      const parserStub = { parseFilesForWorkspace: parseFilesForWorkspaceStub };
+
+      const showInformationMessageSpy = sinon.spy(vscode.window, 'showInformationMessage');
+
+      startWatchingConfigFiles(wkspUri, ctrlStub, testData, parserStub as never, onConfigChangedSpy);
+
+      const changeHandler = mockWatcher.onDidChange.firstCall.args[0];
+      changeHandler(configFileUri);
+
+      await clock.tickAsync(500);
+
+      // Verify re-discovery happened
+      assert.strictEqual(onConfigChangedSpy.callCount, 1,
+        'onConfigChanged should have been called (re-discovery fired)');
+
+      // Verify no popup notification was shown
+      assert.ok(showInformationMessageSpy.notCalled,
+        'showInformationMessage should NOT be called during silent re-discovery');
+    });
+
+  });
+
+  // Gap 3/5 — WATCH-05: config watchers disposed and recreated on workspace folder changes
+  // Full lifecycle (dispose stops event delivery) is integration-territory because the mock
+  // watcher stubs don't wire dispose() to unsubscribe the captured handlers.
+  // This test covers the unit-testable portion: startWatchingConfigFiles returns a watcher
+  // array whose dispose() is callable and does not throw.
+  suite('watcher lifecycle', () => {
+
+    test('WATCH-05: startWatchingConfigFiles returns watcher array with callable dispose()', () => {
+      const ctrlStub = {} as vscode.TestController;
+      const testData = new WeakMap();
+      const parserStub = { parseFilesForWorkspace: parseFilesForWorkspaceStub };
+
+      const watchers = startWatchingConfigFiles(wkspUri, ctrlStub, testData, parserStub as never, onConfigChangedSpy);
+
+      assert.ok(Array.isArray(watchers), 'startWatchingConfigFiles should return an array');
+      assert.strictEqual(watchers.length, 1, 'should return exactly one watcher per workspace');
+      assert.ok(typeof watchers[0].dispose === 'function',
+        'returned watcher should have a callable dispose() method');
+
+      // Calling dispose() must not throw — simulates extension shutdown or workspace removal
+      assert.doesNotThrow(() => watchers[0].dispose(),
+        'watcher.dispose() should not throw');
+    });
+
+  });
+
+  // Gap 4 — WATCH-06: onConfigChanged is called with clearNotifiedErrors=true
+  // (dedicated assertion on the second argument, not buried in a combined test)
+  suite('clearNotifiedErrors flag', () => {
+
+    test('WATCH-06: onConfigChanged is called with clearNotifiedErrors=true so fix-then-break cycles re-notify', async () => {
+      const ctrlStub = {} as vscode.TestController;
+      const testData = new WeakMap();
+      const parserStub = { parseFilesForWorkspace: parseFilesForWorkspaceStub };
+
+      startWatchingConfigFiles(wkspUri, ctrlStub, testData, parserStub as never, onConfigChangedSpy);
+
+      const changeHandler = mockWatcher.onDidChange.firstCall.args[0];
+      changeHandler(configFileUri);
+
+      await clock.tickAsync(500);
+
+      assert.strictEqual(onConfigChangedSpy.callCount, 1,
+        'onConfigChanged should be called once after debounce');
+
+      const callArgs = onConfigChangedSpy.firstCall.args;
+      assert.deepStrictEqual(callArgs[0], [wkspUri],
+        'first argument should be [wkspUri]');
+      assert.strictEqual(callArgs[1], true,
+        'second argument (clearNotifiedErrors) must be true so re-notification fires on repeated config errors');
+    });
+
+  });
+
 });
