@@ -178,10 +178,10 @@ suite('checkRunGuard', () => {
     items: { forEach: () => { /* mock */ } },
   };
 
-  // Import checkRunGuard once — no module cache clearing needed since checkRunGuard
-  // uses the shared config singleton (clearing cache breaks the config reference chain).
+  // Import checkRunGuard and testRunHandler once — no module cache clearing needed since
+  // checkRunGuard uses the shared config singleton (clearing cache breaks the config reference chain).
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { checkRunGuard } = require('../../../src/runners/testRunHandler') as typeof import('../../../src/runners/testRunHandler');
+  const { checkRunGuard, testRunHandler } = require('../../../src/runners/testRunHandler') as typeof import('../../../src/runners/testRunHandler');
 
   let showWarningMessageStub: sinon.SinonStub;
   let executeCommandStub: sinon.SinonStub;
@@ -341,6 +341,60 @@ suite('checkRunGuard', () => {
     assert.ok(
       logArg.includes('Run guard: config error in'),
       `logInfo message should contain 'Run guard: config error in', got: "${logArg}"`
+    );
+  });
+
+  // Gap 6 — GUARD-03: guard fires for both regular runs AND debug sessions.
+  // Both run profiles in extension.ts call the same runHandler(debug, request) closure.
+  // The guard is inserted before the debug/run split, so it fires regardless of debug flag.
+  // Behavioral proof: invoke the full handler with debug=true and a config error that blocks
+  // the run — assert ctrl.createTestRun is never called (guard cancelled before TestRun creation).
+  test('GUARD-03: guard fires for debug=true sessions — cancels run before TestRun is created', async () => {
+    // Stub parser.featureParseComplete to return true so the featureParseComplete guard passes
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parserStub: any = {
+      featureParseComplete: sinon.stub().resolves(true),
+    };
+
+    // Stub ctrl with a spy on createTestRun to detect if a TestRun was created
+    const createTestRunSpy = sinon.spy();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ctrlStub: any = {
+      items: { forEach: () => { /* mock */ } },
+      createTestRun: createTestRunSpy,
+    };
+
+    // Stub a cancellation token source
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cancelSourceStub: any = { cancel: sinon.stub() };
+
+    // Wire up common stubs: config error present, user cancels
+    getDiscoveryEntryStub.returns(entryWithError);
+    getWorkspaceSettingsForFileStub.returns(mockWkspSettings);
+    showWarningMessageStub.resolves('Cancel');
+
+    // Create the runHandler closure with debug=true
+    const handler = testRunHandler(
+      new WeakMap(),
+      ctrlStub,
+      parserStub,
+      {} as never,  // junitWatcher (not reached before guard)
+      cancelSourceStub
+    );
+
+    const item = createMockItem(vscode.Uri.file('c:/test-workspace/features/test.feature'));
+    const request = createMockRequest([item]);
+
+    // Invoke with debug=true — guard should fire and cancel before TestRun creation
+    await handler(true, request);
+
+    assert.ok(
+      showWarningMessageStub.calledOnce,
+      'Guard should have shown warning message even when debug=true'
+    );
+    assert.ok(
+      createTestRunSpy.notCalled,
+      'ctrl.createTestRun must NOT be called when guard cancels — no dangling TestRun'
     );
   });
 
