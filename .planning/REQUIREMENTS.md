@@ -27,7 +27,7 @@ Requirements for config file watching and malformed config run guard. Each maps 
 ### Testing
 
 - [ ] **TEST-07**: Unit tests for watcher debounce logic and lifecycle management (dispose/recreate)
-- [ ] **TEST-08**: Integration test verifying config file change triggers test tree rebuild
+- [x] **TEST-08**: Integration test verifying config file change triggers test tree rebuild
 - [ ] **TEST-09**: Unit test for run guard configError check and user response handling
 
 ## Future Requirements
@@ -73,7 +73,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GUARD-03 | Phase 4 | Pending |
 | GUARD-04 | Phase 4 | Pending |
 | TEST-07 | Phase 4 | Pending |
-| TEST-08 | Phase 5 | Pending |
+| TEST-08 | Phase 5 | Complete |
 | TEST-09 | Phase 4 | Pending |
 
 **Coverage:**
