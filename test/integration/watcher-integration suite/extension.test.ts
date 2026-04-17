@@ -71,7 +71,7 @@ suite('watcher-integration suite', () => {
 			fs.unlinkSync(behaveIniPath);
 
 			// Wait for: (a) cache entry source flipped to convention, (b) the default-path scenario still visible in tree.
-			// D-11/D-12: 100ms poll, 5000ms timeout — comfortably covers 500ms debounce + parse + CI slack.
+			// D-11/D-12: 100ms poll, 15000ms timeout — covers 500ms debounce + parse + Windows FS watcher latency (1-5s for delete events).
 			const state = await waitForTestTree(
 				() => {
 					const entry = getDiscoveryEntry(wkspUri);
@@ -81,7 +81,7 @@ suite('watcher-integration suite', () => {
 					if (!scenario) return undefined;
 					return { entry, scenario };
 				},
-				{ intervalMs: 100, timeoutMs: 5000 }
+				{ intervalMs: 100, timeoutMs: 15000 }
 			);
 
 			// D-17/D-18: assert on observable state (cache + tree), not logs.
@@ -111,7 +111,7 @@ suite('watcher-integration suite', () => {
 					if (!scenario) return undefined;
 					return { entry, scenario };
 				},
-				{ intervalMs: 100, timeoutMs: 5000 }
+				{ intervalMs: 100, timeoutMs: 15000 }
 			);
 
 			assert.strictEqual(state.entry.source, 'config-file', 'after create, source should be config-file');
@@ -144,7 +144,7 @@ suite('watcher-integration suite', () => {
 					if (altScenario) return undefined; // alt scenario must be gone
 					return { entry, scenario };
 				},
-				{ intervalMs: 100, timeoutMs: 5000 }
+				{ intervalMs: 100, timeoutMs: 15000 }
 			);
 
 			assert.strictEqual(state.entry.source, 'config-file', 'after change, source should remain config-file');
