@@ -49,11 +49,11 @@ Plans:
   2. Test suite runs green in CI alongside existing 17 integration test suites with no new flakiness
 **Plans:** 5 plans
 Plans:
-- [ ] 05-01-PLAN.md — Fixture scaffolding: example-projects/watcher-integration/ with behave.ini + features/ + features-alt/
-- [ ] 05-02-PLAN.md — Shared poll helper: test/integration/suite-shared/waitForTestTree.ts
-- [ ] 05-03-PLAN.md — Watcher integration suite: delete/create/change tests in extension.test.ts + index.ts
-- [ ] 05-04-PLAN.md — Run-guard integration suite: three-branch tests in runGuard.test.ts
-- [ ] 05-05-PLAN.md — Register 18th suite in runTestSuites.ts + three-runs flakiness gate + close TEST-08
+- [x] 05-01-PLAN.md — Fixture scaffolding: example-projects/watcher-integration/ with behave.ini + features/ + features-alt/
+- [x] 05-02-PLAN.md — Shared poll helper: test/integration/suite-shared/waitForTestTree.ts
+- [x] 05-03-PLAN.md — Watcher integration suite: delete/create/change tests in extension.test.ts + index.ts
+- [x] 05-04-PLAN.md — Run-guard integration suite: three-branch tests in runGuard.test.ts
+- [x] 05-05-PLAN.md — Register 18th suite in runTestSuites.ts + three-runs flakiness gate + close TEST-08
 
 ### Phase 6: v1.1 Tech Debt & Admin Cleanup
 **Goal**: Close code review findings and planning hygiene issues identified by the v1.1 milestone audit so v1.1 ships clean
