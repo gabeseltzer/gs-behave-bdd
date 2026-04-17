@@ -68,8 +68,8 @@ Plans:
   5. `npx eslint src --ext ts` and `npm run test:unit` both pass clean after code fixes
 **Plans:** 2 plans
 Plans:
-- [ ] 06-01-PLAN.md — Code fixes: WR-01, WR-02, IN-01, IN-02 in testRunHandler.ts + configWatcher.ts
-- [ ] 06-02-PLAN.md — Admin: requirements_completed frontmatter + REQUIREMENTS.md traceability updates
+- [x] 06-01-PLAN.md — Code fixes: WR-01, WR-02, IN-01, IN-02 in testRunHandler.ts + configWatcher.ts
+- [x] 06-02-PLAN.md — Admin: requirements_completed frontmatter + REQUIREMENTS.md traceability updates
 
 ## Progress
 
@@ -80,4 +80,4 @@ Plans:
 | 3. UX & Verification | v1.0 | 2/2 | Complete | 2026-04-16 |
 | 4. Watcher & Run Guard | v1.1 | 2/2 | Code-complete (UAT pending; obsoleted by Phase 5) | - |
 | 5. Integration Verification | v1.1 | 0/5 | Planned | - |
-| 6. v1.1 Tech Debt & Admin Cleanup | v1.1 | 0/2 | Planned | - |
+| 6. v1.1 Tech Debt & Admin Cleanup | v1.1 | 2/2 | Complete | 2026-04-17 |
