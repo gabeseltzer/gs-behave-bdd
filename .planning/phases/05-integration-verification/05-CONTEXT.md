@@ -29,7 +29,7 @@ Deliver an automated integration test suite that exercises the Phase 4 config-wa
   - Test A (`delete`): start from fixture-with-`behave.ini`, delete it, assert the test tree falls back to convention and shows scenarios from `features/`.
   - Test B (`create`): starts from no-config state left by Test A, writes a new `behave.ini` with `paths = features-alt`, asserts tree now shows scenarios from `features-alt/`.
   - Test C (`change`): starts from Test B's state, rewrites `behave.ini` to `paths = features`, asserts tree switches back to `features/`.
-- **D-09:** Original `behave.ini` content snapshotted in `suiteSetup`, restored in `suiteTeardown`. `try`/`finally` inside each `test()` restores the file if an assertion throws, so an abandoned mid-run does not poison the next CI run or leave dirty git state.
+- **D-09:** Original `behave.ini` content snapshotted in `suiteSetup`, restored in `suiteTeardown`. `try`/`finally` inside each `test()` is a belt-and-suspenders scaffold around the authoritative `suiteTeardown` recovery mechanism — the finally blocks intentionally do NOT restore baseline between tests, because D-08 chains test state (each test's end state is the next test's start state). The restore-on-throw semantics for CI cleanliness are delivered by `suiteTeardown`, which runs regardless of per-test outcomes.
 - **D-10:** Run-guard test lives in the same suite but runs AFTER the watcher tests (separate `suite()` block within the suite file, or a sibling `.test.ts`). Uses `example-projects/watcher-integration/` with the `behave.ini` temporarily mutated to malformed content, then restored in teardown.
 
 ### Wait / Sync Strategy
@@ -40,7 +40,7 @@ Deliver an automated integration test suite that exercises the Phase 4 config-wa
 ### Run Guard Test Strategy
 - **D-14:** Run-guard test stubs `vscode.window.showWarningMessage` via `sinon.stub` to return a predetermined button response (one test per branch: `Run Anyway` / `Open Config File` / `Cancel`). No real modal — eliminates CI hang risk.
 - **D-15:** Run-guard test triggers `checkRunGuard` (or the equivalent entry point in `testRunHandler`) against a `TestRunRequest` scoped to the malformed workspace; asserts (a) the stub was called with a message containing the expected filename, (b) the run proceeds or is cancelled per the stubbed branch, (c) `vscode.window.showTextDocument` (or `vscode.commands.executeCommand('vscode.open', ...)`) was invoked for the `Open Config File` branch.
-- **D-16:** Malformed-config state set up by writing bad TOML to `example-projects/watcher-integration/pyproject.toml` (or introducing a syntax error in `behave.ini`) in the guard test's `setup`, and restored in its `teardown`. Does not touch the same `behave.ini` file the watcher tests manipulate — keeps test state orthogonal.
+- **D-16:** Malformed-config state is delivered by writing bad TOML to `example-projects/watcher-integration/pyproject.toml` in the run-guard test's `setup()`. **Config-file precedence constraint:** `src/parsers/configParser.ts` iterates `CONFIG_FILES` in priority order `[behave.ini, .behaverc, setup.cfg, tox.ini, pyproject.toml]` and `searchConfigFiles` returns on the first successful hit (`if (result.ok) return result`). Because Plan 05-01 ships a valid `behave.ini`, the parser would never reach `pyproject.toml` and `configError` would stay `undefined`, defeating the run-guard test. Therefore the run-guard `setup()` MUST transiently remove (and `teardown()` MUST restore) `behave.ini` — this is the only way the parser advances to `pyproject.toml` and populates `configError`. The mutation is scoped strictly to the run-guard `setup`/`teardown` pair: content is read-into-memory snapshot, file is unlinked, `getUrisOfWkspFoldersWithFeatures(true)` forces cache refresh, then reverse in teardown. D-10 already guarantees the run-guard suite runs AFTER the watcher tests, so deleting `behave.ini` at that point does not conflict with watcher-test state. The "keep test state orthogonal" spirit is preserved by strict snapshot-restore discipline: the `behave.ini` mutation is per-test, bounded in setup/teardown, and invisible to any test outside the run-guard suite. `pyproject.toml` is similarly written in `setup()` and unlinked in `teardown()` — never committed.
 
 ### Telemetry & Assertion Shape
 - **D-17:** Tests assert on observable extension state (test tree contents, cache entries via `getDiscoveryEntry`, stub invocations) rather than on `diagLog` / output-channel text. Logs are brittle to format changes and `xRay` setting state; cache + tree are the contract surface.
@@ -83,6 +83,7 @@ Deliver an automated integration test suite that exercises the Phase 4 config-wa
 - `src/extension.ts` — `configurationChangedHandler`, `wkspConfigWatchers` lifecycle, `integrationTestRun` flag, `TestSupport` export
 - `src/runners/testRunHandler.ts` — `checkRunGuard` or equivalent, the SUT for the run-guard suite
 - `src/common.ts` — `getDiscoveryEntry`, `getUrisOfWkspFoldersWithFeatures`, `DiscoveryEntry.configError`, `uriId`
+- `src/parsers/configParser.ts` — `CONFIG_FILES` priority array and `searchConfigFiles` first-hit-wins semantics (D-16 precedence constraint)
 
 ### Test Infrastructure Patterns (must mirror)
 - `.planning/codebase/TESTING.md` — Mocha TDD UI (`suite()`/`test()`), Sinon sandbox pattern, integration test `@vscode/test-electron` bootstrap
@@ -114,6 +115,7 @@ Deliver an automated integration test suite that exercises the Phase 4 config-wa
 - **Fixture projects:** Live under `example-projects/`, one directory per workspace. Referenced by relative path in `runTestSuites.ts` `launchArgs`.
 - **Debounce pattern (production):** `configDebounceTimers: Map<string, NodeJS.Timeout>` keyed on `wkspUri.path` with 500ms. Tests must wait longer than 500ms.
 - **Cache assertion:** `getDiscoveryEntry(wkspUri)` returns the `DiscoveryEntry` including `source`, `featuresUri`, `configError`. Authoritative post-watcher state.
+- **Config-file precedence (D-16 constraint):** `src/parsers/configParser.ts` `CONFIG_FILES` = `[behave.ini, .behaverc, setup.cfg, tox.ini, pyproject.toml]`. `searchConfigFiles` returns on the first valid hit. A malformed `pyproject.toml` is only reachable by the parser when all earlier files are absent or also malformed — so the run-guard test MUST remove `behave.ini` transiently in its setup.
 
 ### Integration Points
 - New suite file: `test/integration/watcher-integration suite/extension.test.ts` — entry point compiled to `out/test/integration/watcher-integration suite/extension.test.js`.
