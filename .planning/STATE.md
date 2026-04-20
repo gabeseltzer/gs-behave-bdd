@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Multi-Path & Monorepo-Aware Discovery
-status: Roadmap drafted; ready for `/gsd-plan-phase 7`
-stopped_at: Phase 7 context gathered
-last_updated: "2026-04-17T20:42:05.832Z"
-last_activity: 2026-04-17 — v1.2 roadmap created (5 phases, 20 requirements mapped)
+status: Phase 7 complete; ready for Phase 8
+stopped_at: Phase 7 complete
+last_updated: "2026-04-20"
+last_activity: 2026-04-20 — Phase 7 complete (3 plans, 569 tests, plural types end-to-end)
 progress:
   total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  completed_phases: 1
+  total_plans: 3
+  completed_plans: 3
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17 — v1.2 milestone started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** v1.2 Multi-Path & Monorepo-Aware Discovery — multi-value `paths=` support + depth-3 subdirectory scan with first-match-wins; phase 7 (types) is next.
+**Current focus:** v1.2 Multi-Path & Monorepo-Aware Discovery — multi-value `paths=` support + depth-3 subdirectory scan with first-match-wins; phase 8 (consumers) is next.
 
 ## Current Position
 
-Phase: 7 — Internal Multi-Path Types (not started)
+Phase: 8 — Parser / Test-Tree / Watcher Multi-Root Iteration (not started)
 Plan: —
-Status: Roadmap drafted; ready for `/gsd-plan-phase 7`
-Last activity: 2026-04-17 — v1.2 roadmap created (5 phases, 20 requirements mapped)
+Status: Phase 7 complete; ready for `/gsd-plan-phase 8`
+Last activity: 2026-04-20 — Phase 7 complete (3 plans, 569 tests, plural types end-to-end)
 
 ## Performance Metrics
 
