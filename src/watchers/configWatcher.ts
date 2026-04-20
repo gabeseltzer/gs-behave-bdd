@@ -3,7 +3,8 @@ import { config } from '../configuration';
 import { diagLog } from '../logger';
 import { FileParser } from '../parsers/fileParser';
 import { TestData } from '../parsers/testFile';
-import { getUrisOfWkspFoldersWithFeatures, uriId } from '../common';
+import { getUrisOfWkspFoldersWithFeatures, uriId, getDiscoveryEntry } from '../common';
+import { clearScanResultCache } from '../discovery/configScanner';
 
 
 const CONFIG_GLOB = '{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}';
@@ -27,9 +28,7 @@ export function startWatchingConfigFiles(
   onConfigChanged: (wkspUris: vscode.Uri[], clearNotifiedErrors: boolean) => void
 ): vscode.FileSystemWatcher[] {
 
-  // Use brace-expansion glob — bare filenames silently fail (VS Code bug #164925, PITFALL-02)
-  const pattern = new vscode.RelativePattern(wkspUri, CONFIG_GLOB);
-  const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+  const watchers: vscode.FileSystemWatcher[] = [];
 
   const handler = (eventUri: vscode.Uri, eventType: string) => {
     if (eventUri.scheme !== 'file') return;
@@ -50,6 +49,8 @@ export function startWatchingConfigFiles(
           `Config file changed: ${filename} — re-discovering features...`,
           wkspUri
         );
+        // Phase 9: Clear scan cache so force-refresh triggers a full re-evaluation
+        clearScanResultCache();
         // Direct cache invalidation — do NOT call configurationChangedHandler (PITFALL-04):
         // configurationChangedHandler has an integrationTestRun early-exit guard that would
         // silently skip re-discovery during integration tests.
@@ -65,10 +66,27 @@ export function startWatchingConfigFiles(
     configDebounceTimers.set(key, timer);
   };
 
-  // Register all three event types (WATCH-02, PITFALL-10)
-  watcher.onDidCreate(uri => handler(uri, 'create'));
-  watcher.onDidChange(uri => handler(uri, 'change'));
-  watcher.onDidDelete(uri => handler(uri, 'delete'));
+  // Tier 1: Narrow watcher at discovered config file's parent directory (fast, specific)
+  const entry = getDiscoveryEntry(wkspUri);
+  if (entry?.configFileUri) {
+    const configDir = vscode.Uri.joinPath(entry.configFileUri, '..');
+    const narrowPattern = new vscode.RelativePattern(configDir, CONFIG_GLOB);
+    const narrowWatcher = vscode.workspace.createFileSystemWatcher(narrowPattern);
+    narrowWatcher.onDidCreate(uri => handler(uri, 'create'));
+    narrowWatcher.onDidChange(uri => handler(uri, 'change'));
+    narrowWatcher.onDidDelete(uri => handler(uri, 'delete'));
+    watchers.push(narrowWatcher);
+    diagLog(`configWatcher: Tier 1 narrow watcher at ${configDir.fsPath}`, wkspUri);
+  }
 
-  return [watcher];
+  // Tier 2: Recursive watcher for new config appearances anywhere in workspace
+  const recursivePattern = new vscode.RelativePattern(wkspUri, `**/${CONFIG_GLOB}`);
+  const recursiveWatcher = vscode.workspace.createFileSystemWatcher(recursivePattern);
+  recursiveWatcher.onDidCreate(uri => handler(uri, 'create'));
+  recursiveWatcher.onDidChange(uri => handler(uri, 'change'));
+  recursiveWatcher.onDidDelete(uri => handler(uri, 'delete'));
+  watchers.push(recursiveWatcher);
+  diagLog(`configWatcher: Tier 2 recursive watcher at ${wkspUri.fsPath}/**/${CONFIG_GLOB}`, wkspUri);
+
+  return watchers;
 }
