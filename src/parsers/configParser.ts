@@ -10,7 +10,7 @@ import { parse as parseToml } from 'smol-toml';
 // Discriminated union: ok:true = success, ok:false = config file found but malformed (D-05)
 // undefined return from findBehaveConfig = no config file found at all (not an error)
 export type BehaveConfigResult =
-  | { ok: true; configFileUri: vscode.Uri; format: 'ini' | 'toml'; rawPaths: string[]; resolvedPath: vscode.Uri }
+  | { ok: true; configFileUri: vscode.Uri; format: 'ini' | 'toml'; rawPaths: string[]; resolvedPaths: vscode.Uri[] }
   | { ok: false; configFileUri: vscode.Uri; errorMessage: string };
 
 // Priority-ordered list of config filenames behave recognises, mapped to their format.
@@ -152,20 +152,28 @@ function parseTomlConfig(fileUri: vscode.Uri): BehaveConfigResult | undefined {
   return buildResult(fileUri, 'toml', rawPaths);
 }
 
-// Resolves rawPaths[0] against the config file's directory.
-// v1: only the first path is resolved (D-03, D-04); all paths are captured in rawPaths[].
+// Private helper (D-10 — colocated in configParser per CONTEXT.md Claude's Discretion).
+// Converts Windows-style backslashes to forward slashes before URI construction.
+// Not exported — only caller is resolvePaths below.
+function normalizeSeparators(rawPath: string): string {
+  return rawPath.replaceAll('\\', '/');
+}
+
+// Resolves every entry of rawPaths against the config file's directory.
+// Applies Windows backslash -> forward slash normalization per entry (D-10).
+// Returns a non-empty Uri[] (D-05 — rawPaths is guaranteed non-empty by callers).
 // Source: bundled/libs/behave/configuration.py path resolution ~lines 547-555
-function resolvePaths(rawPaths: string[], configFileUri: vscode.Uri): vscode.Uri {
+function resolvePaths(rawPaths: string[], configFileUri: vscode.Uri): vscode.Uri[] {
   const configDirUri = vscode.Uri.joinPath(configFileUri, '..');
-  const rawPath = rawPaths[0];
-
-  // Absolute path detection: Unix (/...) or Windows (C:\... or C:/...)
-  if (rawPath.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(rawPath)) {
-    return vscode.Uri.file(rawPath);
-  }
-
-  // Relative path: resolve against config file's directory
-  return vscode.Uri.joinPath(configDirUri, rawPath);
+  return rawPaths.map(rawPath => {
+    const normalized = normalizeSeparators(rawPath);
+    // Absolute path detection: Unix (/...) or Windows (C:\... or C:/... — post-normalize both become C:/...)
+    if (normalized.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(normalized)) {
+      return vscode.Uri.file(normalized);
+    }
+    // Relative path: resolve against config file's directory
+    return vscode.Uri.joinPath(configDirUri, normalized);
+  });
 }
 
 function buildResult(
@@ -178,6 +186,6 @@ function buildResult(
     configFileUri,
     format,
     rawPaths,
-    resolvedPath: resolvePaths(rawPaths, configFileUri),
+    resolvedPaths: resolvePaths(rawPaths, configFileUri),
   };
 }

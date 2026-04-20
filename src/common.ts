@@ -252,7 +252,9 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     if (configResult) {
       if (configResult.ok) {
         // Config file found with valid paths -- use it
-        const featuresUri = configResult.resolvedPath;
+        // Phase 7 bridge: Plan 02 migrates DiscoveryEntry to plural and reads all entries.
+        // In this plan we only keep the TS compile green by reading [0] — same single-path semantics as v1.1.
+        const featuresUri = configResult.resolvedPaths[0];
         if (fs.existsSync(featuresUri.fsPath)) {
           discoveryCache.set(uriId(folder.uri), {
             source: "config-file",
