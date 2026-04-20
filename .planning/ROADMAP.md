@@ -81,7 +81,11 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
   4. Setting `gs-behave-bdd.discoveryDepth: 0` restores v1.1 behavior exactly (workspace-root-only scan) with no subdir traversal
   5. Editing or deleting the currently-discovered subdirectory config fires the config watcher correctly (two-tier strategy: narrow watcher at the discovered config's directory + `**/` fallback only when no config is discovered); the tree rebuilds via `waitForTestTree` predicate
   6. Setting `gs-behave-bdd.projectPath` manually still overrides scan results — the v1.0 priority chain (manual > config > convention) is preserved and re-tested
-**Plans**: TBD
+**Plans**: 3 plans
+**Plans:**
+- [ ] 09-01-PLAN.md — Settings declarations + DiscoveryEntry type extension
+- [ ] 09-02-PLAN.md — configScanner.ts BFS module + unit tests (TEST-11)
+- [ ] 09-03-PLAN.md — Integration wiring, async IIFE, multi-config UX, two-tier watcher
 
 ### Phase 10: `featuresPaths` User-Facing Settings Key
 **Goal**: Users can opt into multi-path discovery via a new `gs-behave-bdd.featuresPaths: string[]` setting in settings.json, and legacy `featuresPath` keeps working unchanged; when both are set, the plural value wins with a one-line info log
@@ -119,6 +123,6 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 | 6. v1.1 Tech Debt & Admin Cleanup | v1.1 | 2/2 | Complete | 2026-04-17 |
 | 7. Internal Multi-Path Types | v1.2 | 3/3 | Complete | 2026-04-20 |
 | 8. Parser / Test-Tree / Watcher Multi-Root Iteration | v1.2 | 0/3 | Not started | - |
-| 9. Subdirectory Config Scan | v1.2 | 0/? | Not started | - |
+| 9. Subdirectory Config Scan | v1.2 | 0/3 | Not started | - |
 | 10. `featuresPaths` User-Facing Settings Key | v1.2 | 0/? | Not started | - |
 | 11. UX Polish + Regression Hardening | v1.2 | 0/? | Not started | - |
