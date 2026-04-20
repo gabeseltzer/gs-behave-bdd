@@ -5,7 +5,8 @@ import { WorkspaceSettings } from "../settings";
 import { deleteFeatureFileSteps, getFeatureFileSteps, getFeatureNameFromContent } from './featureParser';
 import {
   countTestItemsInCollection, getAllTestItems, uriId, getWorkspaceFolder,
-  getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem, couldBePythonStepsFile
+  getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem, couldBePythonStepsFile,
+  getFeaturesRootForFile, getDiscoveryEntry, urisMatch
 } from '../common';
 import { getStepFileSteps, deleteStepFileSteps } from './stepsParser';
 import { deleteFixtures, storePythonFixtureDefinitions } from './fixtureParser';
@@ -140,18 +141,21 @@ export class FileParser {
       controller.items.delete(item.id);
     }
 
-    deleteFeatureFileSteps(wkspSettings.featuresUri);
-    deleteStepMappings(wkspSettings.featuresUri);
+    for (const root of wkspSettings.featuresUris) {
+      deleteFeatureFileSteps(root);
+      deleteStepMappings(root);
+    }
 
-    // replaced with custom findFiles function for now (see comment in findFiles function)
-    //const pattern = new vscode.RelativePattern(wkspSettings.uri, `${wkspSettings.workspaceRelativeFeaturesPath}/**/*.feature`);
-    //const featureFiles = await vscode.workspace.findFiles(pattern, null, undefined, cancelToken);
     const findFilesStart = performance.now();
-    const featureFiles = await findFiles(wkspSettings.featuresUri, undefined, ".feature", cancelToken);
+    const featureFiles: vscode.Uri[] = [];
+    for (const root of wkspSettings.featuresUris) {
+      const files = await findFiles(root, undefined, ".feature", cancelToken);
+      featureFiles.push(...files);
+    }
     diagLog(`${caller}: _parseFeatureFiles findFiles took ${Math.round(performance.now() - findFilesStart)}ms, found ${featureFiles.length} feature files`);
 
     if (featureFiles.length < 1 && !cancelToken.isCancellationRequested)
-      throw `No feature files found in ${wkspSettings.featuresUri.fsPath}`;
+      throw `No feature files found in ${wkspSettings.featuresUris.map(u => u.fsPath).join(", ")}`;
 
     const parseLoopStart = performance.now();
     let processed = 0;
@@ -176,13 +180,20 @@ export class FileParser {
   private _parseStepsFiles = async (wkspSettings: WorkspaceSettings, cancelToken: vscode.CancellationToken,
     caller: string): Promise<number> => {
 
-    // Single findFiles call for all .py files — used to find step directories
+    // Search all step directories across all roots
     const findFilesStart = performance.now();
-    const searchInFeatures = wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path);
-    // When stepsSearchUri is inside featuresUri, search from featuresUri;
-    // otherwise search from stepsSearchUri (the broader path)
-    const searchUri = searchInFeatures ? wkspSettings.featuresUri : wkspSettings.stepsSearchUri;
-    const allPyFiles = await findFiles(searchUri, undefined, ".py", cancelToken);
+    let allPyFiles: vscode.Uri[] = [];
+    for (let i = 0; i < wkspSettings.featuresUris.length; i++) {
+      const featUri = wkspSettings.featuresUris[i];
+      const stepsUri = wkspSettings.stepsSearchUris[i];
+      const searchInFeatures = stepsUri.path.startsWith(featUri.path);
+      const searchUri = searchInFeatures ? featUri : stepsUri;
+      const pyFiles = await findFiles(searchUri, undefined, ".py", cancelToken);
+      allPyFiles.push(...pyFiles);
+    }
+    // Dedup in case of overlapping search paths
+    const seenPy = new Set<string>();
+    allPyFiles = allPyFiles.filter(f => { const id = uriId(f); if (seenPy.has(id)) return false; seenPy.add(id); return true; });
     diagLog(`${caller}: _parseStepsFiles findFiles took ${Math.round(performance.now() - findFilesStart)}ms, found ${allPyFiles.length} .py files`);
 
     const stepFiles = allPyFiles.filter(uri => isStepsFile(uri));
@@ -347,7 +358,33 @@ export class FileParser {
       }
     }
 
+    // Determine the owning root for this feature file
+    const root = getFeaturesRootForFile(wkspSettings, uri) ?? wkspSettings.featuresUri;
 
+    // Path-group intermediate nodes (D-01, D-02): show when paths come from config or multi-path
+    const entry = getDiscoveryEntry(wkspSettings.uri);
+    const showPathGroups = (entry?.source === 'config-file') || wkspSettings.featuresUris.length > 1;
+
+    let pathGroupParent: vscode.TestItem | undefined;
+    if (showPathGroups) {
+      const pathGroupId = uriId(root);
+      const rootIndex = wkspSettings.featuresUris.findIndex(u => urisMatch(u, root));
+      const pathGroupLabel = (rootIndex >= 0 ? wkspSettings.projectRelativeFeaturesPaths[rootIndex] : "features") + "/";
+
+      pathGroupParent = wkspGrandParent
+        ? wkspGrandParent.children.get(pathGroupId)
+        : controller.items.get(pathGroupId);
+
+      if (!pathGroupParent) {
+        pathGroupParent = controller.createTestItem(pathGroupId, pathGroupLabel);
+        pathGroupParent.canResolveChildren = true;
+        if (wkspGrandParent) {
+          wkspGrandParent.children.add(pathGroupParent);
+        } else {
+          controller.items.add(pathGroupParent);
+        }
+      }
+    }
 
     // build folder hierarchy above test item
     // build top-down in case parent folder gets renamed/deleted etc.
@@ -356,17 +393,17 @@ export class FileParser {
     let firstFolder: vscode.TestItem | undefined = undefined;
     let parent: vscode.TestItem | undefined = undefined;
     let current: vscode.TestItem | undefined;
-    const sfp = uri.path.substring(wkspSettings.featuresUri.path.length + 1);
+    const sfp = uri.path.substring(root.path.length + 1);
     if (sfp.includes("/")) {
 
       const folders = sfp.split("/").slice(0, -1);
       for (let i = 0; i < folders.length; i++) {
         const path = folders.slice(0, i + 1).join("/");
         const folderName = "\uD83D\uDCC1 " + folders[i]; // folder icon
-        const folderTestItemId = `${uriId(wkspSettings.featuresUri)}/${path}`;
+        const folderTestItemId = `${uriId(root)}/${path}`;
 
         if (i === 0)
-          parent = wkspGrandParent;
+          parent = pathGroupParent ?? wkspGrandParent;
 
         if (parent)
           current = parent.children.get(folderTestItemId);
@@ -395,11 +432,16 @@ export class FileParser {
       }
     }
 
-    if (wkspGrandParent) {
+    if (pathGroupParent) {
+      if (firstFolder) {
+        pathGroupParent.children.add(firstFolder);
+      } else {
+        pathGroupParent.children.add(testItem);
+      }
+    } else if (wkspGrandParent) {
       if (firstFolder) {
         wkspGrandParent.children.add(firstFolder);
-      }
-      else {
+      } else {
         wkspGrandParent.children.add(testItem);
       }
     }
@@ -509,7 +551,9 @@ export class FileParser {
       diagLog(`${callName}: steps loaded`);
 
       const updateMappingsStart = performance.now();
-      mappingsCount = rebuildStepMappings(wkspSettings.featuresUri);
+      for (const root of wkspSettings.featuresUris) {
+        mappingsCount += rebuildStepMappings(root, wkspSettings.featuresUri);
+      }
       buildMappingsTime = performance.now() - updateMappingsStart;
       diagLog(`${callName}: stepmappings built`);
 
@@ -541,8 +585,10 @@ export class FileParser {
         featureFilesExceptEmptyOrCommentedOut: featureFileCount,
         stepFilesExceptEmptyOrCommentedOut: stepFileCount,
         stepFileStepsExceptCommentedOut: getStepFileSteps(wkspSettings.featuresUri).length,
-        featureFileStepsExceptCommentedOut: getFeatureFileSteps(wkspSettings.featuresUri).length,
-        stepMappings: getStepMappings(wkspSettings.featuresUri).length
+        featureFileStepsExceptCommentedOut: wkspSettings.featuresUris.reduce(
+          (sum, u) => sum + getFeatureFileSteps(u).length, 0),
+        stepMappings: wkspSettings.featuresUris.reduce(
+          (sum, u) => sum + getStepMappings(u).length, 0)
       };
     }
     catch (e: unknown) {
@@ -592,7 +638,8 @@ export class FileParser {
       try {
         this._reparsingFile = true;
         await this._updateTestItemFromFeatureFileContent(wkspSettings, content, testData, ctrl, fileUri, "reparseFile", false);
-        rebuildStepMappings(wkspSettings.featuresUri);
+        const root = getFeaturesRootForFile(wkspSettings, fileUri) ?? wkspSettings.featuresUri;
+        rebuildStepMappings(root, wkspSettings.featuresUri);
       }
       catch (e: unknown) {
         config.logger.showError(e, wkspSettings.uri);
@@ -697,7 +744,9 @@ export class FileParser {
           this._showStepLoadWarning(errMsg, wkspSettings.uri);
         }
 
-        rebuildStepMappings(wkspSettings.featuresUri);
+        for (const root of wkspSettings.featuresUris) {
+          rebuildStepMappings(root, wkspSettings.featuresUri);
+        }
         this.onStepMappingsRebuilt?.(wkspSettings.featuresUri);
       }
       catch (e: unknown) {

@@ -199,18 +199,30 @@ function getjUnitName(wkspSettings: WorkspaceSettings, featureFileName: string, 
 
   const featureFileStem = featureFileName.replace(/.feature$/, "");
 
-  // default
-  let dotSubFolders = featureFileWorkspaceRelativePath.replace(
-    wkspSettings.workspaceRelativeFeaturesPath + "/", "").split("/").slice(0, -1).join(".");
+  // Find the matching features root for this feature file's relative path
+  let matchingRelPath = wkspSettings.workspaceRelativeFeaturesPath; // default to primary
+  for (const relPath of wkspSettings.workspaceRelativeFeaturesPaths) {
+    if (featureFileWorkspaceRelativePath.startsWith(relPath + "/")) {
+      matchingRelPath = relPath;
+      break;
+    }
+  }
 
-  // if features and steps are sibling folders
-  if (!wkspSettings.stepsSearchUri.path.startsWith(wkspSettings.featuresUri.path)) {
+  let dotSubFolders = featureFileWorkspaceRelativePath.replace(
+    matchingRelPath + "/", "").split("/").slice(0, -1).join(".");
+
+  // sibling-steps check: use the matching root's stepsSearchUri/featuresUri pair
+  const rootIndex = wkspSettings.workspaceRelativeFeaturesPaths.indexOf(matchingRelPath);
+  const stepsUri = rootIndex >= 0 ? wkspSettings.stepsSearchUris[rootIndex] : wkspSettings.stepsSearchUri;
+  const featUri = rootIndex >= 0 ? wkspSettings.featuresUris[rootIndex] : wkspSettings.featuresUri;
+
+  if (!stepsUri.path.startsWith(featUri.path)) {
     if (featureFileWorkspaceRelativePath === "features/" + featureFileName) {
       dotSubFolders = featureFileWorkspaceRelativePath.split("/").slice(0, -1).join(".");
     }
     else {
       if (os.platform() === "win32") {
-        const lastDir = wkspSettings.workspaceRelativeFeaturesPath.split("/").pop();
+        const lastDir = matchingRelPath.split("/").pop();
         if (lastDir === "features")
           dotSubFolders = dotSubFolders ? lastDir + "." + dotSubFolders : lastDir;
       }
