@@ -93,6 +93,26 @@
 					"type": "boolean",
 					"markdownDescription": "⚠️ **Warning:** Enabling this may log sensitive information to the output channel, including the full contents of your environment variable presets.\n\nWhen enabled, additional developer debugging information is written to the output channel.",
 					"default": false
+				},
+				"gs-behave-bdd.discoveryDepth": {
+					"scope": "resource",
+					"type": "number",
+					"minimum": 0,
+					"maximum": 10,
+					"markdownDescription": "Maximum directory depth to scan for behave config files (behave.ini, .behaverc, etc.) when no config is found at the workspace root. Set to `0` to disable subdirectory scanning and restore workspace-root-only behavior.",
+					"default": 3
+				},
+				"gs-behave-bdd.discoveryStopOnFirstHit": {
+					"scope": "resource",
+					"type": "boolean",
+					"markdownDescription": "When enabled, the subdirectory config scanner stops at the first depth level that yields a behave config file. When disabled (default), the scanner always scans to `discoveryDepth` so it can report all found configs.",
+					"default": false
+				},
+				"gs-behave-bdd.suppressMultiConfigNotification": {
+					"scope": "resource",
+					"type": "boolean",
+					"markdownDescription": "Suppress the notification shown when multiple behave config files are found in subdirectories. Scan results are always logged to the output channel regardless of this setting.",
+					"default": false
 				}
 			}
 		},
