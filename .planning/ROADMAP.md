@@ -32,7 +32,7 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 
 ### v1.2 Multi-Path & Monorepo-Aware Discovery (Phases 7-11)
 
-- [ ] **Phase 7: Internal Multi-Path Types** — Introduce primary-plus-list plural types end-to-end (`featuresUris[]`, `resolvedPaths[]`) with singular getters so the codebase still compiles
+- [x] **Phase 7: Internal Multi-Path Types** — Introduce primary-plus-list plural types end-to-end (`featuresUris[]`, `resolvedPaths[]`) with singular getters so the codebase still compiles — completed 2026-04-20 (3/3 plans)
 - [ ] **Phase 8: Parser / Test-Tree / Watcher Multi-Root Iteration** — Make every consumer iterate/union/per-root-scope across `featuresUris[]`; user-visible multi-path when a behave.ini already lists multiple `paths=` entries
 - [ ] **Phase 9: Subdirectory Config Scan** — New `src/discovery/configScanner.ts` module: BFS depth-3 default, `discoveryDepth` setting, first-match-wins + `alsoFoundConfigs` notification, two-tier config watcher
 - [ ] **Phase 10: `featuresPaths` User-Facing Settings Key** — `gs-behave-bdd.featuresPaths: string[]` in package.json; plural wins over singular `featuresPath`; legacy key still honored
