@@ -350,13 +350,11 @@ export const getWorkspaceSettingsForFile = (fileorFolderUri: vscode.Uri | undefi
 // false positives (e.g. /features matching /featuresA — see Pitfall 3); urisMatch handles
 // the exact-root case where fileUri === root.
 // Dead code in Phase 7 — Phase 8 per-document-root scoping handlers call it.
-// Phase 7: reads singular featuresUri; Plan 03 migrates to featuresUris[] and this becomes a loop.
 export function getFeaturesRootForFile(
   wkspSettings: WorkspaceSettings,
   fileUri: vscode.Uri
 ): vscode.Uri | undefined {
-  const roots = [wkspSettings.featuresUri]; // Phase 7: length-1; Plan 03 replaces with featuresUris
-  return roots.find(
+  return wkspSettings.featuresUris.find(
     root => fileUri.path.startsWith(root.path + '/') || urisMatch(root, fileUri)
   );
 }
