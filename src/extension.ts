@@ -76,11 +76,11 @@ function updateDiscoveryUX(
     if (entry.configFileUri) {
       config.logger.logInfo(`Config file: ${entry.configFileUri.fsPath}`, wkspUri);
     }
-    config.logger.logInfo(`Features directory: ${entry.featuresUri.fsPath}`, wkspUri);
+    config.logger.logInfo(`Features directory: ${entry.featuresUris[0].fsPath}`, wkspUri);
 
     // D-02: xRay full discovery chain
     diagLog(
-      `Discovery detail: source=${entry.source}, config=${entry.configFileUri?.fsPath ?? 'none'}, features=${entry.featuresUri.fsPath}`,
+      `Discovery detail: source=${entry.source}, config=${entry.configFileUri?.fsPath ?? 'none'}, features=${entry.featuresUris[0].fsPath}`,
       wkspUri
     );
 

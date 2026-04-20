@@ -36,7 +36,7 @@ export interface DiscoveryEntry {
     configFileUri: vscode.Uri;
     errorMessage: string;
   };
-  featuresUri: vscode.Uri;          // the resolved features path used
+  featuresUris: vscode.Uri[];       // non-empty per D-05; length-1 in every Phase 7 branch
 }
 
 
@@ -222,13 +222,13 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
 
       // default features folder and nothing specified in settings.json (or default specified)
       if (hasDefaultFeaturesFolder && !featuresPath) {
-        discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUri });
+        discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUris: [featuresUri] });
         return true;
       }
 
       featuresUri = vscode.Uri.joinPath(projectUri, featuresPath as string);
       if (fs.existsSync(featuresUri.fsPath) && vscode.workspace.getWorkspaceFolder(featuresUri) === folder) {
-        discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUri });
+        discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUris: [featuresUri] });
         return true;
       }
 
@@ -251,15 +251,13 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
 
     if (configResult) {
       if (configResult.ok) {
-        // Config file found with valid paths -- use it
-        // Phase 7 bridge: Plan 02 migrates DiscoveryEntry to plural and reads all entries.
-        // In this plan we only keep the TS compile green by reading [0] — same single-path semantics as v1.1.
+        // Config file found with valid paths -- use it (Phase 7: single-path semantics, reads [0])
         const featuresUri = configResult.resolvedPaths[0];
         if (fs.existsSync(featuresUri.fsPath)) {
           discoveryCache.set(uriId(folder.uri), {
             source: "config-file",
             configFileUri: configResult.configFileUri,
-            featuresUri,
+            featuresUris: [featuresUri],
           });
           return true;
         }
@@ -273,7 +271,7 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
             configFileUri: configResult.configFileUri,
             errorMessage: configResult.errorMessage,
           },
-          featuresUri: vscode.Uri.joinPath(folder.uri, "features"), // placeholder, overwritten below if convention succeeds
+          featuresUris: [vscode.Uri.joinPath(folder.uri, "features")], // placeholder (length-1 per D-05)
         });
       }
     }
@@ -285,7 +283,7 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
       discoveryCache.set(uriId(folder.uri), {
         ...existing,                  // preserves configError if set from malformed config above
         source: "convention",
-        featuresUri: conventionFeaturesUri,
+        featuresUris: [conventionFeaturesUri],
       });
       return true;
     }
@@ -344,6 +342,23 @@ export const getWorkspaceSettingsForFile = (fileorFolderUri: vscode.Uri | undefi
   if (!wkspUri)
     return undefined;
   return config.workspaceSettings[wkspUri.path];
+}
+
+
+// D-09 — Returns the first featuresUri that contains fileUri,
+// or undefined if fileUri is outside every root. The `+ '/'` guard prevents sibling-prefix
+// false positives (e.g. /features matching /featuresA — see Pitfall 3); urisMatch handles
+// the exact-root case where fileUri === root.
+// Dead code in Phase 7 — Phase 8 per-document-root scoping handlers call it.
+// Phase 7: reads singular featuresUri; Plan 03 migrates to featuresUris[] and this becomes a loop.
+export function getFeaturesRootForFile(
+  wkspSettings: WorkspaceSettings,
+  fileUri: vscode.Uri
+): vscode.Uri | undefined {
+  const roots = [wkspSettings.featuresUri]; // Phase 7: length-1; Plan 03 replaces with featuresUris
+  return roots.find(
+    root => fileUri.path.startsWith(root.path + '/') || urisMatch(root, fileUri)
+  );
 }
 
 
