@@ -59,6 +59,9 @@ const BASE_CFG = {
   runParallel: false,
   importStrategy: 'useBundled',
   stepDefinitionSearchTimeout: 20,
+  discoveryDepth: 3,
+  discoveryStopOnFirstHit: false,
+  suppressMultiConfigNotification: false,
 };
 
 function buildSettings(overrides: Record<string, unknown>): WorkspaceSettings {

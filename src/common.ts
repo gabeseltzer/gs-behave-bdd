@@ -38,6 +38,7 @@ export interface DiscoveryEntry {
     errorMessage: string;
   };
   featuresUris: vscode.Uri[];       // non-empty per D-05; length-1 in every Phase 7 branch
+  alsoFoundConfigs?: vscode.Uri[];  // Phase 9: other configs found during subdir scan
 }
 
 
@@ -550,7 +551,8 @@ export function cleanBehaveText(text: string) {
 // Directories that never contain useful Python/feature files — skipped by findFiles
 export const DEFAULT_EXCLUDE_DIRS = new Set([
   '__pycache__', '.git', 'node_modules', '.venv', '.tox',
-  '.mypy_cache', '.pytest_cache', '.eggs', '*.egg-info'
+  '.mypy_cache', '.pytest_cache', '.eggs', '*.egg-info',
+  'dist', 'out', 'build', 'coverage'
 ]);
 
 function isDirExcluded(dirName: string, excludeDirs: Set<string>): boolean {

@@ -162,6 +162,15 @@ export const workspace = {
       if (key === 'stepDefinitionSearchTimeout') {
         return 10;
       }
+      if (key === 'discoveryDepth') {
+        return 3;
+      }
+      if (key === 'discoveryStopOnFirstHit') {
+        return false;
+      }
+      if (key === 'suppressMultiConfigNotification') {
+        return false;
+      }
       return defaultValue;
     },
     has: () => false,
