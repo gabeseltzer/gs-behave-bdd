@@ -31,6 +31,7 @@ import { validateFixtureTags } from './handlers/fixtureDiagnostics';
 import { validateStepDefinitions } from './handlers/stepDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
 import { startWatchingConfigFiles, clearConfigDebounceTimers } from './watchers/configWatcher';
+import { scanForBehaveConfig, setCachedScanResult, clearScanResultCache } from './discovery/configScanner';
 import { JunitWatcher } from './watchers/junitWatcher';
 
 
@@ -112,6 +113,49 @@ function updateDiscoveryUX(
     } else if (entry.configFileUri) {
       // Clear any stale diagnostic for this config file if it was previously malformed
       clearConfigParseErrorDiagnostic(entry.configFileUri);
+    }
+
+    // Phase 9: Multi-config notification (D-06, D-07, D-08, D-10)
+    if (entry.alsoFoundConfigs && entry.alsoFoundConfigs.length > 0) {
+      const wkspSettings = config.workspaceSettings[wkspUri.path];
+      const suppress = wkspSettings?.suppressMultiConfigNotification ?? false;
+
+      // D-09: Always log full results to output channel regardless of suppression
+      config.logger.logInfo(`Multiple behave configs found:`, wkspUri);
+      const primaryRelPath = entry.configFileUri
+        ? vscode.workspace.asRelativePath(entry.configFileUri, false)
+        : 'unknown';
+      config.logger.logInfo(`  \u2022 ${primaryRelPath} (active)`, wkspUri);
+      for (const alsoUri of entry.alsoFoundConfigs) {
+        const relPath = vscode.workspace.asRelativePath(alsoUri, false);
+        config.logger.logInfo(`  \u2022 ${relPath}`, wkspUri);
+      }
+
+      // D-08: Only show notification if not suppressed
+      if (!suppress) {
+        const totalConfigs = entry.alsoFoundConfigs.length + 1;
+        const configLines = [`\u2022 ${primaryRelPath} (active)`];
+        for (const alsoUri of entry.alsoFoundConfigs) {
+          configLines.push(`\u2022 ${vscode.workspace.asRelativePath(alsoUri, false)}`);
+        }
+        const message = `Behave BDD: Found ${totalConfigs} behave configs:\n${configLines.join('\n')}\nSet projectPath to choose a different project.`;
+
+        vscode.window.showInformationMessage(
+          message,
+          'Open Settings',
+          'Show Details',
+          "Don't Show Again"
+        ).then(action => {
+          if (action === 'Open Settings') {
+            vscode.commands.executeCommand('workbench.action.openSettings', 'gs-behave-bdd.projectPath');
+          } else if (action === 'Show Details') {
+            vscode.commands.executeCommand('gs-behave-bdd.openOutput');
+          } else if (action === "Don't Show Again") {
+            const wkspCfg = vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri);
+            wkspCfg.update("suppressMultiConfigNotification", true, vscode.ConfigurationTarget.WorkspaceFolder);
+          }
+        });
+      }
     }
 
   }
@@ -516,6 +560,87 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       }
     })();
 
+    // Phase 9: Async subdirectory config scan for undiscovered workspaces (D-01)
+    (async () => {
+      try {
+        const allFolders = vscode.workspace.workspaceFolders;
+        if (!allFolders) return;
+
+        const discoveredUris = getUrisOfWkspFoldersWithFeatures();
+        const discoveredSet = new Set(discoveredUris.map(u => u.path));
+        const undiscovered = allFolders.filter(f => !discoveredSet.has(f.uri.path));
+
+        if (undiscovered.length === 0) return;
+
+        for (const folder of undiscovered) {
+          const wkspConfig = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri);
+          const discoveryDepth = wkspConfig.get<number>("discoveryDepth") ?? 3;
+          const stopOnFirstHit = wkspConfig.get<boolean>("discoveryStopOnFirstHit") ?? false;
+
+          if (discoveryDepth === 0) {
+            diagLog(`Subdir scan: skipped for ${folder.name} (discoveryDepth=0)`, folder.uri);
+            continue;
+          }
+
+          config.logger.logInfo(`Scanning for behave config in subdirectories (depth ${discoveryDepth})...`, folder.uri);
+
+          const result = await scanForBehaveConfig(folder.uri, discoveryDepth, stopOnFirstHit);
+
+          if (result.primary) {
+            const primaryRelPath = vscode.workspace.asRelativePath(result.primary.configFileUri, false);
+            config.logger.logInfo(
+              `Subdir scan: found ${result.alsoFound.length + 1} config(s), ` +
+              `scanned ${result.scannedDirs} dirs. Primary: ${primaryRelPath} (depth ${result.primary.depth})`,
+              folder.uri
+            );
+            for (const entry of result.alsoFound) {
+              const relPath = vscode.workspace.asRelativePath(entry.configFileUri, false);
+              config.logger.logInfo(`  Also found: ${relPath} (depth ${entry.depth})`, folder.uri);
+            }
+          } else {
+            config.logger.logInfo(
+              `No behave config found in subdirectories (scanned depth ${result.maxDepthReached}, ${result.scannedDirs} dirs)`,
+              folder.uri
+            );
+            continue;
+          }
+
+          if (result.circuitBreakerFired) {
+            config.logger.logInfo(
+              `Subdir scan: circuit breaker at ${result.scannedDirs} entries. ` +
+              `Set discoveryDepth=0 to disable scan or set projectPath manually.`,
+              folder.uri
+            );
+          }
+
+          // Cache the result so hasFeaturesFolder can read it on force-refresh
+          setCachedScanResult(folder.uri, result);
+
+          // INT-04: Call cache + parser directly, NOT through configurationChangedHandler
+          getUrisOfWkspFoldersWithFeatures(true);
+          config.reloadSettings(folder.uri);
+
+          // Set up watchers and trigger parsing for newly-discovered workspace
+          if (getUrisOfWkspFoldersWithFeatures().some(u => urisMatch(u, folder.uri))) {
+            const watchers = startWatchingWorkspace(folder.uri, ctrl, testData, parser);
+            wkspWatchers.set(folder.uri, watchers);
+            watchers.forEach(w => context.subscriptions.push(w));
+
+            const configWatchers = startWatchingConfigFiles(
+              folder.uri, ctrl, testData, parser, updateDiscoveryUX
+            );
+            wkspConfigWatchers.set(folder.uri, configWatchers);
+            configWatchers.forEach(w => context.subscriptions.push(w));
+
+            updateDiscoveryUX([folder.uri], false);
+            parser.parseFilesForWorkspace(folder.uri, testData, ctrl, 'subdirScan', false);
+          }
+        }
+      } catch (e: unknown) {
+        config.logger.showError(e, undefined);
+      }
+    })();
+
     // called when a user edits a file.
     // we want to reparse on edit (not just on disk changes) because:
     // a. the user may run a file they just edited without saving,
@@ -598,6 +723,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         // changing featuresPath in settings.json/*.vscode-workspace to a valid path, or adding/removing/renaming workspaces
         // will not only change the set of workspaces we are watching, but also the output channels
         config.logger.syncChannelsToWorkspaceFolders();
+
+        // Phase 9: Clear scan cache on settings change so re-discovery can re-scan
+        if (forceFullRefresh || (event && (event.affectsConfiguration('gs-behave-bdd.discoveryDepth') ||
+            event.affectsConfiguration('gs-behave-bdd.discoveryStopOnFirstHit') ||
+            event.affectsConfiguration('gs-behave-bdd.projectPath')))) {
+          clearScanResultCache();
+        }
 
         for (const wkspUri of getUrisOfWkspFoldersWithFeatures(true)) {
           if (testCfg) {
