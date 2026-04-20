@@ -4,12 +4,12 @@ milestone: v1.2
 milestone_name: Multi-Path & Monorepo-Aware Discovery
 status: unknown
 stopped_at: Phase 8 context gathered
-last_updated: "2026-04-20T19:21:25.534Z"
+last_updated: "2026-04-20T21:13:53.097Z"
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  completed_phases: 3
+  total_plans: 9
+  completed_plans: 9
 ---
 
 # Project State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17 — v1.2 milestone started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Phase 08 — parser-test-tree-watcher-multi-root
+**Current focus:** Phase 09 — subdirectory-config-scan
 
 ## Current Position
 
-Phase: 9
+Phase: 10
 Plan: Not started
 
 ## Performance Metrics
