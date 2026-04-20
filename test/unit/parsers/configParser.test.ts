@@ -24,8 +24,8 @@ suite('configParser', () => {
       assert.strictEqual(result.format, 'ini', 'format should be ini');
       assert.deepStrictEqual(result.rawPaths, ['features'], 'rawPaths should contain features');
       assert.ok(
-        result.resolvedPath.fsPath.replace(/\\/g, '/').endsWith('behave-ini/features'),
-        `resolvedPath ${result.resolvedPath.fsPath} should end with behave-ini/features`
+        result.resolvedPaths[0].fsPath.replace(/\\/g, '/').endsWith('behave-ini/features'),
+        `resolvedPaths[0] ${result.resolvedPaths[0].fsPath} should end with behave-ini/features`
       );
       assert.ok(
         result.configFileUri.fsPath.replace(/\\/g, '/').endsWith('behave-ini/behave.ini'),
@@ -46,8 +46,8 @@ suite('configParser', () => {
       assert.strictEqual(result.format, 'ini', 'format should be ini');
       assert.deepStrictEqual(result.rawPaths, ['features'], 'rawPaths should contain features');
       assert.ok(
-        result.resolvedPath.fsPath.replace(/\\/g, '/').endsWith('behaverc/features'),
-        `resolvedPath ${result.resolvedPath.fsPath} should end with behaverc/features`
+        result.resolvedPaths[0].fsPath.replace(/\\/g, '/').endsWith('behaverc/features'),
+        `resolvedPaths[0] ${result.resolvedPaths[0].fsPath} should end with behaverc/features`
       );
     });
 
@@ -92,8 +92,8 @@ suite('configParser', () => {
       assert.strictEqual(result.format, 'toml', 'format should be toml');
       assert.deepStrictEqual(result.rawPaths, ['features'], 'rawPaths should contain features');
       assert.ok(
-        result.resolvedPath.fsPath.replace(/\\/g, '/').endsWith('pyproject-toml/features'),
-        `resolvedPath ${result.resolvedPath.fsPath} should end with pyproject-toml/features`
+        result.resolvedPaths[0].fsPath.replace(/\\/g, '/').endsWith('pyproject-toml/features'),
+        `resolvedPaths[0] ${result.resolvedPaths[0].fsPath} should end with pyproject-toml/features`
       );
     });
 
@@ -109,8 +109,8 @@ suite('configParser', () => {
       if (!result.ok) return;  // TypeScript narrowing
       const expectedSuffix = path.join('behave-ini', 'features').replace(/\\/g, '/');
       assert.ok(
-        result.resolvedPath.fsPath.replace(/\\/g, '/').endsWith(expectedSuffix),
-        `resolvedPath ${result.resolvedPath.fsPath} should end with ${expectedSuffix}`
+        result.resolvedPaths[0].fsPath.replace(/\\/g, '/').endsWith(expectedSuffix),
+        `resolvedPaths[0] ${result.resolvedPaths[0].fsPath} should end with ${expectedSuffix}`
       );
     });
 
@@ -145,9 +145,9 @@ suite('configParser', () => {
 
   });
 
-  suite('findBehaveConfig - multi-path (TEST-04, D-03)', () => {
+  suite('findBehaveConfig - multi-path (TEST-04, MP-02)', () => {
 
-    test('parses all continuation-line paths into rawPaths but resolves only the first', () => {
+    test('parses all continuation-line paths into rawPaths AND resolves all three', () => {
       const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'multi-path'));
       const result = findBehaveConfig(wkspUri);
       assert.ok(result, 'should return a result');
@@ -158,9 +158,59 @@ suite('configParser', () => {
         ['features/auth', 'features/checkout', 'features/admin'],
         'rawPaths should contain all 3 paths from continuation lines'
       );
+      assert.strictEqual(result.resolvedPaths.length, 3, 'resolvedPaths should contain all 3 resolved URIs');
       assert.ok(
-        result.resolvedPath.fsPath.replace(/\\/g, '/').endsWith('multi-path/features/auth'),
-        `resolvedPath ${result.resolvedPath.fsPath} should resolve only the first path (features/auth)`
+        result.resolvedPaths[0].fsPath.replace(/\\/g, '/').endsWith('multi-path/features/auth'),
+        `resolvedPaths[0] ${result.resolvedPaths[0].fsPath} should end with multi-path/features/auth`
+      );
+      assert.ok(
+        result.resolvedPaths[1].fsPath.replace(/\\/g, '/').endsWith('multi-path/features/checkout'),
+        `resolvedPaths[1] ${result.resolvedPaths[1].fsPath} should end with multi-path/features/checkout`
+      );
+      assert.ok(
+        result.resolvedPaths[2].fsPath.replace(/\\/g, '/').endsWith('multi-path/features/admin'),
+        `resolvedPaths[2] ${result.resolvedPaths[2].fsPath} should end with multi-path/features/admin`
+      );
+    });
+
+  });
+
+  suite('findBehaveConfig - Windows backslash normalization (TEST-12, D-10)', () => {
+
+    test('Windows backslash paths normalized to forward slashes', () => {
+      const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'windows-backslash'));
+      const result = findBehaveConfig(wkspUri);
+      assert.ok(result, 'should return a result');
+      assert.strictEqual(result.ok, true, 'should be ok:true');
+      if (!result.ok) return;  // TypeScript narrowing
+      // rawPaths should preserve original backslashes from INI file
+      assert.deepStrictEqual(
+        result.rawPaths,
+        ['features\\alt', 'features\\sub\\deep', 'C:\\Windows\\abs'],
+        'rawPaths should preserve original backslashes'
+      );
+      // resolvedPaths should have forward slashes in URI .path
+      assert.strictEqual(result.resolvedPaths.length, 3, 'resolvedPaths should have 3 entries');
+      assert.ok(
+        result.resolvedPaths[0].path.endsWith('/features/alt'),
+        `resolvedPaths[0].path ${result.resolvedPaths[0].path} should end with /features/alt`
+      );
+      assert.ok(
+        result.resolvedPaths[1].path.endsWith('/features/sub/deep'),
+        `resolvedPaths[1].path ${result.resolvedPaths[1].path} should end with /features/sub/deep`
+      );
+    });
+
+    test('Windows absolute path with drive letter preserves drive and normalizes slashes', () => {
+      const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'windows-backslash'));
+      const result = findBehaveConfig(wkspUri);
+      assert.ok(result, 'should return a result');
+      assert.strictEqual(result.ok, true, 'should be ok:true');
+      if (!result.ok) return;  // TypeScript narrowing
+      // Third entry is absolute Windows path C:\Windows\abs
+      assert.ok(
+        result.resolvedPaths[2].path.includes('/Windows/abs'),
+        `resolvedPaths[2].path ${result.resolvedPaths[2].path} should contain /Windows/abs (forward slashes)`
       );
     });
 
