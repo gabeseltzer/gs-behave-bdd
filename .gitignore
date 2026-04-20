@@ -11,3 +11,4 @@ plans/*
 .mypy_cache
 .ruff_cache
 .claude/settings.local.json
+.claude/worktrees/
