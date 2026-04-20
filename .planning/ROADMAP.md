@@ -83,9 +83,9 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
   6. Setting `gs-behave-bdd.projectPath` manually still overrides scan results — the v1.0 priority chain (manual > config > convention) is preserved and re-tested
 **Plans**: 3 plans
 **Plans:**
-- [ ] 09-01-PLAN.md — Settings declarations + DiscoveryEntry type extension
-- [ ] 09-02-PLAN.md — configScanner.ts BFS module + unit tests (TEST-11)
-- [ ] 09-03-PLAN.md — Integration wiring, async IIFE, multi-config UX, two-tier watcher
+- [x] 09-01-PLAN.md — Settings declarations + DiscoveryEntry type extension
+- [x] 09-02-PLAN.md — configScanner.ts BFS module + unit tests (TEST-11)
+- [x] 09-03-PLAN.md — Integration wiring, async IIFE, multi-config UX, two-tier watcher
 
 ### Phase 10: `featuresPaths` User-Facing Settings Key
 **Goal**: Users can opt into multi-path discovery via a new `gs-behave-bdd.featuresPaths: string[]` setting in settings.json, and legacy `featuresPath` keeps working unchanged; when both are set, the plural value wins with a one-line info log
