@@ -9,6 +9,7 @@ import { WorkspaceSettings } from './settings';
 import { diagLog } from './logger';
 import { getJunitDirUri } from './watchers/junitWatcher';
 import { findBehaveConfig } from './parsers/configParser';
+import { getCachedScanResult } from './discovery/configScanner';
 import { clearPathDiagnostics, setPathResolutionDiagnostics, setSubsumptionDiagnostics } from './handlers/configDiagnostics';
 
 
@@ -321,6 +322,50 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
         featuresUris: [conventionFeaturesUri],
       });
       return true;
+    }
+
+    // === Phase 9: Check cached subdirectory scan result ===
+    const scanResult = getCachedScanResult(folder.uri);
+    if (scanResult?.primary) {
+      const subdirConfigResult = findBehaveConfig(scanResult.primary.dirUri);
+      if (subdirConfigResult && subdirConfigResult.ok) {
+        clearPathDiagnostics(subdirConfigResult.configFileUri);
+
+        const dedupResult = dedupResolvedPaths(
+          subdirConfigResult.resolvedPaths, subdirConfigResult.rawPaths, subdirConfigResult.pathLineNumbers
+        );
+
+        if (dedupResult.subsumedPaths.length > 0) {
+          setSubsumptionDiagnostics(subdirConfigResult.configFileUri, dedupResult.subsumedPaths);
+        }
+
+        const validPaths: vscode.Uri[] = [];
+        const invalidPaths: { rawPath: string; lineNumber: number }[] = [];
+        for (let i = 0; i < dedupResult.resolvedPaths.length; i++) {
+          if (fs.existsSync(dedupResult.resolvedPaths[i].fsPath)) {
+            validPaths.push(dedupResult.resolvedPaths[i]);
+          } else {
+            invalidPaths.push({
+              rawPath: dedupResult.rawPaths[i],
+              lineNumber: dedupResult.pathLineNumbers[i],
+            });
+          }
+        }
+
+        if (invalidPaths.length > 0) {
+          setPathResolutionDiagnostics(subdirConfigResult.configFileUri, invalidPaths);
+        }
+
+        if (validPaths.length > 0) {
+          discoveryCache.set(uriId(folder.uri), {
+            source: "config-file",
+            configFileUri: subdirConfigResult.configFileUri,
+            featuresUris: validPaths,
+            alsoFoundConfigs: scanResult.alsoFound.map(e => e.configFileUri),
+          });
+          return true;
+        }
+      }
     }
 
     return false;
