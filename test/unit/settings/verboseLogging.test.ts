@@ -83,8 +83,12 @@ suite('verboseLogging setting', () => {
         id: 'test-id',
         projectUri: vscode.Uri.file('/fake/workspace'),
         featuresUri: vscode.Uri.file('/fake/workspace/features'),
+        featuresUris: [vscode.Uri.file('/fake/workspace/features')],
         stepsSearchUri: vscode.Uri.file('/fake/workspace/features'),
+        stepsSearchUris: [vscode.Uri.file('/fake/workspace/features')],
         workspaceRelativeFeaturesPath: 'features',
+        workspaceRelativeFeaturesPaths: ['features'],
+        projectRelativeFeaturesPaths: ['features'],
         _warnings: [],
         _fatalErrors: [],
       };

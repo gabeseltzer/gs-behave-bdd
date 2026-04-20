@@ -76,11 +76,11 @@ function updateDiscoveryUX(
     if (entry.configFileUri) {
       config.logger.logInfo(`Config file: ${entry.configFileUri.fsPath}`, wkspUri);
     }
-    config.logger.logInfo(`Features directory: ${entry.featuresUris[0].fsPath}`, wkspUri);
+    config.logger.logInfo(`Features directories: ${entry.featuresUris.map(u => u.fsPath).join(", ")}`, wkspUri);
 
     // D-02: xRay full discovery chain
     diagLog(
-      `Discovery detail: source=${entry.source}, config=${entry.configFileUri?.fsPath ?? 'none'}, features=${entry.featuresUris[0].fsPath}`,
+      `Discovery detail: source=${entry.source}, config=${entry.configFileUri?.fsPath ?? 'none'}, features=[${entry.featuresUris.map(u => u.fsPath).join(", ")}]`,
       wkspUri
     );
 
@@ -196,7 +196,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       for (const document of vscode.workspace.textDocuments) {
         if (!isFeatureFile(document.uri)) continue;
         const wkspSettings = getWorkspaceSettingsForFile(document.uri);
-        if (!wkspSettings || !urisMatch(wkspSettings.featuresUri, featuresUri)) continue;
+        if (!wkspSettings || !wkspSettings.featuresUris.some(u => urisMatch(u, featuresUri))) continue;
         validateFixtureTags(document);
         validateStepDefinitions(document);
       }

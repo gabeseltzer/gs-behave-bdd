@@ -33,7 +33,7 @@ suite('stepDiagnostics', () => {
     sandbox.stub(common, 'isFeatureFile').returns(opts.isFeature ?? true);
     sandbox.stub(common, 'getWorkspaceSettingsForFile').returns(
       'wkspSettings' in opts ? opts.wkspSettings as ReturnType<typeof common.getWorkspaceSettingsForFile>
-        : { uri: mockUri, featuresUri: mockUri, stepsSearchUri: vscode.Uri.file('/test/features/steps') } as ReturnType<typeof common.getWorkspaceSettingsForFile>
+        : { uri: mockUri, featuresUri: mockUri, featuresUris: [mockUri], stepsSearchUri: vscode.Uri.file('/test/features/steps') } as ReturnType<typeof common.getWorkspaceSettingsForFile>
     );
     sandbox.stub(featureParser, 'getFeatureFileSteps').returns(opts.featureSteps ?? []);
     sandbox.stub(stepMappings, 'getStepFileStepForFeatureFileStep').returns(opts.stepMatch);
@@ -363,6 +363,7 @@ suite('stepDiagnostics', () => {
       sandbox.stub(common, 'getWorkspaceSettingsForFile').returns({
         uri: mockUri,
         featuresUri: mockUri,
+        featuresUris: [mockUri],
         stepsSearchUri: vscode.Uri.file('/test/features/steps')
       } as ReturnType<typeof common.getWorkspaceSettingsForFile>);
       sandbox.stub(featureParser, 'getFeatureFileSteps').returns([
@@ -443,6 +444,7 @@ suite('stepDiagnostics', () => {
       sandbox.stub(common, 'getWorkspaceSettingsForFile').returns({
         uri: mockUri,
         featuresUri: mockUri,
+        featuresUris: [mockUri],
         stepsSearchUri: stepsSearchUri
       } as ReturnType<typeof common.getWorkspaceSettingsForFile>);
       sandbox.stub(featureParser, 'getFeatureFileSteps').returns([['key1', step]]);
@@ -513,6 +515,7 @@ suite('stepDiagnostics', () => {
       sandbox.stub(common, 'getWorkspaceSettingsForFile').returns({
         uri: mockUri,
         featuresUri: mockUri,
+        featuresUris: [mockUri],
         stepsSearchUri: vscode.Uri.file('/test/features/steps')
       } as ReturnType<typeof common.getWorkspaceSettingsForFile>);
       sandbox.stub(featureParser, 'getFeatureFileSteps').returns([
@@ -680,6 +683,7 @@ suite('stepDiagnostics', () => {
       sandbox.stub(common, 'getWorkspaceSettingsForFile').returns({
         uri: mockUri,
         featuresUri: mockUri,
+        featuresUris: [mockUri],
         stepsSearchUri: vscode.Uri.file('/test/features/steps')
       } as ReturnType<typeof common.getWorkspaceSettingsForFile>);
       sandbox.stub(featureParser, 'getFeatureFileSteps').returns([
@@ -730,6 +734,7 @@ suite('stepDiagnostics', () => {
       sandbox.stub(common, 'getWorkspaceSettingsForFile').returns({
         uri: mockUri,
         featuresUri: mockUri,
+        featuresUris: [mockUri],
         stepsSearchUri: vscode.Uri.file('/test/features/steps')
       } as ReturnType<typeof common.getWorkspaceSettingsForFile>);
       sandbox.stub(featureParser, 'getFeatureFileSteps').returns([
@@ -869,6 +874,7 @@ suite('stepDiagnostics', () => {
       sandbox.stub(common, 'getWorkspaceSettingsForFile').returns({
         uri: mockUri,
         featuresUri: mockUri,
+        featuresUris: [mockUri],
         stepsSearchUri: vscode.Uri.file('/test/features/steps')
       } as ReturnType<typeof common.getWorkspaceSettingsForFile>);
       sandbox.stub(featureParser, 'getFeatureFileSteps').returns([
