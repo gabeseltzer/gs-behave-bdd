@@ -63,7 +63,11 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
   4. A per-path diagnostic appears in the Problems panel attached to the config file when one entry in `paths=` fails to resolve (e.g. `paths=[features, bogus]` flags `bogus` without aborting discovery of `features`)
   5. Fixtures declared in root A do NOT appear as autocomplete/diagnostic results for a feature file in root B — per-document-root scoping via `getFeaturesRootForFile` is correctness-enforced
   6. Overlapping paths (`paths = features\n  features/api`) produce exactly ONE test tree subtree — dedup in `resolvePaths` drops the subsumed path and logs the collision
-**Plans**: TBD
+**Plans**: 3 plans
+**Plans:**
+- [ ] 08-01-PLAN.md - configParser dedup + per-path diagnostics + unit tests
+- [ ] 08-02-PLAN.md - fileParser + stepMappings + junitParser multi-root + path-group TestItems
+- [ ] 08-03-PLAN.md - Watcher fan-out + handler union + runner + settings cascade
 **UI hint**: yes
 
 ### Phase 9: Subdirectory Config Scan
@@ -113,8 +117,8 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 | 4. Watcher & Run Guard | v1.1 | 2/2 | Complete | 2026-04-16 |
 | 5. Integration Verification | v1.1 | 5/5 | Complete | 2026-04-17 |
 | 6. v1.1 Tech Debt & Admin Cleanup | v1.1 | 2/2 | Complete | 2026-04-17 |
-| 7. Internal Multi-Path Types | v1.2 | 0/? | Not started | - |
-| 8. Parser / Test-Tree / Watcher Multi-Root Iteration | v1.2 | 0/? | Not started | - |
+| 7. Internal Multi-Path Types | v1.2 | 3/3 | Complete | 2026-04-20 |
+| 8. Parser / Test-Tree / Watcher Multi-Root Iteration | v1.2 | 0/3 | Not started | - |
 | 9. Subdirectory Config Scan | v1.2 | 0/? | Not started | - |
 | 10. `featuresPaths` User-Facing Settings Key | v1.2 | 0/? | Not started | - |
 | 11. UX Polish + Regression Hardening | v1.2 | 0/? | Not started | - |
