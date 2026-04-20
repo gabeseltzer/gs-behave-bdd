@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { getWorkspaceSettingsForFile, isFeatureFile } from "../common";
+import { getWorkspaceSettingsForFile, isFeatureFile, getFeaturesRootForFile } from "../common";
 import { getFixtureByTag, getFixtures } from "../parsers/fixtureParser";
 import { getFeatureTagByPosition, getFeatureTags } from "../parsers/featureParser";
 import { config } from "../configuration";
@@ -166,7 +166,8 @@ export class FixtureReferenceProvider implements vscode.ReferenceProvider {
       }
 
       const locations: vscode.Location[] = [];
-      const featureTags = getFeatureTags(wkspSettings.featuresUri);
+      const root = getFeaturesRootForFile(wkspSettings, document.uri) ?? wkspSettings.featuresUri;
+      const featureTags = getFeatureTags(root);
 
       for (const tag of featureTags) {
         if (!tag.tag.startsWith('fixture.')) {

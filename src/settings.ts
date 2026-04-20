@@ -313,11 +313,11 @@ export class WorkspaceSettings {
     const rscSettingsDic: { [name: string]: string; } = {};
     let wkspEntries = Object.entries(this).sort();
     wkspEntries.push(["fullProjectPath", this.projectUri.fsPath]);
-    wkspEntries.push(["fullFeaturesPath", this.featuresUri.fsPath]);
+    wkspEntries.push(["fullFeaturesPaths", this.featuresUris.map(u => u.fsPath).join(", ")]);
     wkspEntries.push(["junitTempPath", config.extensionTempFilesUri.fsPath]);
     wkspEntries = wkspEntries.filter(([key]) => !key.startsWith("_") && !nonUserSettableWkspSettings.includes(key) && key !== "workspaceRelativeProjectPath" && key !== "projectRelativeFeaturesPath");
     wkspEntries.push(["projectPath", this.workspaceRelativeProjectPath || "(workspace root)"]);
-    wkspEntries.push(["featuresPath", this.projectRelativeFeaturesPath]);
+    wkspEntries.push(["featuresPaths", this.projectRelativeFeaturesPaths.join(", ")]);
     wkspEntries.push(["discoverySource", this.discoverySource]);
     wkspEntries.push(["configFileUri", this.configFileUri?.fsPath ?? "(none)"]);
     wkspEntries = wkspEntries.sort();

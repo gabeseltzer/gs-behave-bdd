@@ -22,7 +22,7 @@ export function validateStepDefinitions(document: vscode.TextDocument): void {
     }
 
     const stepDiagnostics: vscode.Diagnostic[] = [];
-    const featureSteps = getFeatureFileSteps(wkspSettings.featuresUri)
+    const featureSteps = wkspSettings.featuresUris.flatMap(u => getFeatureFileSteps(u))
       .filter(([, s]) => s.uri.toString() === document.uri.toString());
 
     const allStepDefs = getStepFileSteps(wkspSettings.featuresUri);
