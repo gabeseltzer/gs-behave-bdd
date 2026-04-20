@@ -1,4 +1,4 @@
-// configParser.ts
+﻿// configParser.ts
 // Reads behave's native config files and returns a structured BehaveConfigResult.
 // Supports: behave.ini, .behaverc, setup.cfg, tox.ini, pyproject.toml
 // Priority order matches behave's own config_filenames() function.
@@ -10,7 +10,7 @@ import { parse as parseToml } from 'smol-toml';
 // Discriminated union: ok:true = success, ok:false = config file found but malformed (D-05)
 // undefined return from findBehaveConfig = no config file found at all (not an error)
 export type BehaveConfigResult =
-  | { ok: true; configFileUri: vscode.Uri; format: 'ini' | 'toml'; rawPaths: string[]; resolvedPaths: vscode.Uri[] }
+  | { ok: true; configFileUri: vscode.Uri; format: 'ini' | 'toml'; rawPaths: string[]; resolvedPaths: vscode.Uri[]; pathLineNumbers: number[] }
   | { ok: false; configFileUri: vscode.Uri; errorMessage: string };
 
 // Priority-ordered list of config filenames behave recognises, mapped to their format.
@@ -64,9 +64,11 @@ function parseIniConfig(fileUri: vscode.Uri): BehaveConfigResult | undefined {
   const lines = content.split(/\r?\n/);
   let inBehaveSection = false;
   let pathsLines: string[] = [];
+  let pathLineNumbers: number[] = [];
   let collectingPaths = false;
 
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
     const trimmed = line.trim();
 
     if (trimmed.startsWith('[')) {
@@ -94,13 +96,17 @@ function parseIniConfig(fileUri: vscode.Uri): BehaveConfigResult | undefined {
     if (/^paths\s*=/.test(trimmed)) {
       const value = trimmed.replace(/^paths\s*=\s*/, '');
       pathsLines = value ? [value] : [];
+      pathLineNumbers = value ? [lineIndex] : [];
       collectingPaths = true;
       continue;
     }
 
     // Continuation line: raw line (not trimmed) starts with whitespace
     if (collectingPaths && /^\s/.test(line)) {
-      if (trimmed) pathsLines.push(trimmed);
+      if (trimmed) {
+        pathsLines.push(trimmed);
+        pathLineNumbers.push(lineIndex);
+      }
       continue;
     }
 
@@ -111,10 +117,19 @@ function parseIniConfig(fileUri: vscode.Uri): BehaveConfigResult | undefined {
   if (!inBehaveSection) return undefined; // DISC-06: no [behave] section found
   if (pathsLines.length === 0) return undefined; // paths key absent or empty
 
-  const rawPaths = pathsLines.map(p => p.trim()).filter(p => p.length > 0);
+  // Filter in lockstep: rawPaths and pathLineNumbers keep only non-empty entries
+  const rawPaths: string[] = [];
+  const filteredLineNumbers: number[] = [];
+  for (let i = 0; i < pathsLines.length; i++) {
+    const trimmed = pathsLines[i].trim();
+    if (trimmed.length > 0) {
+      rawPaths.push(trimmed);
+      filteredLineNumbers.push(pathLineNumbers[i]);
+    }
+  }
   if (rawPaths.length === 0) return undefined;
 
-  return buildResult(fileUri, 'ini', rawPaths);
+  return buildResult(fileUri, 'ini', rawPaths, filteredLineNumbers);
 }
 
 // Parses a TOML-format config file (pyproject.toml).
@@ -149,7 +164,29 @@ function parseTomlConfig(fileUri: vscode.Uri): BehaveConfigResult | undefined {
   const rawPaths = paths.map(String).filter(p => p.length > 0);
   if (rawPaths.length === 0) return undefined;
 
-  return buildResult(fileUri, 'toml', rawPaths);
+  // Derive line numbers from the raw text for diagnostic attachment (D-05)
+  const contentLines = content.split(/\r?\n/);
+  let sectionStart = 0;
+  for (let i = 0; i < contentLines.length; i++) {
+    if (/^\[tool\.behave\]/.test(contentLines[i].trim())) {
+      sectionStart = i;
+      break;
+    }
+  }
+  const pathLineNumbers: number[] = [];
+  for (const rp of rawPaths) {
+    let found = false;
+    for (let i = sectionStart; i < contentLines.length; i++) {
+      if (contentLines[i].includes(rp)) {
+        pathLineNumbers.push(i);
+        found = true;
+        break;
+      }
+    }
+    if (!found) pathLineNumbers.push(sectionStart);
+  }
+
+  return buildResult(fileUri, 'toml', rawPaths, pathLineNumbers);
 }
 
 // Private helper (D-10 — colocated in configParser per CONTEXT.md Claude's Discretion).
@@ -179,7 +216,8 @@ function resolvePaths(rawPaths: string[], configFileUri: vscode.Uri): vscode.Uri
 function buildResult(
   configFileUri: vscode.Uri,
   format: 'ini' | 'toml',
-  rawPaths: string[]
+  rawPaths: string[],
+  pathLineNumbers: number[]
 ): BehaveConfigResult {
   return {
     ok: true,
@@ -187,5 +225,6 @@ function buildResult(
     format,
     rawPaths,
     resolvedPaths: resolvePaths(rawPaths, configFileUri),
+    pathLineNumbers,
   };
 }

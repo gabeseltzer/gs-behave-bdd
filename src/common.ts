@@ -9,6 +9,7 @@ import { WorkspaceSettings } from './settings';
 import { diagLog } from './logger';
 import { getJunitDirUri } from './watchers/junitWatcher';
 import { findBehaveConfig } from './parsers/configParser';
+import { clearPathDiagnostics, setPathResolutionDiagnostics, setSubsumptionDiagnostics } from './handlers/configDiagnostics';
 
 
 
@@ -251,17 +252,50 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
 
     if (configResult) {
       if (configResult.ok) {
-        // Config file found with valid paths -- use it (Phase 7: single-path semantics, reads [0])
-        const featuresUri = configResult.resolvedPaths[0];
-        if (fs.existsSync(featuresUri.fsPath)) {
+        // Clear stale path diagnostics before emitting new ones
+        clearPathDiagnostics(configResult.configFileUri);
+
+        // Dedup overlapping/duplicate paths (D-09, D-11)
+        const dedupResult = dedupResolvedPaths(
+          configResult.resolvedPaths, configResult.rawPaths, configResult.pathLineNumbers
+        );
+
+        // Emit subsumption warnings (D-10)
+        if (dedupResult.subsumedPaths.length > 0) {
+          setSubsumptionDiagnostics(configResult.configFileUri, dedupResult.subsumedPaths);
+        }
+
+        // Partition deduped paths into valid (exist on disk) and invalid
+        const validPaths: vscode.Uri[] = [];
+        const invalidPaths: { rawPath: string; lineNumber: number }[] = [];
+        for (let i = 0; i < dedupResult.resolvedPaths.length; i++) {
+          if (fs.existsSync(dedupResult.resolvedPaths[i].fsPath)) {
+            validPaths.push(dedupResult.resolvedPaths[i]);
+          } else {
+            invalidPaths.push({
+              rawPath: dedupResult.rawPaths[i],
+              lineNumber: dedupResult.pathLineNumbers[i],
+            });
+          }
+        }
+
+        // Emit per-path Error diagnostics for invalid paths (D-04)
+        if (invalidPaths.length > 0) {
+          setPathResolutionDiagnostics(configResult.configFileUri, invalidPaths);
+        }
+
+        // Partial success: use valid paths (D-04)
+        if (validPaths.length > 0) {
           discoveryCache.set(uriId(folder.uri), {
             source: "config-file",
             configFileUri: configResult.configFileUri,
-            featuresUris: [featuresUri],
+            featuresUris: validPaths,
           });
           return true;
         }
-        // Config points to nonexistent directory -- fall through to convention
+
+        // ALL paths failed — do NOT fall through to convention (D-06)
+        return false;
       } else {
         // ok:false -- malformed config file; capture error, fall through to convention (D-06)
         // Store a partial entry so Phase 3 can read the configError
@@ -349,7 +383,7 @@ export const getWorkspaceSettingsForFile = (fileorFolderUri: vscode.Uri | undefi
 // or undefined if fileUri is outside every root. The `+ '/'` guard prevents sibling-prefix
 // false positives (e.g. /features matching /featuresA — see Pitfall 3); urisMatch handles
 // the exact-root case where fileUri === root.
-// Dead code in Phase 7 — Phase 8 per-document-root scoping handlers call it.
+// Phase 8 per-document-root scoping handlers call it.
 export function getFeaturesRootForFile(
   wkspSettings: WorkspaceSettings,
   fileUri: vscode.Uri
@@ -357,6 +391,77 @@ export function getFeaturesRootForFile(
   return wkspSettings.featuresUris.find(
     root => fileUri.path.startsWith(root.path + '/') || urisMatch(root, fileUri)
   );
+}
+
+
+export interface SubsumedPath {
+  rawPath: string;
+  lineNumber: number;
+  subsumedBy: string;
+}
+
+export interface DedupResult {
+  resolvedPaths: vscode.Uri[];
+  rawPaths: string[];
+  pathLineNumbers: number[];
+  subsumedPaths: SubsumedPath[];
+}
+
+// Deduplicates resolved paths by removing exact duplicates (case-insensitive via uriId)
+// and paths subsumed by a broader parent (D-09). Sorted by path length ascending so parent
+// paths always win over children regardless of input order.
+export function dedupResolvedPaths(
+  resolvedPaths: vscode.Uri[],
+  rawPaths: string[],
+  pathLineNumbers: number[]
+): DedupResult {
+  const entries = resolvedPaths.map((uri, i) => ({
+    uri,
+    rawPath: rawPaths[i],
+    lineNumber: pathLineNumbers[i],
+    id: uriId(uri),
+  }));
+
+  // Sort by URI path length ascending — broader (shorter) paths first so parent wins (D-09)
+  entries.sort((a, b) => a.uri.path.length - b.uri.path.length);
+
+  const accepted: typeof entries = [];
+  const seenIds = new Set<string>();
+  const subsumedPaths: SubsumedPath[] = [];
+
+  for (const entry of entries) {
+    // Exact duplicate check (case-insensitive via uriId, D-11)
+    if (seenIds.has(entry.id)) {
+      const winner = accepted.find(a => a.id === entry.id);
+      subsumedPaths.push({
+        rawPath: entry.rawPath,
+        lineNumber: entry.lineNumber,
+        subsumedBy: winner?.rawPath ?? entry.rawPath,
+      });
+      continue;
+    }
+
+    // Subsumption check: is this path contained within an already-accepted broader path?
+    const parent = accepted.find(a => entry.uri.path.startsWith(a.uri.path + '/'));
+    if (parent) {
+      subsumedPaths.push({
+        rawPath: entry.rawPath,
+        lineNumber: entry.lineNumber,
+        subsumedBy: parent.rawPath,
+      });
+      continue;
+    }
+
+    accepted.push(entry);
+    seenIds.add(entry.id);
+  }
+
+  return {
+    resolvedPaths: accepted.map(e => e.uri),
+    rawPaths: accepted.map(e => e.rawPath),
+    pathLineNumbers: accepted.map(e => e.lineNumber),
+    subsumedPaths,
+  };
 }
 
 
