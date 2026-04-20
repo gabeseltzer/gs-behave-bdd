@@ -65,9 +65,9 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
   6. Overlapping paths (`paths = features\n  features/api`) produce exactly ONE test tree subtree — dedup in `resolvePaths` drops the subsumed path and logs the collision
 **Plans**: 3 plans
 **Plans:**
-- [ ] 08-01-PLAN.md - configParser dedup + per-path diagnostics + unit tests
-- [ ] 08-02-PLAN.md - fileParser + stepMappings + junitParser multi-root + path-group TestItems
-- [ ] 08-03-PLAN.md - Watcher fan-out + handler union + runner + settings cascade
+- [x] 08-01-PLAN.md - configParser dedup + per-path diagnostics + unit tests
+- [x] 08-02-PLAN.md - fileParser + stepMappings + junitParser multi-root + path-group TestItems
+- [x] 08-03-PLAN.md - Watcher fan-out + handler union + runner + settings cascade
 **UI hint**: yes
 
 ### Phase 9: Subdirectory Config Scan
