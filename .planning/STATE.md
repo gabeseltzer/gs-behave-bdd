@@ -2,15 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Multi-Path & Monorepo-Aware Discovery
-status: Phase 7 complete; ready for Phase 8
-stopped_at: Phase 7 complete
-last_updated: "2026-04-20"
-last_activity: 2026-04-20 — Phase 7 complete (3 plans, 569 tests, plural types end-to-end)
+status: unknown
+stopped_at: Phase 8 context gathered
+last_updated: "2026-04-20T19:21:25.534Z"
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  completed_phases: 2
+  total_plans: 6
+  completed_plans: 6
 ---
 
 # Project State
@@ -20,14 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17 — v1.2 milestone started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** v1.2 Multi-Path & Monorepo-Aware Discovery — multi-value `paths=` support + depth-3 subdirectory scan with first-match-wins; phase 8 (consumers) is next.
+**Current focus:** Phase 08 — parser-test-tree-watcher-multi-root
 
 ## Current Position
 
-Phase: 8 — Parser / Test-Tree / Watcher Multi-Root Iteration (not started)
-Plan: —
-Status: Phase 7 complete; ready for `/gsd-plan-phase 8`
-Last activity: 2026-04-20 — Phase 7 complete (3 plans, 569 tests, plural types end-to-end)
+Phase: 9
+Plan: Not started
 
 ## Performance Metrics
 
@@ -95,6 +92,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-17T20:42:05.827Z
-Stopped at: Phase 7 context gathered
-Resume file: .planning/phases/07-internal-multi-path-types/07-CONTEXT.md
+Last session: 2026-04-20T17:41:40.099Z
+Stopped at: Phase 8 context gathered
+Resume file: .planning/phases/08-parser-test-tree-watcher-multi-root/08-CONTEXT.md
