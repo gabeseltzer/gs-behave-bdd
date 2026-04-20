@@ -107,7 +107,7 @@ suite('watcher-integration suite', () => {
 					const entry = instances.getDiscoveryEntry(wkspUri);
 					if (!entry) return undefined;
 					if (entry.source !== 'config-file') return undefined;
-					if (!entry.featuresUri.fsPath.endsWith('features-alt')) return undefined;
+					if (!entry.featuresUris[0].fsPath.endsWith('features-alt')) return undefined;
 					return { entry };
 				},
 				{ intervalMs: 100, timeoutMs: 15000 }
@@ -115,7 +115,7 @@ suite('watcher-integration suite', () => {
 
 			assert.strictEqual(state.entry.source, 'config-file', 'after create, source should be config-file');
 			assert.strictEqual(state.entry.configError, undefined, 'no configError on fresh valid config');
-			assert.ok(state.entry.featuresUri.fsPath.endsWith('features-alt'), 'featuresUri should point to features-alt');
+			assert.ok(state.entry.featuresUris[0].fsPath.endsWith('features-alt'), 'featuresUris[0] should point to features-alt');
 		} finally {
 			// D-08/D-09 tension: no-op by design — Test C depends on Test B's "paths = features-alt" end state.
 			// See 05-03-PLAN.md §design_notes.
@@ -134,8 +134,8 @@ suite('watcher-integration suite', () => {
 					const entry = instances.getDiscoveryEntry(wkspUri);
 					if (!entry) return undefined;
 					if (entry.source !== 'config-file') return undefined;
-					if (!entry.featuresUri.fsPath.endsWith('features')) return undefined;
-					if (entry.featuresUri.fsPath.endsWith('features-alt')) return undefined;
+					if (!entry.featuresUris[0].fsPath.endsWith('features')) return undefined;
+					if (entry.featuresUris[0].fsPath.endsWith('features-alt')) return undefined;
 					const scenario = findScenarioByName(instances, wkspUri, 'run a successful test');
 					const altScenario = findScenarioByName(instances, wkspUri, 'alternate path discovery');
 					if (!scenario) return undefined;
@@ -146,8 +146,8 @@ suite('watcher-integration suite', () => {
 			);
 
 			assert.strictEqual(state.entry.source, 'config-file', 'after change, source should remain config-file');
-			assert.ok(state.entry.featuresUri.fsPath.endsWith('features'), 'featuresUri should point back to features/');
-			assert.ok(!state.entry.featuresUri.fsPath.endsWith('features-alt'), 'featuresUri should NOT end with features-alt');
+			assert.ok(state.entry.featuresUris[0].fsPath.endsWith('features'), 'featuresUris[0] should point back to features/');
+			assert.ok(!state.entry.featuresUris[0].fsPath.endsWith('features-alt'), 'featuresUris[0] should NOT end with features-alt');
 			assert.ok(state.scenario, "'run a successful test' scenario should reappear");
 		} finally {
 			// D-08/D-09 tension: no-op by design — suiteTeardown restores originalBehaveIni after this test.
