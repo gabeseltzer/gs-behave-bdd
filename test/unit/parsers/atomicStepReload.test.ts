@@ -35,7 +35,9 @@ suite('atomic step reload - reparseFile (debounced Python path)', () => {
     uri: wkspUri,
     name: 'test',
     featuresUri: featuresUri,
+    featuresUris: [featuresUri],
     stepsSearchUri: stepsUri,
+    stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
   } as WorkspaceSettings;
 
@@ -171,7 +173,9 @@ suite('step load error notification', () => {
     uri: wkspUri,
     name: 'test',
     featuresUri: featuresUri,
+    featuresUris: [featuresUri],
     stepsSearchUri: stepsUri,
+    stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
   } as WorkspaceSettings;
 
@@ -404,7 +408,9 @@ suite('duplicate step diagnostics integration (via reparseFile)', () => {
     uri: wkspUri,
     name: 'test',
     featuresUri: featuresUri,
+    featuresUris: [featuresUri],
     stepsSearchUri: stepsUri,
+    stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
   } as WorkspaceSettings;
 
@@ -572,7 +578,9 @@ suite('stderr logging to output channel (via reparseFile)', () => {
     uri: wkspUri,
     name: 'test',
     featuresUri: featuresUri,
+    featuresUris: [featuresUri],
     stepsSearchUri: stepsUri,
+    stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
   } as WorkspaceSettings;
 
