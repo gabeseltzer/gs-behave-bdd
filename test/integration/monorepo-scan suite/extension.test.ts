@@ -38,6 +38,7 @@ suite('monorepo-scan suite', () => {
 	suiteTeardown(async () => {
 		try {
 			await vscode.workspace.getConfiguration('gs-behave-bdd').update('discoveryDepth', undefined, vscode.ConfigurationTarget.Workspace);
+			await instances.configurationChangedHandler(undefined, undefined, true);
 		} catch {
 			// best-effort cleanup
 		}
@@ -67,6 +68,8 @@ suite('monorepo-scan suite', () => {
 		await vscode.workspace.getConfiguration('gs-behave-bdd').update(
 			'discoveryDepth', 0, vscode.ConfigurationTarget.Workspace
 		);
+		// Trigger re-discovery (integration test guard blocks onDidChangeConfiguration)
+		await instances.configurationChangedHandler(undefined, undefined, true);
 
 		const state = await waitForTestTree(
 			() => {
@@ -97,6 +100,8 @@ suite('monorepo-scan suite', () => {
 		await vscode.workspace.getConfiguration('gs-behave-bdd').update(
 			'discoveryDepth', undefined, vscode.ConfigurationTarget.Workspace
 		);
+		// Trigger re-discovery (integration test guard blocks onDidChangeConfiguration)
+		await instances.configurationChangedHandler(undefined, undefined, true);
 
 		const state = await waitForTestTree(
 			() => {
