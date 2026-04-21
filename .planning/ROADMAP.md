@@ -97,7 +97,9 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
   3. A workspace with BOTH `featuresPath` and `featuresPaths` set uses the plural value and writes an info-level line to the Behave BDD output channel noting that the singular is being ignored
   4. `"gs-behave-bdd.featuresPaths": []` (empty array) is treated as if the setting is not set — discovery falls back to config file / convention with no silent empty tree
   5. `hasExplicitSetting` returns true when either `featuresPath` OR `featuresPaths` is set at any scope, preserving the v1.0 manual-override priority
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 10-01-PLAN.md — package.json declaration + settings.ts info log + common.ts hasExplicitNonEmptyArraySetting + unit tests
 
 ### Phase 11: UX Polish + Regression Hardening
 **Goal**: The v1.2 feature set is locked in by a multi-scenario integration test matrix running against dedicated fixtures, with a 3× Windows CI flakiness gate matching v1.1 precedent
@@ -124,5 +126,5 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 | 7. Internal Multi-Path Types | v1.2 | 3/3 | Complete | 2026-04-20 |
 | 8. Parser / Test-Tree / Watcher Multi-Root Iteration | v1.2 | 0/3 | Not started | - |
 | 9. Subdirectory Config Scan | v1.2 | 0/3 | Not started | - |
-| 10. `featuresPaths` User-Facing Settings Key | v1.2 | 0/? | Not started | - |
+| 10. `featuresPaths` User-Facing Settings Key | v1.2 | 0/1 | Not started | - |
 | 11. UX Polish + Regression Hardening | v1.2 | 0/? | Not started | - |
