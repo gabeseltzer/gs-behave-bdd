@@ -417,11 +417,9 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
   if (workspaceFoldersWithFeatures.length === 0) {
     if (folders.length === 1 && folders[0].name === "gs-behave-bdd")
       throw `Please disable the marketplace Behave BDD extension before beginning development!`;
-    else
-      throw `Extension was activated but none of the workspace folders contain a root 'features' folder, ` +
-      `a behave config file (behave.ini, .behaverc, setup.cfg, tox.ini, pyproject.toml) with a [behave] paths setting, ` +
-      `or a settings.json that specifies a valid 'gs-behave-bdd.featuresPath'.\n` +
-      `Please add a valid 'gs-behave-bdd.featuresPath' property to your workspace settings.json file and then restart vscode.`;
+    // Phase 9: Don't throw on 0 folders — the async BFS scanner may discover
+    // subdirectory configs after initial activation. Return empty so activate()
+    // can proceed and the scanner gets a chance to run.
   }
 
   return workspaceFoldersWithFeatures;
