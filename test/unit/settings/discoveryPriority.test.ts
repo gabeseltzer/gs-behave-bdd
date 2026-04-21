@@ -6,7 +6,7 @@
 // When no explicit settings exist, config-file discovery runs (Branch B).
 
 import * as assert from 'assert';
-import { hasExplicitSetting } from '../../../src/common';
+import { hasExplicitSetting, hasExplicitNonEmptyArraySetting } from '../../../src/common';
 
 // --- Helpers: mock vscode.WorkspaceConfiguration with specific scope values ---
 
@@ -123,6 +123,66 @@ suite('discovery priority (TEST-02)', () => {
       const cfg = makeConfig({});
       const legacyCfg = makeConfig({});
       assert.strictEqual(hasExplicitSetting(cfg, 'projectPath', legacyCfg), false);
+    });
+  });
+
+
+
+  suite('hasExplicitNonEmptyArraySetting - featuresPaths (D-13, D-14)', () => {
+
+    test('returns true for non-empty array at workspaceFolderValue', () => {
+      const cfg = {
+        inspect: () => ({
+          key: 'featuresPaths',
+          globalValue: undefined,
+          workspaceValue: undefined,
+          workspaceFolderValue: ['a', 'b'],
+        }),
+      } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      assert.strictEqual(hasExplicitNonEmptyArraySetting(cfg, 'featuresPaths'), true);
+    });
+
+    test('returns true for non-empty array at globalValue', () => {
+      const cfg = {
+        inspect: () => ({
+          key: 'featuresPaths',
+          globalValue: ['x'],
+          workspaceValue: undefined,
+          workspaceFolderValue: undefined,
+        }),
+      } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      assert.strictEqual(hasExplicitNonEmptyArraySetting(cfg, 'featuresPaths'), true);
+    });
+
+    test('returns false for empty array at all scopes (Pitfall 1)', () => {
+      const cfg = {
+        inspect: () => ({
+          key: 'featuresPaths',
+          globalValue: [],
+          workspaceValue: [],
+          workspaceFolderValue: [],
+        }),
+      } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      assert.strictEqual(hasExplicitNonEmptyArraySetting(cfg, 'featuresPaths'), false);
+    });
+
+    test('returns false when all scopes are undefined', () => {
+      const cfg = {
+        inspect: () => ({
+          key: 'featuresPaths',
+          globalValue: undefined,
+          workspaceValue: undefined,
+          workspaceFolderValue: undefined,
+        }),
+      } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      assert.strictEqual(hasExplicitNonEmptyArraySetting(cfg, 'featuresPaths'), false);
+    });
+
+    test('returns false when inspect returns undefined', () => {
+      const cfg = {
+        inspect: () => undefined,
+      } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      assert.strictEqual(hasExplicitNonEmptyArraySetting(cfg, 'featuresPaths'), false);
     });
   });
 

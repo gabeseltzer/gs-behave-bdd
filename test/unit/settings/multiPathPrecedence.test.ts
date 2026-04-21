@@ -11,6 +11,7 @@ import * as common from '../../../src/common';
 import * as configModule from '../../../src/configuration';
 import { WorkspaceSettings, WindowSettings } from '../../../src/settings';
 import { Logger } from '../../../src/logger';
+import { TestWorkspaceConfig } from '../../../src/testWorkspaceConfig';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const vscode = require('vscode');
@@ -192,6 +193,76 @@ suite('multiPathPrecedence (TEST-12, D-11)', () => {
       });
       assert.strictEqual(s.workspaceRelativeFeaturesPaths[0], 'project/a');
       assert.strictEqual(s.workspaceRelativeFeaturesPaths[1], 'project/b');
+    });
+  });
+
+
+
+  suite('both-set info log (D-06..D-09)', () => {
+
+    test('logs info when both featuresPath and featuresPaths are explicitly set', () => {
+      const logger = mockLogger();
+      const cfg = makeConfig({ ...BASE_CFG, featuresPath: 'custom', featuresPaths: ['a', 'b'] });
+      new WorkspaceSettings(MOCK_URI, cfg, makeWinSettings(), logger);
+      const logInfoStub = logger.logInfo as sinon.SinonStub;
+      assert.ok(
+        logInfoStub.calledWithMatch(
+          sinon.match((msg: string) => msg.includes('Both featuresPath and featuresPaths are set')),
+          MOCK_URI
+        ),
+        'expected logInfo to be called with both-set message'
+      );
+    });
+
+    test('does NOT log when only featuresPaths is set (singular not explicit)', () => {
+      const logger = mockLogger();
+      const values: Record<string, unknown> = { ...BASE_CFG, featuresPaths: ['a', 'b'], featuresPath: 'features' };
+      const cfg = {
+        get: (key: string) => values[key],
+        has: () => false,
+        inspect: (key: string) => ({
+          key,
+          defaultValue: key === 'featuresPath' ? 'features' : undefined,
+          globalValue: undefined,
+          workspaceValue: key === 'featuresPath' ? undefined : values[key],
+          workspaceFolderValue: undefined,
+        }),
+        update: () => Promise.resolve(),
+      };
+      new WorkspaceSettings(MOCK_URI, cfg as any, makeWinSettings(), logger); // eslint-disable-line @typescript-eslint/no-explicit-any
+      const logInfoStub = logger.logInfo as sinon.SinonStub;
+      const bothSetCalls = logInfoStub.getCalls().filter(
+        (c: sinon.SinonSpyCall) => typeof c.args[0] === 'string' && c.args[0].includes('Both featuresPath and featuresPaths are set')
+      );
+      assert.strictEqual(bothSetCalls.length, 0, 'should not log both-set message when singular is not explicit');
+    });
+
+    test('does NOT log when only featuresPath is set (no plural)', () => {
+      const logger = mockLogger();
+      const cfg = makeConfig({ ...BASE_CFG, featuresPath: 'custom', featuresPaths: undefined });
+      new WorkspaceSettings(MOCK_URI, cfg, makeWinSettings(), logger);
+      const logInfoStub = logger.logInfo as sinon.SinonStub;
+      const bothSetCalls = logInfoStub.getCalls().filter(
+        (c: sinon.SinonSpyCall) => typeof c.args[0] === 'string' && c.args[0].includes('Both featuresPath and featuresPaths are set')
+      );
+      assert.strictEqual(bothSetCalls.length, 0, 'should not log both-set message when plural is absent');
+    });
+  });
+
+
+  suite('TestWorkspaceConfig featuresPaths default (Pitfall 5)', () => {
+    test('get("featuresPaths") returns [] when no featuresPaths passed', () => {
+      const tc = new TestWorkspaceConfig({
+        envVarOverrides: {},
+        featuresPath: 'features',
+        justMyCode: true,
+        multiRootRunWorkspacesInParallel: true,
+        runParallel: false,
+        xRay: false,
+      });
+      const result = tc.get<string[]>('featuresPaths');
+      assert.ok(Array.isArray(result), 'should return an array');
+      assert.strictEqual(result.length, 0, 'should be empty array');
     });
   });
 
