@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import {
   findHighestTargetParentDirectorySync, findSubdirectorySync, getUrisOfWkspFoldersWithFeatures,
   getWorkspaceFolder, uriId, urisMatch, WkspError,
-  DiscoverySource, DiscoveryEntry, getDiscoveryEntry,
+  DiscoverySource, DiscoveryEntry, getDiscoveryEntry, hasExplicitSetting,
 } from './common';
 import { config } from './configuration';
 import { Logger } from './logger';
@@ -184,6 +184,14 @@ export class WorkspaceSettings {
     let projectRelativeFeaturesPaths: string[];
     if (featuresPathsCfg && Array.isArray(featuresPathsCfg) && featuresPathsCfg.length > 0) {
       // Rung 1: plural non-empty
+      // D-06..D-09: emit info log if singular also explicitly set at any scope
+      if (hasExplicitSetting(wkspConfig, "featuresPath", legacyConfig)) {
+        logger.logInfo(
+          "Both featuresPath and featuresPaths are set — using featuresPaths (plural). " +
+          "The singular featuresPath value is ignored.",
+          wkspUri
+        );
+      }
       projectRelativeFeaturesPaths = featuresPathsCfg
         .map(p => p.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim())
         .filter(p => p.length > 0);

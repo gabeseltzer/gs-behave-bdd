@@ -79,7 +79,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
       case "featuresPath":
         return <T><unknown>(this.featuresPath === undefined ? "features" : this.featuresPath);
       case "featuresPaths":
-        return <T><unknown>this.featuresPaths;
+        return <T><unknown>(this.featuresPaths ?? []);
       case "multiRootRunWorkspacesInParallel":
         return <T><unknown>(this.multiRootRunWorkspacesInParallel === undefined ? true : this.multiRootRunWorkspacesInParallel);
       case "justMyCode":

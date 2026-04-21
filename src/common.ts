@@ -158,6 +158,19 @@ export function hasExplicitSetting(
 }
 
 
+// Returns true if the named array setting has been explicitly set to a NON-EMPTY array
+// at any VS Code scope. An empty array [] does NOT count as "explicitly set" (D-14).
+export function hasExplicitNonEmptyArraySetting(
+  wkspConfig: vscode.WorkspaceConfiguration,
+  name: string
+): boolean {
+  const insp = wkspConfig.inspect<string[]>(name);
+  if (!insp) return false;
+  return (Array.isArray(insp.globalValue) && insp.globalValue.length > 0) ||
+    (Array.isArray(insp.workspaceValue) && insp.workspaceValue.length > 0) ||
+    (Array.isArray(insp.workspaceFolderValue) && insp.workspaceFolderValue.length > 0);
+}
+
 // THIS FUNCTION MUST BE FAST (ideally < 1ms)
 // (check performance if you change it)
 let workspaceFoldersWithFeatures: vscode.Uri[];
@@ -186,7 +199,8 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     // When explicit settings exist at any scope, skip config-file discovery entirely.
     // Run existing settings-based logic unchanged for backward compatibility.
     if (hasExplicitSetting(wkspConfig, "projectPath", legacyWkspConfig) ||
-        hasExplicitSetting(wkspConfig, "featuresPath", legacyWkspConfig)) {
+        hasExplicitSetting(wkspConfig, "featuresPath", legacyWkspConfig) ||
+        hasExplicitNonEmptyArraySetting(wkspConfig, "featuresPaths")) {
 
       const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath", legacyWkspConfig);
       const featuresPath = getActualWorkspaceSetting<string>(wkspConfig, "featuresPath", legacyWkspConfig);
