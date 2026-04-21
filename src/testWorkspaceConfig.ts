@@ -22,12 +22,15 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   private verboseLogging: boolean | undefined;
   private importStrategy: string | undefined;
   private stepDefinitionSearchTimeout: number | undefined;
+  private discoveryDepth: number | undefined;
+  private discoveryStopOnFirstHit: boolean | undefined;
+  private suppressMultiConfigNotification: boolean | undefined;
 
   // all user-settable settings in settings.json or *.code-workspace
   constructor({
     envVarOverrides, envVarPresets, activeEnvVarPreset, projectPath, featuresPath: featuresPath, featuresPaths, justMyCode,
     multiRootRunWorkspacesInParallel,
-    runParallel, xRay, verboseLogging, importStrategy, stepDefinitionSearchTimeout
+    runParallel, xRay, verboseLogging, importStrategy, stepDefinitionSearchTimeout, discoveryDepth, discoveryStopOnFirstHit, suppressMultiConfigNotification
   }: {
     envVarOverrides: { [name: string]: string } | undefined,
     envVarPresets?: { [presetName: string]: { [name: string]: string } } | undefined,
@@ -41,7 +44,10 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     xRay: boolean | undefined,
     verboseLogging?: boolean | undefined,
     importStrategy?: string | undefined,
-    stepDefinitionSearchTimeout?: number | undefined
+    stepDefinitionSearchTimeout?: number | undefined,
+    discoveryDepth?: number | undefined,
+    discoveryStopOnFirstHit?: boolean | undefined,
+    suppressMultiConfigNotification?: boolean | undefined
   }) {
     this.envVarOverrides = envVarOverrides;
     this.envVarPresets = envVarPresets;
@@ -56,6 +62,9 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     this.verboseLogging = verboseLogging;
     this.importStrategy = importStrategy;
     this.stepDefinitionSearchTimeout = stepDefinitionSearchTimeout;
+    this.discoveryDepth = discoveryDepth;
+    this.discoveryStopOnFirstHit = discoveryStopOnFirstHit;
+    this.suppressMultiConfigNotification = suppressMultiConfigNotification;
   }
 
   get<T>(section: string): T {
@@ -94,6 +103,12 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.importStrategy === undefined ? "useBundled" : this.importStrategy);
       case "stepDefinitionSearchTimeout":
         return <T><unknown>(this.stepDefinitionSearchTimeout === undefined ? 20 : this.stepDefinitionSearchTimeout);
+      case "discoveryDepth":
+        return <T><unknown>(this.discoveryDepth === undefined ? 3 : this.discoveryDepth);
+      case "discoveryStopOnFirstHit":
+        return <T><unknown>(this.discoveryStopOnFirstHit === undefined ? false : this.discoveryStopOnFirstHit);
+      case "suppressMultiConfigNotification":
+        return <T><unknown>(this.suppressMultiConfigNotification === undefined ? false : this.suppressMultiConfigNotification);
       default:
         debugger; // eslint-disable-line no-debugger
         throw new Error("get() missing case for section: " + section);
@@ -150,6 +165,15 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         break;
       case "stepDefinitionSearchTimeout":
         response = <T><unknown>this.stepDefinitionSearchTimeout;
+        break;
+      case "discoveryDepth":
+        response = <T><unknown>this.discoveryDepth;
+        break;
+      case "discoveryStopOnFirstHit":
+        response = <T><unknown>this.discoveryStopOnFirstHit;
+        break;
+      case "suppressMultiConfigNotification":
+        response = <T><unknown>this.suppressMultiConfigNotification;
         break;
       default:
         debugger; // eslint-disable-line no-debugger
@@ -247,7 +271,12 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.importStrategy === undefined ? "useBundled" : this.importStrategy);
       case "stepDefinitionSearchTimeout":
         return <T><unknown>(this.stepDefinitionSearchTimeout === undefined ? 20 : this.stepDefinitionSearchTimeout);
-
+      case "discoveryDepth":
+        return <T><unknown>(this.discoveryDepth === undefined ? 3 : this.discoveryDepth);
+      case "discoveryStopOnFirstHit":
+        return <T><unknown>(this.discoveryStopOnFirstHit === undefined ? false : this.discoveryStopOnFirstHit);
+      case "suppressMultiConfigNotification":
+        return <T><unknown>(this.suppressMultiConfigNotification === undefined ? false : this.suppressMultiConfigNotification);
       default:
         debugger; // eslint-disable-line no-debugger
         throw new Error("getExpected() missing case for section: " + section);
