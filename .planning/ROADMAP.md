@@ -50,8 +50,11 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
   3. A workspace with an INI config containing `paths = features\n  features-alt` populates `WorkspaceSettings.featuresUris.length === 2` internally, even though nothing downstream consumes the second entry yet
   4. Setting `featuresPath: "."` (invalid token) or an empty string is still rejected exactly as in v1.1
   5. `npm run test:unit` passes with new unit coverage for the plural/singular precedence matrix (plural set / singular set / both set / neither set / plural empty array)
-**Plans**: TBD
-
+**Plans**: 3 plans
+Plans:
+- [ ] 11-01-PLAN.md — Fixtures (multi-path/, multi-path-settings/, monorepo-scan/) + logSettings plural unit test
+- [ ] 11-02-PLAN.md — Integration test suites (multi-path, multi-path-settings, monorepo-scan) + runTestSuites.ts wiring
+- [ ] 11-03-PLAN.md — 3× Windows CI flakiness gate (checkpoint)
 ### Phase 8: Parser / Test-Tree / Watcher Multi-Root Iteration
 **Goal**: When a user's behave config resolves to multiple feature directories, every consumer (parser, test tree, watcher, runner queue, fixture/step handlers, JUnit parser) iterates/unions/per-root-scopes across all roots so the full test surface is visible, runnable, and correctly scoped
 **Depends on**: Phase 7
@@ -111,8 +114,11 @@ Plans:
   3. Integration suite covers: multi-path from `behave.ini`, multi-path from `settings.json.featuresPaths`, subdir scan with multi-path inside the discovered config, config-edit that adds a new path rebuilding the tree via `waitForTestTree`, `discoveryDepth=0` edge case
   4. 3-run green pass on Windows CI matches the v1.1 D-21 flakiness gate before milestone close
   5. `logSettings` output in `settings.ts` renders the plural `featuresUris` as a comma-joined list — no single-path lie in the output channel
-**Plans**: TBD
-
+**Plans**: 3 plans
+Plans:
+- [ ] 11-01-PLAN.md — Fixtures (multi-path/, multi-path-settings/, monorepo-scan/) + logSettings plural unit test
+- [ ] 11-02-PLAN.md — Integration test suites (multi-path, multi-path-settings, monorepo-scan) + runTestSuites.ts wiring
+- [ ] 11-03-PLAN.md — 3× Windows CI flakiness gate (checkpoint)
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -127,4 +133,4 @@ Plans:
 | 8. Parser / Test-Tree / Watcher Multi-Root Iteration | v1.2 | 0/3 | Not started | - |
 | 9. Subdirectory Config Scan | v1.2 | 0/3 | Not started | - |
 | 10. `featuresPaths` User-Facing Settings Key | v1.2 | 1/1 | Complete    | 2026-04-21 |
-| 11. UX Polish + Regression Hardening | v1.2 | 0/? | Not started | - |
+| 11. UX Polish + Regression Hardening | v1.2 | 0/3 | Not started | - |
