@@ -35,7 +35,7 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 - [x] **Phase 7: Internal Multi-Path Types** — Introduce primary-plus-list plural types end-to-end (`featuresUris[]`, `resolvedPaths[]`) with singular getters so the codebase still compiles — completed 2026-04-20 (3/3 plans)
 - [ ] **Phase 8: Parser / Test-Tree / Watcher Multi-Root Iteration** — Make every consumer iterate/union/per-root-scope across `featuresUris[]`; user-visible multi-path when a behave.ini already lists multiple `paths=` entries
 - [ ] **Phase 9: Subdirectory Config Scan** — New `src/discovery/configScanner.ts` module: BFS depth-3 default, `discoveryDepth` setting, first-match-wins + `alsoFoundConfigs` notification, two-tier config watcher
-- [ ] **Phase 10: `featuresPaths` User-Facing Settings Key** — `gs-behave-bdd.featuresPaths: string[]` in package.json; plural wins over singular `featuresPath`; legacy key still honored
+- [x] **Phase 10: `featuresPaths` User-Facing Settings Key** — `gs-behave-bdd.featuresPaths: string[]` in package.json; plural wins over singular `featuresPath`; legacy key still honored (completed 2026-04-21)
 - [ ] **Phase 11: UX Polish + Regression Hardening** — Integration test matrix, dedicated `multi-path/` + `monorepo-scan/` fixtures, 3× Windows CI flakiness gate
 
 ## Phase Details
@@ -99,7 +99,7 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
   5. `hasExplicitSetting` returns true when either `featuresPath` OR `featuresPaths` is set at any scope, preserving the v1.0 manual-override priority
 **Plans**: 1 plan
 Plans:
-- [ ] 10-01-PLAN.md — package.json declaration + settings.ts info log + common.ts hasExplicitNonEmptyArraySetting + unit tests
+- [x] 10-01-PLAN.md — package.json declaration + settings.ts info log + common.ts hasExplicitNonEmptyArraySetting + unit tests
 
 ### Phase 11: UX Polish + Regression Hardening
 **Goal**: The v1.2 feature set is locked in by a multi-scenario integration test matrix running against dedicated fixtures, with a 3× Windows CI flakiness gate matching v1.1 precedent
@@ -126,5 +126,5 @@ Plans:
 | 7. Internal Multi-Path Types | v1.2 | 3/3 | Complete | 2026-04-20 |
 | 8. Parser / Test-Tree / Watcher Multi-Root Iteration | v1.2 | 0/3 | Not started | - |
 | 9. Subdirectory Config Scan | v1.2 | 0/3 | Not started | - |
-| 10. `featuresPaths` User-Facing Settings Key | v1.2 | 0/1 | Not started | - |
+| 10. `featuresPaths` User-Facing Settings Key | v1.2 | 1/1 | Complete    | 2026-04-21 |
 | 11. UX Polish + Regression Hardening | v1.2 | 0/? | Not started | - |
