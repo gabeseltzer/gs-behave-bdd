@@ -703,8 +703,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       forceFullRefresh?: boolean) => {
 
       // for integration test runAllTestsAndAssertTheResults, 
-      // only reload config on request (i.e. when testCfg supplied)
-      if (config.integrationTestRun && !testCfg)
+      // only reload config on request (i.e. when testCfg supplied or forceFullRefresh)
+      if (config.integrationTestRun && !testCfg && !forceFullRefresh)
         return;
 
       try {
@@ -725,10 +725,42 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         config.logger.syncChannelsToWorkspaceFolders();
 
         // Phase 9: Clear scan cache on settings change so re-discovery can re-scan
-        if (forceFullRefresh || (event && (event.affectsConfiguration('gs-behave-bdd.discoveryDepth') ||
+        const needsRescan = forceFullRefresh || (event && (event.affectsConfiguration('gs-behave-bdd.discoveryDepth') ||
             event.affectsConfiguration('gs-behave-bdd.discoveryStopOnFirstHit') ||
-            event.affectsConfiguration('gs-behave-bdd.projectPath')))) {
+            event.affectsConfiguration('gs-behave-bdd.projectPath')));
+        if (needsRescan) {
           clearScanResultCache();
+        }
+
+        // Phase 9: Re-run BFS scan for undiscovered workspaces when scan-affecting settings change
+        if (needsRescan) {
+          const allFolders = vscode.workspace.workspaceFolders;
+          if (allFolders) {
+            const discoveredUris = getUrisOfWkspFoldersWithFeatures(true);
+            const discoveredSet = new Set(discoveredUris.map(u => u.path));
+            const undiscovered = allFolders.filter(f => !discoveredSet.has(f.uri.path));
+            for (const folder of undiscovered) {
+              const wkspCfg = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri);
+              const depth = wkspCfg.get<number>("discoveryDepth") ?? 3;
+              const stopFirst = wkspCfg.get<boolean>("discoveryStopOnFirstHit") ?? false;
+              if (depth > 0) {
+                const result = await scanForBehaveConfig(folder.uri, depth, stopFirst);
+                if (result.primary) {
+                  setCachedScanResult(folder.uri, result);
+                  getUrisOfWkspFoldersWithFeatures(true);
+                  config.reloadSettings(folder.uri);
+                  if (getUrisOfWkspFoldersWithFeatures().some(u => urisMatch(u, folder.uri))) {
+                    const watchers = startWatchingWorkspace(folder.uri, ctrl, testData, parser);
+                    wkspWatchers.set(folder.uri, watchers);
+                    watchers.forEach(w => context.subscriptions.push(w));
+                    const cWatchers = startWatchingConfigFiles(folder.uri, ctrl, testData, parser, updateDiscoveryUX);
+                    wkspConfigWatchers.set(folder.uri, cWatchers);
+                    cWatchers.forEach(w => context.subscriptions.push(w));
+                  }
+                }
+              }
+            }
+          }
         }
 
         for (const wkspUri of getUrisOfWkspFoldersWithFeatures(true)) {
