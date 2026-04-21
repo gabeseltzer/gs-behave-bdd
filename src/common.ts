@@ -227,6 +227,20 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
         }
       }
 
+      // === Handle plural featuresPaths (D-11 Rung 1) ===
+      const featuresPathsArr = wkspConfig.get<string[]>("featuresPaths");
+      if (Array.isArray(featuresPathsArr) && featuresPathsArr.length > 0) {
+        const validUris = featuresPathsArr
+          .map(p => p.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim())
+          .filter(p => p.length > 0)
+          .map(p => vscode.Uri.joinPath(projectUri, p))
+          .filter(u => fs.existsSync(u.fsPath));
+        if (validUris.length > 0) {
+          discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUris: validUris });
+          return true;
+        }
+      }
+
       // default features path, no settings.json required
       let featuresUri = vscode.Uri.joinPath(projectUri, "features");
 
