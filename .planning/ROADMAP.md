@@ -33,10 +33,10 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 ### v1.2 Multi-Path & Monorepo-Aware Discovery (Phases 7-11)
 
 - [x] **Phase 7: Internal Multi-Path Types** — Introduce primary-plus-list plural types end-to-end (`featuresUris[]`, `resolvedPaths[]`) with singular getters so the codebase still compiles — completed 2026-04-20 (3/3 plans)
-- [ ] **Phase 8: Parser / Test-Tree / Watcher Multi-Root Iteration** — Make every consumer iterate/union/per-root-scope across `featuresUris[]`; user-visible multi-path when a behave.ini already lists multiple `paths=` entries
-- [ ] **Phase 9: Subdirectory Config Scan** — New `src/discovery/configScanner.ts` module: BFS depth-3 default, `discoveryDepth` setting, first-match-wins + `alsoFoundConfigs` notification, two-tier config watcher
+- [x] **Phase 8: Parser / Test-Tree / Watcher Multi-Root Iteration** — Make every consumer iterate/union/per-root-scope across `featuresUris[]`; user-visible multi-path when a behave.ini already lists multiple `paths=` entries — completed 2026-04-21 (3/3 plans)
+- [x] **Phase 9: Subdirectory Config Scan** — New `src/discovery/configScanner.ts` module: BFS depth-3 default, `discoveryDepth` setting, first-match-wins + `alsoFoundConfigs` notification, two-tier config watcher — completed 2026-04-21 (3/3 plans)
 - [x] **Phase 10: `featuresPaths` User-Facing Settings Key** — `gs-behave-bdd.featuresPaths: string[]` in package.json; plural wins over singular `featuresPath`; legacy key still honored (completed 2026-04-21)
-- [ ] **Phase 11: UX Polish + Regression Hardening** — Integration test matrix, dedicated `multi-path/` + `monorepo-scan/` fixtures, 3× Windows CI flakiness gate
+- [x] **Phase 11: UX Polish + Regression Hardening** — Integration test matrix, dedicated `multi-path/` + `monorepo-scan/` fixtures, 3× Windows CI flakiness gate (completed 2026-04-21)
 
 ## Phase Details
 
@@ -52,9 +52,9 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
   5. `npm run test:unit` passes with new unit coverage for the plural/singular precedence matrix (plural set / singular set / both set / neither set / plural empty array)
 **Plans**: 3 plans
 Plans:
-- [ ] 11-01-PLAN.md — Fixtures (multi-path/, multi-path-settings/, monorepo-scan/) + logSettings plural unit test
-- [ ] 11-02-PLAN.md — Integration test suites (multi-path, multi-path-settings, monorepo-scan) + runTestSuites.ts wiring
-- [ ] 11-03-PLAN.md — 3× Windows CI flakiness gate (checkpoint)
+- [x] 11-01-PLAN.md — Fixtures (multi-path/, multi-path-settings/, monorepo-scan/) + logSettings plural unit test
+- [x] 11-02-PLAN.md — Integration test suites (multi-path, multi-path-settings, monorepo-scan) + runTestSuites.ts wiring
+- [x] 11-03-PLAN.md — 3× Windows CI flakiness gate (checkpoint)
 ### Phase 8: Parser / Test-Tree / Watcher Multi-Root Iteration
 **Goal**: When a user's behave config resolves to multiple feature directories, every consumer (parser, test tree, watcher, runner queue, fixture/step handlers, JUnit parser) iterates/unions/per-root-scopes across all roots so the full test surface is visible, runnable, and correctly scoped
 **Depends on**: Phase 7
@@ -116,9 +116,9 @@ Plans:
   5. `logSettings` output in `settings.ts` renders the plural `featuresUris` as a comma-joined list — no single-path lie in the output channel
 **Plans**: 3 plans
 Plans:
-- [ ] 11-01-PLAN.md — Fixtures (multi-path/, multi-path-settings/, monorepo-scan/) + logSettings plural unit test
-- [ ] 11-02-PLAN.md — Integration test suites (multi-path, multi-path-settings, monorepo-scan) + runTestSuites.ts wiring
-- [ ] 11-03-PLAN.md — 3× Windows CI flakiness gate (checkpoint)
+- [x] 11-01-PLAN.md — Fixtures (multi-path/, multi-path-settings/, monorepo-scan/) + logSettings plural unit test
+- [x] 11-02-PLAN.md — Integration test suites (multi-path, multi-path-settings, monorepo-scan) + runTestSuites.ts wiring
+- [x] 11-03-PLAN.md — 3× Windows CI flakiness gate (checkpoint)
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -130,7 +130,7 @@ Plans:
 | 5. Integration Verification | v1.1 | 5/5 | Complete | 2026-04-17 |
 | 6. v1.1 Tech Debt & Admin Cleanup | v1.1 | 2/2 | Complete | 2026-04-17 |
 | 7. Internal Multi-Path Types | v1.2 | 3/3 | Complete | 2026-04-20 |
-| 8. Parser / Test-Tree / Watcher Multi-Root Iteration | v1.2 | 0/3 | Not started | - |
-| 9. Subdirectory Config Scan | v1.2 | 0/3 | Not started | - |
+| 8. Parser / Test-Tree / Watcher Multi-Root Iteration | v1.2 | 3/3 | Complete | 2026-04-21 |
+| 9. Subdirectory Config Scan | v1.2 | 3/3 | Complete | 2026-04-21 |
 | 10. `featuresPaths` User-Facing Settings Key | v1.2 | 1/1 | Complete    | 2026-04-21 |
-| 11. UX Polish + Regression Hardening | v1.2 | 0/3 | Not started | - |
+| 11. UX Polish + Regression Hardening | v1.2 | 3/3 | Complete   | 2026-04-21 |
