@@ -202,8 +202,8 @@ export class WorkspaceSettings {
           featuresPathCfg.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim() || "features"
         ];
       }
-    } else if (featuresPathCfg && featuresPathCfg.trim() !== "") {
-      // Rung 2: singular set
+    } else if (hasExplicitSetting(wkspConfig, "featuresPath", legacyConfig) && featuresPathCfg && featuresPathCfg.trim() !== "") {
+      // Rung 2: singular explicitly set (not just the package.json default)
       projectRelativeFeaturesPaths = [featuresPathCfg.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim()];
     } else if (entry?.source === 'config-file' && entry.featuresUris.length > 0) {
       // Rung 3: config-file discovery paths (from behave.ini/setup.cfg/pyproject.toml)
