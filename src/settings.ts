@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
 import {
   findHighestTargetParentDirectorySync, findSubdirectorySync, getUrisOfWkspFoldersWithFeatures,
   getWorkspaceFolder, uriId, urisMatch, WkspError,
@@ -204,8 +205,13 @@ export class WorkspaceSettings {
     } else if (featuresPathCfg && featuresPathCfg.trim() !== "") {
       // Rung 2: singular set
       projectRelativeFeaturesPaths = [featuresPathCfg.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim()];
+    } else if (entry?.source === 'config-file' && entry.featuresUris.length > 0) {
+      // Rung 3: config-file discovery paths (from behave.ini/setup.cfg/pyproject.toml)
+      projectRelativeFeaturesPaths = entry.featuresUris.map(u =>
+        path.relative(this.projectUri.fsPath, u.fsPath).replace(/\\/g, '/')
+      );
     } else {
-      // Rung 3: neither set → convention
+      // Rung 4: neither set, no config file → convention
       projectRelativeFeaturesPaths = ["features"];
     }
 
