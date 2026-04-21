@@ -164,6 +164,33 @@ async function runTestSuites() {
       launchArgs
     });
 
+    launchArgs = ["example-projects/multi-path"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './multi-path suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = ["example-projects/multi-path-settings"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './multi-path-settings suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = ["example-projects/monorepo-scan"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './monorepo-scan suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
     console.log("test run complete");
 
   } catch (err) {
