@@ -424,4 +424,79 @@ suite('configParser', () => {
 
   });
 
+
+  suite('dedupResolvedPaths (Phase 8, D-09, D-11)', () => {
+
+    function makeUri(p: string) {
+      return vscode.Uri.file(path.join(fixtureRoot, p));
+    }
+
+    test('exact duplicate: two identical paths deduplicated to one', () => {
+      const uri = makeUri('behave-ini/features');
+      const result = dedupResolvedPaths([uri, uri], ['features', 'features'], [1, 2]);
+      assert.strictEqual(result.resolvedPaths.length, 1, 'should have 1 path');
+      assert.strictEqual(result.subsumedPaths.length, 1, 'should have 1 subsumed');
+      assert.strictEqual(result.subsumedPaths[0].rawPath, 'features');
+      assert.strictEqual(result.subsumedPaths[0].lineNumber, 2);
+    });
+
+    test('subsumption: parent contains child', () => {
+      const parentUri = makeUri('multi-path');
+      const childUri = vscode.Uri.joinPath(parentUri, 'features/auth');
+      const result = dedupResolvedPaths(
+        [parentUri, childUri],
+        ['multi-path', 'multi-path/features/auth'],
+        [0, 1]
+      );
+      assert.strictEqual(result.resolvedPaths.length, 1, 'parent should win');
+      assert.strictEqual(result.subsumedPaths.length, 1);
+      assert.strictEqual(result.subsumedPaths[0].subsumedBy, 'multi-path');
+    });
+
+    test('reverse order subsumption: child listed first, parent still wins', () => {
+      const parentUri = makeUri('multi-path');
+      const childUri = vscode.Uri.joinPath(parentUri, 'features/auth');
+      const result = dedupResolvedPaths(
+        [childUri, parentUri],
+        ['multi-path/features/auth', 'multi-path'],
+        [1, 0]
+      );
+      assert.strictEqual(result.resolvedPaths.length, 1, 'parent should win regardless of order');
+      assert.ok(
+        result.resolvedPaths[0].path.endsWith('multi-path'),
+        'surviving path should be the parent'
+      );
+      assert.strictEqual(result.subsumedPaths[0].rawPath, 'multi-path/features/auth');
+    });
+
+    test('no overlap: both paths survive', () => {
+      const uri1 = makeUri('behave-ini/features');
+      const uri2 = makeUri('behaverc');
+      const result = dedupResolvedPaths([uri1, uri2], ['features', 'behaverc'], [0, 1]);
+      assert.strictEqual(result.resolvedPaths.length, 2, 'both should survive');
+      assert.strictEqual(result.subsumedPaths.length, 0, 'no subsumed paths');
+    });
+
+    test('three paths with mixed overlap', () => {
+      const features = makeUri('multi-path');
+      const featuresAuth = vscode.Uri.joinPath(features, 'features/auth');
+      const featuresAlt = makeUri('behave-ini');
+      const result = dedupResolvedPaths(
+        [features, featuresAuth, featuresAlt],
+        ['multi-path', 'multi-path/features/auth', 'behave-ini'],
+        [0, 1, 2]
+      );
+      assert.strictEqual(result.resolvedPaths.length, 2, 'multi-path + behave-ini survive');
+      assert.strictEqual(result.subsumedPaths.length, 1, 'features/auth subsumed');
+      assert.strictEqual(result.subsumedPaths[0].rawPath, 'multi-path/features/auth');
+    });
+
+    test('empty input returns empty output', () => {
+      const result = dedupResolvedPaths([], [], []);
+      assert.strictEqual(result.resolvedPaths.length, 0);
+      assert.strictEqual(result.subsumedPaths.length, 0);
+    });
+
+  });
+
 });
