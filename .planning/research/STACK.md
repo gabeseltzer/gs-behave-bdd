@@ -1,17 +1,17 @@
 # Technology Stack
 
-**Project:** gs-behave-bdd — v1.2 Multi-Path & Monorepo-Aware Discovery
+**Project:** gs-behave-bdd — 1.2.0 Multi-Path & Monorepo-Aware Discovery
 **Researched:** 2026-04-17
 **Confidence:** HIGH
-**Scope:** ADDITIONS ONLY for v1.2. v1.0 stack (smol-toml, hand-rolled INI parser) and v1.1 stack (VS Code FileSystemWatcher, 500ms debounce) remain unchanged.
+**Scope:** ADDITIONS ONLY for 1.2.0. 1.0.0 stack (smol-toml, hand-rolled INI parser) and 1.1.0 stack (VS Code FileSystemWatcher, 500ms debounce) remain unchanged.
 
 ---
 
 ## Headline Finding: configParser.ts ALREADY supports multi-path
 
-`src/parsers/configParser.ts` already parses multi-value `paths=` in both formats correctly. The v1.0 shrink was a deliberate deferral in the **resolver**, not the parser.
+`src/parsers/configParser.ts` already parses multi-value `paths=` in both formats correctly. The 1.0.0 shrink was a deliberate deferral in the **resolver**, not the parser.
 
-| Code location | What it does today | v1.2 change needed |
+| Code location | What it does today | 1.2.0 change needed |
 |--------------|-------------------|-------------------|
 | `parseIniConfig()` line 94-109 | Handles `paths=` plus whitespace-indented continuation lines; pushes each non-empty trimmed line into `pathsLines[]`. Matches Python `configparser` semantics. | **None.** |
 | `parseTomlConfig()` line 146-152 | Requires `paths` to be `Array.isArray(...)`; `paths.map(String)` produces `string[]`. | **None.** |
@@ -25,7 +25,7 @@ Downstream, `src/common.ts:253-261` (the `findBehaveConfig` → `DiscoveryEntry`
 
 ---
 
-## Recommended Stack (v1.2 additions)
+## Recommended Stack (1.2.0 additions)
 
 ### Zero new npm packages
 
@@ -41,7 +41,7 @@ Downstream, `src/common.ts:253-261` (the `findBehaveConfig` → `DiscoveryEntry`
 
 ### What `getUrisOfWkspFoldersWithFeatures` gives us for free
 
-The `<1ms` gatekeeper contract (`src/common.ts:161-168`, verified in v1.0) means the discovery cache must stay in-process. Our multi-path entries add `featuresUris: vscode.Uri[]` to the existing `Map<uriId, DiscoveryEntry>` — no new storage tier. Subdirectory scan results feed into the **same** map on cache-miss via the existing `findBehaveConfig` integration point.
+The `<1ms` gatekeeper contract (`src/common.ts:161-168`, verified in 1.0.0) means the discovery cache must stay in-process. Our multi-path entries add `featuresUris: vscode.Uri[]` to the existing `Map<uriId, DiscoveryEntry>` — no new storage tier. Subdirectory scan results feed into the **same** map on cache-miss via the existing `findBehaveConfig` integration point.
 
 ---
 
@@ -51,11 +51,11 @@ The `<1ms` gatekeeper contract (`src/common.ts:161-168`, verified in v1.0) means
 
 ### Why not `vscode.workspace.findFiles(pattern, ...)` (the built-in glob API)
 
-The codebase already answered this question in v1.0:
+The codebase already answered this question in 1.0.0:
 
 - `src/parsers/fileParser.ts:146-148` literally commented out a `vscode.workspace.findFiles(pattern, ...)` call and replaced it with the custom walker.
 - `src/common.ts:447-448` explains why: *"custom function to replace vscode.workspace.findFiles() functionality when required due to the glob INTERMITTENTLY not returning results on vscode startup in Windows OS for multiroot workspaces"*.
-- This extension targets Windows as a first-class platform (the flakiness gate in v1.1 was Windows-specific). Re-introducing the same API for config discovery would re-introduce the same bug class.
+- This extension targets Windows as a first-class platform (the flakiness gate in 1.1.0 was Windows-specific). Re-introducing the same API for config discovery would re-introduce the same bug class.
 
 ### Why not `fast-glob`, `globby`, `micromatch`, or `@npmcli/glob`
 
@@ -65,11 +65,11 @@ The codebase already answered this question in v1.0:
 | `globby` | Wraps `fast-glob` + `.gitignore` via `ignore` lib. Adds 2-3 MB to bundle. Overkill. |
 | `micromatch` | Pattern matcher only, not a walker — would still need a walker. No gain. |
 | `@npmcli/glob` / `glob@10` | `glob@7.2.0` is already a devDependency (never shipped to extension); pulling a production glob would be the first non-VS Code walker in `dependencies`. No justification for the 100KB+ of weight. |
-| `chokidar` | This is a watcher, not a walker — also already rejected in v1.1 STACK.md for the same reason. |
+| `chokidar` | This is a watcher, not a walker — also already rejected in 1.1.0 STACK.md for the same reason. |
 | `fs.promises.readdir({ recursive: true })` | Node 18.17+ supports this, but:<br>(1) no `excludeDirs` filter — would descend into `node_modules`, `.git`, `__pycache__` wasting time;<br>(2) no `CancellationToken` integration — cannot abort when workspace folder changes mid-scan;<br>(3) breaks the codebase's single-pattern convention (one traversal primitive, used everywhere). |
 | `fs.readdir` with `withFileTypes` + manual recursion | This is what `common.ts:_findFilesRecursive` already does — **but through `vscode.workspace.fs.readDirectory`**, which is abstracted over VS Code's virtual file systems and already integrates `FileType` checks. Using raw Node `fs` would split the abstraction. |
 
-### Why the existing walker fits v1.2 with almost no change
+### Why the existing walker fits 1.2.0 with almost no change
 
 `src/common.ts:449 findFiles()` already:
 
@@ -78,7 +78,7 @@ The codebase already answered this question in v1.0:
 3. Skips `DEFAULT_EXCLUDE_DIRS = { '__pycache__', '.git', 'node_modules', '.venv', '.tox', '.mypy_cache', '.pytest_cache', '.eggs', '*.egg-info' }` (`src/common.ts:431`) — exactly the directories we don't want to scan for configs either.
 4. Accepts a `CancellationToken` for abort on workspace change.
 
-**What v1.2 needs to add:** a thin wrapper (proposed name: `findConfigsInSubdirectories(wkspUri, maxDepth, cancelToken)`) that:
+**What 1.2.0 needs to add:** a thin wrapper (proposed name: `findConfigsInSubdirectories(wkspUri, maxDepth, cancelToken)`) that:
 
 - Tracks current depth; stops recursing when `depth > maxDepth` (default 3, from `discoveryDepth` setting).
 - Matches by **exact filename** against the `CONFIG_FILES` list in `configParser.ts:18-24`, not by extension (since `setup.cfg`/`tox.ini`/`pyproject.toml` share extensions with unrelated files).
@@ -88,7 +88,7 @@ The codebase already answered this question in v1.0:
 
 **Symlinks:** `vscode.workspace.fs.readDirectory` returns `FileType.SymbolicLink` as a separate flag. The existing walker treats anything not `FileType.Directory` as a file — so symlinked directories are **not** recursed into, which is the desired safety behaviour for a monorepo scan. No change needed.
 
-**`.gitignore` respect:** The existing walker does NOT respect `.gitignore`. For v1.2 this is acceptable because the `DEFAULT_EXCLUDE_DIRS` list covers the overwhelming majority of gitignored dirs in practice (`node_modules`, `.venv`, `__pycache__`, etc.). Adding a `.gitignore` parser would be a ~100KB dep (`ignore` package) for marginal benefit. Flag for revisit only if users report false-positive configs from `.gitignore`d dirs.
+**`.gitignore` respect:** The existing walker does NOT respect `.gitignore`. For 1.2.0 this is acceptable because the `DEFAULT_EXCLUDE_DIRS` list covers the overwhelming majority of gitignored dirs in practice (`node_modules`, `.venv`, `__pycache__`, etc.). Adding a `.gitignore` parser would be a ~100KB dep (`ignore` package) for marginal benefit. Flag for revisit only if users report false-positive configs from `.gitignore`d dirs.
 
 ---
 
@@ -99,7 +99,7 @@ The codebase already answered this question in v1.0:
 ### The existing pattern
 
 ```ts
-// src/extension.ts:505-517 (v1.0)
+// src/extension.ts:505-517 (1.0.0)
 (async () => {
   try {
     await parser.stepsParseComplete(10000, "activate-validateOpenDocs");
@@ -117,16 +117,16 @@ The codebase already answered this question in v1.0:
 
 This is the canonical "kick off async work during `activate()` without blocking" idiom in this codebase. `activate()`'s own comment at `src/extension.ts:124-125` spells it out: *"THIS MUST RETURN FAST: AVOID using "await" here unless absolutely necessary"*.
 
-### How v1.2 uses it
+### How 1.2.0 uses it
 
 Inside the existing activation loop (`src/extension.ts:142-146`, which sets up watchers per workspace), the discovery call that invokes `findBehaveConfig` currently runs synchronously through `getUrisOfWkspFoldersWithFeatures()` → `discoveryCache` population (`src/common.ts:249-262`). That whole path is synchronous (`fs.existsSync` + `fs.readFileSync`), which is fine for workspace-root-only reads.
 
-For subdirectory scan v1.2 must **not** add synchronous `readDirSync` recursion into activation. Two viable patterns:
+For subdirectory scan 1.2.0 must **not** add synchronous `readDirSync` recursion into activation. Two viable patterns:
 
 **Pattern A (preferred): async fallback inside discovery function**
 
 - Workspace-root check stays synchronous (unchanged).
-- If root has no config AND subdirectory-scan is enabled, kick off async scan via IIFE after `activate()` returns; initial test tree renders from convention-fallback; when scan completes, call `getUrisOfWkspFoldersWithFeatures(true)` (forceRefresh) + `parser.parseFilesForWorkspace(...)`, same re-render path used by the v1.1 config watcher (`src/watchers/configWatcher.ts:56-59`).
+- If root has no config AND subdirectory-scan is enabled, kick off async scan via IIFE after `activate()` returns; initial test tree renders from convention-fallback; when scan completes, call `getUrisOfWkspFoldersWithFeatures(true)` (forceRefresh) + `parser.parseFilesForWorkspace(...)`, same re-render path used by the 1.1.0 config watcher (`src/watchers/configWatcher.ts:56-59`).
 - Trade-off: user sees tests from `features/` convention for a moment, then reconciles to the subdirectory config's features when scan lands. Acceptable because the common case (config at workspace root) still resolves synchronously.
 
 **Pattern B: make discovery fully async**
@@ -143,11 +143,11 @@ For subdirectory scan v1.2 must **not** add synchronous `readDirSync` recursion 
 
 ## VS Code FileSystemWatcher Deep-Glob Support
 
-### What v1.1 currently watches
+### What 1.1.0 currently watches
 
 `src/watchers/configWatcher.ts:9` → `{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}` — workspace root only, no `**/`.
 
-### What v1.2 needs
+### What 1.2.0 needs
 
 When the resolved config file lives in a subdirectory (e.g., `myapp/backend/behave.ini`), the watcher must fire on edits there. Two design choices:
 
@@ -156,13 +156,13 @@ When the resolved config file lives in a subdirectory (e.g., `myapp/backend/beha
 new vscode.RelativePattern(wkspUri, '**/{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}')
 ```
 
-Supported by VS Code's `GlobPattern` type documentation (installed `@types/vscode@1.82.0` — HIGH confidence, same doc block referenced in v1.1 STACK.md). `**/` prefix enables arbitrary-depth matching.
+Supported by VS Code's `GlobPattern` type documentation (installed `@types/vscode@1.82.0` — HIGH confidence, same doc block referenced in 1.1.0 STACK.md). `**/` prefix enables arbitrary-depth matching.
 
-**Risk 1 — the #164925 bare-filename bug:** v1.1 avoided this by using brace expansion (`{a,b,c}`). The fix is preserved under `**/{a,b,c}`; the bug is specifically about glob patterns with NO metacharacters being silently dropped. Brace expansion keeps this active. **No regression.**
+**Risk 1 — the #164925 bare-filename bug:** 1.1.0 avoided this by using brace expansion (`{a,b,c}`). The fix is preserved under `**/{a,b,c}`; the bug is specifically about glob patterns with NO metacharacters being silently dropped. Brace expansion keeps this active. **No regression.**
 
 **Risk 2 — recursive watcher cost on huge monorepos:** VS Code's `FileSystemWatcher` with `**/` recursively watches the entire tree. On a 10,000-file monorepo the OS-level watcher handles this, but change-event noise increases (every file-system event is delivered to the extension host, then filtered client-side). Mitigation: our handler already filters by `eventUri.scheme !== 'file'` (configWatcher.ts:35) and the 500ms debounce collapses bursts. Acceptable.
 
-**Risk 3 — documented quirk #72831 (stale file read on `onDidChange`):** Already mitigated by the 500ms debounce (v1.1). No change needed.
+**Risk 3 — documented quirk #72831 (stale file read on `onDidChange`):** Already mitigated by the 500ms debounce (1.1.0). No change needed.
 
 **Option B: Watch only the resolved config file's parent directory**
 ```ts
@@ -220,7 +220,7 @@ Two new `contributes.configuration.properties` entries. Both `scope: "resource"`
 | `src/watchers/workspaceWatcher.ts:14` | `${wkspSettings.workspaceRelativeFeaturesPath}/**` → iterate over `featuresUris[]`, create one watcher per path | Each features path needs its own FileSystemWatcher |
 | `src/settings.ts:82-101` | `WorkspaceSettings.featuresUri: Uri` → `featuresUris: Uri[]`; legacy singular `featuresUri` may stay as alias for `featuresUris[0]` to avoid cascading ~30+ call sites in a single phase | Roadmap may stage this |
 | `src/parsers/fileParser.ts:150, 185` | `findFiles(wkspSettings.featuresUri, ...)` → iterate `featuresUris` | Each features path produces its own feature-file set; merged into single test tree |
-| `src/runners/testRunHandler.ts` | `checkRunGuard` already uses `getDiscoveryEntry` per-workspace (v1.1) — no change | Multi-path doesn't affect guard semantics (one config, one error) |
+| `src/runners/testRunHandler.ts` | `checkRunGuard` already uses `getDiscoveryEntry` per-workspace (1.1.0) — no change | Multi-path doesn't affect guard semantics (one config, one error) |
 | `package.json:5-96` | Add `featuresPaths` and `discoveryDepth` keys (schema above) | |
 
 ---
@@ -230,15 +230,15 @@ Two new `contributes.configuration.properties` entries. Both `scope: "resource"`
 | Temptation | Why to Avoid |
 |------------|--------------|
 | `fast-glob`, `globby`, `micromatch`, `@npmcli/glob` | 100KB–2MB bundle cost for a problem the in-repo walker already solves. Bundle-size constraint in PROJECT.md:100 is explicit. |
-| `chokidar` or raw `fs.watch` | Rejected in v1.1 STACK.md for the same reason: VS Code's watcher is more reliable, especially on Windows. |
+| `chokidar` or raw `fs.watch` | Rejected in 1.1.0 STACK.md for the same reason: VS Code's watcher is more reliable, especially on Windows. |
 | `ignore` package (.gitignore respect) | DEFAULT_EXCLUDE_DIRS covers the 95% case. Revisit only on user report. |
 | Worker threads for scanning | I/O-bound; threading doesn't speed up disk. Extension host is single-process by design. |
 | `fs.promises.readdir({ recursive: true })` | Node 18.17+ supports it but no excluded-dirs + no cancellation = worse than existing walker. |
-| `vscode.workspace.findFiles` | v1.0 already rejected this for Windows multi-root startup flakiness (configParser/fileParser.ts:146-148, common.ts:447-448). Reintroducing for config search would reintroduce the bug. |
+| `vscode.workspace.findFiles` | 1.0.0 already rejected this for Windows multi-root startup flakiness (configParser/fileParser.ts:146-148, common.ts:447-448). Reintroducing for config search would reintroduce the bug. |
 | Bumping `engines.vscode` | No new APIs needed. All patterns work on ^1.82.0. |
-| New npm package for INI parsing | The hand-rolled parser in `configParser.ts:56-118` matches Python `configparser` continuation-line semantics exactly — a requirement no npm package satisfies (confirmed in v1.0 key decisions). Adding `ini` or `iniparser` would break config-fidelity. |
+| New npm package for INI parsing | The hand-rolled parser in `configParser.ts:56-118` matches Python `configparser` continuation-line semantics exactly — a requirement no npm package satisfies (confirmed in 1.0.0 key decisions). Adding `ini` or `iniparser` would break config-fidelity. |
 | Exposing `featuresUris` through `WorkspaceSettings` in the same phase as the parser change | Stage it: the type change cascades to 30+ sites. Scope to one phase at a time — first `configParser.resolvedPaths`, then `DiscoveryEntry`, then `WorkspaceSettings`. |
-| Making `updateDiscoveryUX` a public export on `extension.ts` | v1.1 already handled this by passing it as a callback into `startWatchingConfigFiles` (configWatcher.ts:27). Keep that pattern for any new watcher/scan modules. |
+| Making `updateDiscoveryUX` a public export on `extension.ts` | 1.1.0 already handled this by passing it as a callback into `startWatchingConfigFiles` (configWatcher.ts:27). Keep that pattern for any new watcher/scan modules. |
 | Auto-detecting `.gitignore` for scan excludes | Scope creep. `discoveryDepth=0` already gives users a full opt-out. |
 | Union-type setting (`featuresPath: string | string[]`) | VS Code settings UI renders union types awkwardly. Two keys + precedence rule is clearer. |
 | Async conversion of `getUrisOfWkspFoldersWithFeatures` | The `<1ms` gatekeeper contract (PROJECT.md:98) depends on synchronous cache read. Keep it sync; do async work outside the cache-read path. |
@@ -253,7 +253,7 @@ Two new `contributes.configuration.properties` entries. Both `scope: "resource"`
 | `**/{...}` single-watcher glob | Multiple per-directory watchers | If profiling shows excessive event noise from deep-watching large monorepos (unlikely; 500ms debounce handles it). |
 | Pattern A (sync root + async subdir IIFE) | Pattern B (fully async discovery) | Only if Pattern A introduces a visible flicker that users report as a bug. |
 | Two settings keys (`featuresPath` scalar + `featuresPaths` array) | Union-type single key | Never — VS Code UI makes this user-hostile. |
-| Inline additions to `configParser.ts` + `common.ts` | New `src/parsers/configDiscovery.ts` module | Only if the subdirectory-scan function grows past ~80 lines; below that, module split is over-abstraction (per v1.1 decision on `configWatcher.ts` sizing). |
+| Inline additions to `configParser.ts` + `common.ts` | New `src/parsers/configDiscovery.ts` module | Only if the subdirectory-scan function grows past ~80 lines; below that, module split is over-abstraction (per 1.1.0 decision on `configWatcher.ts` sizing). |
 
 ---
 
@@ -275,14 +275,14 @@ Two new `contributes.configuration.properties` entries. Both `scope: "resource"`
 - `src/common.ts:431-480` — **HIGH confidence**: custom `findFiles` walker with `DEFAULT_EXCLUDE_DIRS`, `vscode.workspace.fs.readDirectory`, `CancellationToken` support.
 - `src/common.ts:447-448` — **HIGH confidence**: documented rationale for rejecting `vscode.workspace.findFiles` on Windows multi-root.
 - `src/common.ts:32-40, 249-277` — **HIGH confidence**: `DiscoveryEntry` shape and the `findBehaveConfig` → cache-population bridge.
-- `src/watchers/configWatcher.ts:9, 31, 55-59` — **HIGH confidence**: v1.1 watcher pattern, brace-expansion glob, 500ms debounce, forceRefresh call site.
+- `src/watchers/configWatcher.ts:9, 31, 55-59` — **HIGH confidence**: 1.1.0 watcher pattern, brace-expansion glob, 500ms debounce, forceRefresh call site.
 - `src/extension.ts:124-125` — **HIGH confidence**: explicit "activate must return fast" contract.
 - `src/extension.ts:505-517` — **HIGH confidence**: existing async-IIFE pattern for post-activation work.
-- `src/parsers/fileParser.ts:146-148, 612-630` — **HIGH confidence**: rejected-`findFiles` comment and the debounce pattern that v1.1 already copied.
+- `src/parsers/fileParser.ts:146-148, 612-630` — **HIGH confidence**: rejected-`findFiles` comment and the debounce pattern that 1.1.0 already copied.
 - `node_modules/@types/vscode/index.d.ts` — `GlobPattern` and `RelativePattern` definitions (HIGH confidence, installed package).
 - `node_modules/smol-toml/package.json` — **HIGH confidence**: version `1.6.0`, already installed.
 - `package.json:5-96, 273-277` — **HIGH confidence**: existing settings schema shape (for `featuresPath`/`projectPath`) and existing `workspaceContains:**/behave.ini` activation events.
-- `.planning/research/STACK.md` (v1.1 baseline) — **HIGH confidence**: prior rationale for VS Code-native watcher over chokidar, `RelativePattern` with `Uri` base, debounce value.
+- `.planning/research/STACK.md` (1.1.0 baseline) — **HIGH confidence**: prior rationale for VS Code-native watcher over chokidar, `RelativePattern` with `Uri` base, debounce value.
 - `.planning/PROJECT.md:107-120` — **HIGH confidence**: decision log confirming `smol-toml`, hand-rolled INI, brace-expansion glob, 500ms debounce as shipped choices.
 
 ---

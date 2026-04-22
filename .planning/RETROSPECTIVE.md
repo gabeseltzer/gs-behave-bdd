@@ -2,7 +2,7 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
-## Milestone: v1.1 — Config File Watching
+## Milestone: 1.1.0 — Config File Watching
 
 **Shipped:** 2026-04-17
 **Phases:** 3 (Phases 4, 5, 6) | **Plans:** 9 | **Requirements:** 13/13
@@ -16,7 +16,7 @@
 
 ### What Worked
 
-- **Audit-driven Phase 5 + Phase 6.** The v1.1 milestone audit found `gaps_found` (TEST-08 unsatisfied + 4 tech-debt items). Spawning a dedicated integration-verification phase and a tech-debt cleanup phase made those gaps first-class work instead of acceptance-with-debt. Phases 4/5/6 closed same-week with zero carried debt.
+- **Audit-driven Phase 5 + Phase 6.** The 1.1.0 milestone audit found `gaps_found` (TEST-08 unsatisfied + 4 tech-debt items). Spawning a dedicated integration-verification phase and a tech-debt cleanup phase made those gaps first-class work instead of acceptance-with-debt. Phases 4/5/6 closed same-week with zero carried debt.
 - **Dedicated fixture per suite that mutates fs state.** Adding `watcher-integration/` alongside `features-alt/` meant other suites could keep running in parallel without cross-pollution — exactly the pattern D-05 predicted.
 - **`waitForTestTree` predicate polling.** Replacing wall-clock sleeps with state-based polling cut both flakiness and runtime on Windows, where FileSystemWatcher delete events can trail the syscall by 1-5s.
 - **Single choke-point callback.** Routing the watcher callback through `configurationChangedHandler(undefined, undefined, true)` (not a new handler) preserved the integration-test guard, log clearing, watcher rebuild, and notification-dedup clear in one place. Zero state-management branches.
@@ -24,7 +24,7 @@
 
 ### What Was Inefficient
 
-- **Audit was run against work-in-progress.** The v1.1 audit fired before Phases 5 and 6 existed as plans, so `gaps_found` status stuck around until the milestone-close ran. In future, the audit is most useful after planning phases exist but before they execute — not as a pre-flight for a close.
+- **Audit was run against work-in-progress.** The 1.1.0 audit fired before Phases 5 and 6 existed as plans, so `gaps_found` status stuck around until the milestone-close ran. In future, the audit is most useful after planning phases exist but before they execute — not as a pre-flight for a close.
 - **Three SUMMARY.md files (04-02, 06-01, 06-02) lacked the `one_liner` frontmatter field** that `gsd-tools summary-extract` reads. That is why `milestone complete` reported "2 phases, 7 plans" instead of the actual 3/9 — the tool counts plans via the presence of that field. Cheap to fix: add `one_liner:` to the YAML frontmatter convention.
 - **STATE.md drift through the milestone.** Multiple mid-milestone edits to plans/tasks counts meant STATE.md and the tool's view diverged at the close. Either use `gsd-tools` as the single writer, or clear the stats at milestone close rather than trying to keep them current mid-flight.
 - **`audit-open` CLI is broken** (`ReferenceError: output is not defined` at bin/gsd-tools.cjs:786). The pre-close artifact audit step was skipped. File this upstream.
@@ -58,18 +58,18 @@
 
 | Milestone | Phases | Plans | Key Change |
 |-----------|--------|-------|------------|
-| v1.0 | 3 | 6 | Initial MVP — config parsing, discovery cache, UX |
-| v1.1 | 3 | 9 | Introduced milestone audit + dedicated tech-debt phase at close; added predicate-polling test primitive |
+| 1.0.0 | 3 | 6 | Initial MVP — config parsing, discovery cache, UX |
+| 1.1.0 | 3 | 9 | Introduced milestone audit + dedicated tech-debt phase at close; added predicate-polling test primitive |
 
 ### Cumulative Quality
 
 | Milestone | Unit Tests | Integration Suites | Requirements Shipped | Deferred Debt |
 |-----------|-----------|--------------------|--------------------:|---------------|
-| v1.0 | ~430 | 13 | 21 | 0 |
-| v1.1 | 539 | 14 | 13 | 0 |
+| 1.0.0 | ~430 | 13 | 21 | 0 |
+| 1.1.0 | 539 | 14 | 13 | 0 |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. **Cache-first architecture keeps runtime cheap.** Both v1.0 (discovery cache) and v1.1 (run guard reads the same cache) validated that a module-level Map read in the hot path is the right shape for sub-ms gatekeepers.
-2. **Integration tests earn their cost when they cover multi-module flows.** v1.0's config-only/pyproject-config/malformed-config suites and v1.1's watcher-integration suite both caught wiring bugs that unit tests by construction cannot see.
-3. **Non-blocking UX over blocking dialogs.** Ship warnings, not gates — validated in both milestones (malformed-config notification in v1.0, run guard in v1.1).
+1. **Cache-first architecture keeps runtime cheap.** Both 1.0.0 (discovery cache) and 1.1.0 (run guard reads the same cache) validated that a module-level Map read in the hot path is the right shape for sub-ms gatekeepers.
+2. **Integration tests earn their cost when they cover multi-module flows.** 1.0.0's config-only/pyproject-config/malformed-config suites and 1.1.0's watcher-integration suite both caught wiring bugs that unit tests by construction cannot see.
+3. **Non-blocking UX over blocking dialogs.** Ship warnings, not gates — validated in both milestones (malformed-config notification in 1.0.0, run guard in 1.1.0).

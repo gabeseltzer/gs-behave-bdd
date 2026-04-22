@@ -1,7 +1,7 @@
 # Project Research Summary
 
-**Project:** gs-behave-bdd — v1.2 Multi-Path & Monorepo-Aware Discovery
-**Domain:** VS Code extension — additive discovery expansion on top of shipped v1.0/v1.1 stack
+**Project:** gs-behave-bdd — 1.2.0 Multi-Path & Monorepo-Aware Discovery
+**Domain:** VS Code extension — additive discovery expansion on top of shipped 1.0.0/1.1.0 stack
 **Researched:** 2026-04-17
 **Confidence:** HIGH
 
@@ -9,14 +9,14 @@
 
 ## Executive Summary
 
-**Scope is smaller than the milestone name suggests.** `src/parsers/configParser.ts` **already parses** multi-value `paths=` correctly in both INI (continuation lines) and TOML (native arrays). The v1.0 single-path restriction lives in exactly two functions — `resolvePaths` and `buildResult` — roughly 15 lines in one file. The parser never needed changes; v1.0 deliberately discarded the tail of `rawPaths[]` at the resolver. DISC-08 is a cascading type change (`featuresUri: Uri` → `featuresUris: Uri[]`) across ~18 consumers, not a parser rewrite. Land as a **primary-plus-list** pattern (keep `featuresUri` as a `featuresUris[0]` getter) rather than hard rename — the 18 consumers have three semantically distinct needs (primary canonical path, iterate-all, does-file-belong) that a blunt rename would collapse incorrectly.
+**Scope is smaller than the milestone name suggests.** `src/parsers/configParser.ts` **already parses** multi-value `paths=` correctly in both INI (continuation lines) and TOML (native arrays). The 1.0.0 single-path restriction lives in exactly two functions — `resolvePaths` and `buildResult` — roughly 15 lines in one file. The parser never needed changes; 1.0.0 deliberately discarded the tail of `rawPaths[]` at the resolver. DISC-08 is a cascading type change (`featuresUri: Uri` → `featuresUris: Uri[]`) across ~18 consumers, not a parser rewrite. Land as a **primary-plus-list** pattern (keep `featuresUri` as a `featuresUris[0]` getter) rather than hard rename — the 18 consumers have three semantically distinct needs (primary canonical path, iterate-all, does-file-belong) that a blunt rename would collapse incorrectly.
 
-**DISC-07 subdir scanning decisions are mostly pre-answered by the v1.0 codebase** — reuse `src/common.ts:449 findFiles` walker (not `vscode.workspace.findFiles`, rejected in v1.0 for Windows multi-root startup flakiness), reuse `DEFAULT_EXCLUDE_DIRS`, follow the fire-and-forget IIFE activation idiom from `extension.ts:505-517`. No new npm packages. `smol-toml` already handles arrays natively. Scanner must be BFS-bounded (depth 3 default, `discoveryDepth` setting opt-out), dedup subsumed paths, normalize Windows backslashes, and protect against symlink cycles on pnpm monorepos. Two new `package.json` settings keys (`featuresPaths`, `discoveryDepth`) and one watcher-glob change (`{...}` → `**/{...}`) round out the external surface.
+**DISC-07 subdir scanning decisions are mostly pre-answered by the 1.0.0 codebase** — reuse `src/common.ts:449 findFiles` walker (not `vscode.workspace.findFiles`, rejected in 1.0.0 for Windows multi-root startup flakiness), reuse `DEFAULT_EXCLUDE_DIRS`, follow the fire-and-forget IIFE activation idiom from `extension.ts:505-517`. No new npm packages. `smol-toml` already handles arrays natively. Scanner must be BFS-bounded (depth 3 default, `discoveryDepth` setting opt-out), dedup subsumed paths, normalize Windows backslashes, and protect against symlink cycles on pnpm monorepos. Two new `package.json` settings keys (`featuresPaths`, `discoveryDepth`) and one watcher-glob change (`{...}` → `**/{...}`) round out the external surface.
 
 **Two design constraints are firm, not preferences:**
 
 1. **Single TestItem root per workspace** — never one-per-feature-path. Cited from vscode-python #20345 and vscode-jest #129 UX pain. Multi-path features go as siblings under the existing workspace node.
-2. **MULTI-01/02 boundary rule** — if a feature requires `WorkspaceSettings` to become per-project rather than per-workspace-folder, it is Milestone 3 scope. Keeps out per-config Python interpreters, per-config env-var presets, `Select Project` quick-pick, parallel per-config runs. v1.2 stays single-project-per-workspace with "first-match wins + warn + `projectPath` override."
+2. **MULTI-01/02 boundary rule** — if a feature requires `WorkspaceSettings` to become per-project rather than per-workspace-folder, it is Milestone 3 scope. Keeps out per-config Python interpreters, per-config env-var presets, `Select Project` quick-pick, parallel per-config runs. 1.2.0 stays single-project-per-workspace with "first-match wins + warn + `projectPath` override."
 
 ---
 
@@ -30,7 +30,7 @@
 - **`smol-toml` 1.6.0** — installed; `parseTomlConfig` returns arrays natively.
 - **Hand-rolled INI parser** (`configParser.ts:57-118`) — already collects continuation lines into `pathsLines: string[]`.
 - **`vscode.workspace.fs.readDirectory` + existing `findFiles` walker** (`common.ts:449`) — respects `DEFAULT_EXCLUDE_DIRS` and `CancellationToken`. Do NOT use `vscode.workspace.findFiles` (Windows multi-root glob flakiness).
-- **`vscode.RelativePattern` with `**/{configs}`** — glob upgrade from workspace-root-only to recursive. `**/` + brace-expansion preserves the v1.1 bare-filename bug fix (VS Code #164925); 500ms debounce covers stale-read (#72831).
+- **`vscode.RelativePattern` with `**/{configs}`** — glob upgrade from workspace-root-only to recursive. `**/` + brace-expansion preserves the 1.1.0 bare-filename bug fix (VS Code #164925); 500ms debounce covers stale-read (#72831).
 - **Fire-and-forget IIFE activation** (`extension.ts:505-517`) — non-blocking post-activation pattern. Subdir scan piggybacks so the `<1ms` gatekeeper contract stays synchronous.
 
 See `STACK.md` for the full reuse matrix, alternatives considered, and the "what NOT to add" list.
@@ -43,7 +43,7 @@ See `STACK.md` for the full reuse matrix, alternatives considered, and the "what
 - Legacy `featuresPath` still honored (backward-compat non-negotiable).
 - Depth-3 recursive config scan with excluded dirs; `discoveryDepth` setting (default 3, `0` disables).
 - First-match-wins selection when multiple configs found; informational notification + `projectPath` override path.
-- `projectPath` override still wins over recursive scan (v1.0 priority chain preserved; reconfirm in tests).
+- `projectPath` override still wins over recursive scan (1.0.0 priority chain preserved; reconfirm in tests).
 - Config watcher covers subdirectory paths (`**/{configs}` glob upgrade).
 - Symlink/junction loop protection (visited-realpath set — pnpm monorepos).
 - Single TestItem root per workspace — features from all paths as siblings, **not** multiple top-level roots.
@@ -51,7 +51,7 @@ See `STACK.md` for the full reuse matrix, alternatives considered, and the "what
 **Should have (differentiators, P2):**
 - Path-group intermediate TestItems when `featuresUris.length > 1`.
 - Per-path resolution failure diagnostic in Problems panel.
-- Deduplicated notification per session (mirrors v1.0 `notifiedConfigErrors` pattern).
+- Deduplicated notification per session (mirrors 1.0.0 `notifiedConfigErrors` pattern).
 - Output-channel candidate list logging full scan walk when xRay enabled.
 
 **Defer (v2+ / MULTI-01/02, Milestone 3):**
@@ -66,7 +66,7 @@ See `FEATURES.md` for the full taxonomy and explicit anti-features list guarding
 
 ### Architecture Approach
 
-**Additive refactor** on top of shipped v1.0 (discovery) + v1.1 (watcher + run-guard). Three major integration surfaces:
+**Additive refactor** on top of shipped 1.0.0 (discovery) + 1.1.0 (watcher + run-guard). Three major integration surfaces:
 
 **Major components:**
 1. **Parser layer** — `configParser.ts::resolvePaths` / `buildResult` rewritten to loop over `rawPaths`; `BehaveConfigResult.resolvedPath: Uri` → `resolvedPaths: Uri[]`. ~15 lines. One new module: `src/discovery/configScanner.ts` implementing BFS-bounded subdir scan.
@@ -87,7 +87,7 @@ Top five, all with concrete code-line citations:
 4. **Config watcher `**/{configs}` glob fan-out on monorepos** — 50 `pyproject.toml` files = 50 watcher registrations. **Avoid:** two-tier watcher strategy — Tier 1 narrow watcher at discovered config's directory; Tier 2 `**/` only when no config is discovered. Honor exclude-dirs filter in handler.
 5. **Windows path separator in INI continuation lines** — Windows user commits `paths = features-win\alt`; on macOS `vscode.Uri.joinPath` treats as literal single-segment filename; discovery silently falls back. **Avoid:** normalize all `\` → `/` in `resolvePaths` before URI construction. Document in settings.json schema description.
 
-Additional pitfalls in `PITFALLS.md`: empty `featuresPaths: []` silently disables discovery; scanner iteration order (depth outer, filename inner) for D-06 malformed-config priority; run-guard non-determinism if scanner memoizes; symlink cycles on pnpm workspaces; mid-run config edit disrupting test run (`ctrl.activeRuns` check); `waitForTestTree` predicates must walk all top-level nodes; fixture pollution (two new dedicated fixtures — `multi-path/`, `monorepo-scan/`); migration UX when both `featuresPath` + `featuresPaths` set; `integrationTestRun` bypass mirroring v1.1 Pitfall 14; `workspaceWatcher` one-per-features-path.
+Additional pitfalls in `PITFALLS.md`: empty `featuresPaths: []` silently disables discovery; scanner iteration order (depth outer, filename inner) for D-06 malformed-config priority; run-guard non-determinism if scanner memoizes; symlink cycles on pnpm workspaces; mid-run config edit disrupting test run (`ctrl.activeRuns` check); `waitForTestTree` predicates must walk all top-level nodes; fixture pollution (two new dedicated fixtures — `multi-path/`, `monorepo-scan/`); migration UX when both `featuresPath` + `featuresPaths` set; `integrationTestRun` bypass mirroring 1.1.0 Pitfall 14; `workspaceWatcher` one-per-features-path.
 
 ---
 
@@ -125,7 +125,7 @@ ARCHITECTURE.md's **5-phase decomposition** absorbs PITFALLS.md's **~3 pitfall g
 ### Phase 5: UX Polish + Regression Hardening
 
 **Rationale:** Integration test coverage + polish.
-**Delivers:** Integration test matrix (multi-path from config-file, multi-path from settings.json, subdir config with multi-path, multi-path within `alsoFoundConfigs`); flakiness gate (×3 on CI per v1.1 precedent); `logSettings` plural output; `discoveryDepth=0` edge case; dedicated fixtures `example-projects/multi-path/` and `example-projects/monorepo-scan/`.
+**Delivers:** Integration test matrix (multi-path from config-file, multi-path from settings.json, subdir config with multi-path, multi-path within `alsoFoundConfigs`); flakiness gate (×3 on CI per 1.1.0 precedent); `logSettings` plural output; `discoveryDepth=0` edge case; dedicated fixtures `example-projects/multi-path/` and `example-projects/monorepo-scan/`.
 **Avoids:** Pitfall 7 (run-guard staleness under rapid config move); Pitfall 10 (mid-run config edit); Pitfall 11 (predicate audit); Pitfall 12 (fixture isolation).
 
 ### Phase Dependency Graph
@@ -173,7 +173,7 @@ Realistic sequential order: **1 → 2 → 3 → 4 → 5**. Parallel-capable: **1
 
 - **Depth-3 default heuristic** — user-tunable escape hatch via `discoveryDepth`; adjust default if Phase 3 profiling reveals a different common case.
 - **`featuresPath` + `featuresPaths` coexistence** — plural-wins locked; migration surprise mitigated by info-level log + CHANGELOG entry.
-- **Path-group intermediate TestItems** — ship flat in v1.2; wrapper as v1.2.x patch if users ask.
+- **Path-group intermediate TestItems** — ship flat in 1.2.0; wrapper as 1.2.x patch if users ask.
 - **`waitForTestTree` predicate audit scope** — unknown until Phase 5.
 - **Benchmarking threshold** — "<100ms with 1000-file `node_modules/`" is a target, validate in Phase 3.
 
@@ -182,9 +182,9 @@ Realistic sequential order: **1 → 2 → 3 → 4 → 5**. Parallel-capable: **1
 ## Sources
 
 ### Primary (HIGH confidence)
-- Source code analysis — every `src/` file referenced with line numbers in STACK.md, ARCHITECTURE.md, PITFALLS.md. Verified against commit `4a684d3` (v1.1 shipped).
-- `.planning/PROJECT.md` — locked v1.2 scoping decisions.
-- v1.0 + v1.1 RESEARCH + RETROSPECTIVE — prior decisions.
+- Source code analysis — every `src/` file referenced with line numbers in STACK.md, ARCHITECTURE.md, PITFALLS.md. Verified against commit `4a684d3` (1.1.0 shipped).
+- `.planning/PROJECT.md` — locked 1.2.0 scoping decisions.
+- 1.0.0 + 1.1.0 RESEARCH + RETROSPECTIVE — prior decisions.
 - `node_modules/smol-toml/package.json` — version 1.6.0 installed, array semantics verified.
 - `node_modules/@types/vscode/index.d.ts` — `GlobPattern`, `RelativePattern`, `FileSystemWatcher` API surface for `^1.82.0`.
 - behave docs + source — `paths = Sequence<text>` semantics; issue #638.

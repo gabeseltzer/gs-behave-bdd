@@ -1,9 +1,9 @@
 # Milestones
 
-## v1.1 Config File Watching (Shipped: 2026-04-17)
+## 1.1.0 Config File Watching (Shipped: 2026-04-17)
 
 **Phases completed:** 3 phases (4-6), 9 plans, 19 tasks
-**Git range:** v1.0..v1.1 (48 commits, 93 files, +9458/-8540 lines)
+**Git range:** 1.0.0..1.1.0 (48 commits, 93 files, +9458/-8540 lines)
 **Requirements:** 13/13 complete
 
 **Key accomplishments:**
@@ -13,11 +13,11 @@
 - Dedicated watcher-integration fixture (`example-projects/watcher-integration/`) with sibling `features-alt/` for mutation-safe filesystem tests
 - Shared `waitForTestTree` polling primitive replacing brittle wall-clock sleeps with deterministic state gating across integration suites
 - 14th integration suite added: 3 watcher tests (delete/create/change) + 4 run-guard tests, locked in by a 3-run flakiness gate on Windows
-- TEST-08 closed and 13/13 v1.1 requirements flipped to Complete; Phase 4 code-review findings (WR-01, WR-02, IN-01, IN-02) resolved in Phase 6
+- TEST-08 closed and 13/13 1.1.0 requirements flipped to Complete; Phase 4 code-review findings (WR-01, WR-02, IN-01, IN-02) resolved in Phase 6
 
 ---
 
-## v1.0 Auto-Discover Behave Projects (Shipped: 2026-04-16)
+## 1.0.0 Auto-Discover Behave Projects (Shipped: 2026-04-16)
 
 **Phases completed:** 3 phases, 6 plans, 11 tasks
 

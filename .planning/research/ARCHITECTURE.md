@@ -1,15 +1,15 @@
-# Architecture Patterns: v1.2 Multi-Path & Monorepo-Aware Discovery
+# Architecture Patterns: 1.2.0 Multi-Path & Monorepo-Aware Discovery
 
-**Domain:** VS Code extension — v1.2 additions to gs-behave-bdd (auto-discovery + config watching already shipped)
+**Domain:** VS Code extension — 1.2.0 additions to gs-behave-bdd (auto-discovery + config watching already shipped)
 **Researched:** 2026-04-17
 **Confidence:** HIGH (direct source analysis of every touched file)
-**Scope:** How DISC-07 (subdir config scan, depth 3) and DISC-08 (multi-path) integrate with the existing architecture. Milestones 1 (v1.0 discovery) and 2 (v1.1 watcher + run guard) are fully shipped.
+**Scope:** How DISC-07 (subdir config scan, depth 3) and DISC-08 (multi-path) integrate with the existing architecture. Milestones 1 (1.0.0 discovery) and 2 (1.1.0 watcher + run guard) are fully shipped.
 
 ---
 
-## Current State After v1.1 (What Already Exists)
+## Current State After 1.1.0 (What Already Exists)
 
-Core discovery + watcher + run-guard stack is shipped and operational. Key facts that v1.2 has to work with:
+Core discovery + watcher + run-guard stack is shipped and operational. Key facts that 1.2.0 has to work with:
 
 ### Singular `featuresUri` Everywhere
 
@@ -41,7 +41,7 @@ Debounce is module-level (`configDebounceTimers: Map<string, NodeJS.Timeout>`), 
 getUrisOfWkspFoldersWithFeatures(true) → config.reloadSettings(wkspUri) → onConfigChanged([wkspUri], true) → parser.parseFilesForWorkspace(…)
 ```
 
-NOTE: the v1.1 ARCHITECTURE.md prescribed routing through `configurationChangedHandler(undefined, undefined, true)` but the final implementation in `src/watchers/configWatcher.ts:53-59` bypasses it ("Direct cache invalidation — do NOT call configurationChangedHandler (PITFALL-04)"). This matters for v1.2: the same bypass will apply to subdir-scanned config watchers.
+NOTE: the 1.1.0 ARCHITECTURE.md prescribed routing through `configurationChangedHandler(undefined, undefined, true)` but the final implementation in `src/watchers/configWatcher.ts:53-59` bypasses it ("Direct cache invalidation — do NOT call configurationChangedHandler (PITFALL-04)"). This matters for 1.2.0: the same bypass will apply to subdir-scanned config watchers.
 
 ### Feature-Tree Construction Has Built-In Multi-Root Support
 
@@ -53,7 +53,7 @@ NOTE: the v1.1 ARCHITECTURE.md prescribed routing through `configurationChangedH
 
 ---
 
-## System Overview (Post v1.2)
+## System Overview (Post 1.2.0)
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
@@ -68,7 +68,7 @@ NOTE: the v1.1 ARCHITECTURE.md prescribed routing through `configurationChangedH
 │  getUrisOfWkspFoldersWithFeatures(forceRefresh)                               │
 │     → hasFeaturesFolder(folder)                                               │
 │          Branch A: explicit settings (featuresPath | featuresPaths*)          │
-│          Branch B: config-file scan (v1.2: depth-3 via configScanner)         │
+│          Branch B: config-file scan (1.2.0: depth-3 via configScanner)         │
 │          Branch C: "features/" convention                                     │
 │     → discoveryCache.set(uriId(wkspUri), DiscoveryEntry)                      │
 │                                                                               │
@@ -128,7 +128,7 @@ This is the **exhaustive** list derived from grepping the entire `src/` tree. Ea
 
 ### Discovery writer (must change)
 
-| File | Lines | Current Behavior | v1.2 Change |
+| File | Lines | Current Behavior | 1.2.0 Change |
 |------|-------|------------------|-------------|
 | `src/common.ts::hasFeaturesFolder` | 177–291 | Single-path resolution at each of 3 branches. | Branch A: read `featuresPaths[]` (new plural) OR fall back to singular `featuresPath`. Branch B: use new `configScanner.scanForBehaveConfig()` and populate `featuresUris` from `configResult.rawPaths` (all of them, not just `[0]`). Branch C: unchanged (convention yields `[wkspUri/features]`). |
 | `src/common.ts` | 214, 225, 229, 231, 255, 260, 274, 286 | Assigns scalar `featuresUri` to the `DiscoveryEntry`. | Assigns array `featuresUris`. |
@@ -273,7 +273,7 @@ const configResult = findBehaveConfig(folder.uri);
 if (configResult) { … }
 ```
 
-v1.2:
+1.2.0:
 ```typescript
 import { scanForBehaveConfig } from './discovery/configScanner';
 import { config } from './configuration';
@@ -309,7 +309,7 @@ if (scanResult) {
 ### 2. `src/settings.ts::WorkspaceSettings` (multi-path rewrite)
 
 ```typescript
-// read plural first, fall back to singular for back-compat (NEW in v1.2)
+// read plural first, fall back to singular for back-compat (NEW in 1.2.0)
 const featuresPathsCfg = get<string[] | undefined>("featuresPaths");
 const featuresPathCfg = get<string>("featuresPath") ?? "";
 
@@ -359,7 +359,7 @@ Alternative (cleaner): once `discoveryCache` has `configFileUri` for each wksp, 
 - Pro: tight watcher scope.
 - Con: re-registering watchers when the chosen config file moves.
 
-The brace-expansion glob is simpler and keeps the watcher-rebuild logic identical to today. Recommend the glob approach for milestone v1.2.
+The brace-expansion glob is simpler and keeps the watcher-rebuild logic identical to today. Recommend the glob approach for milestone 1.2.0.
 
 ---
 
@@ -546,10 +546,10 @@ Five phases, each independently testable. Unit-test-compatible all the way throu
 
 **Scope:**
 - Add integration tests for the combinations: multi-path from config-file, multi-path from settings.json, subdir config with multi-path, multi-path within one of `alsoFoundConfigs`.
-- Flakiness gate: run each new integration suite 3× on CI (matches v1.1 gate).
+- Flakiness gate: run each new integration suite 3× on CI (matches 1.1.0 gate).
 - Documentation updates in READMEs (if requested).
 - `logSettings` output in `settings.ts:261-267` — make `featuresUris` a sensible display string (currently uses singular `featuresUri`).
-- `configWatcher`-depth edge cases: what happens if `discoveryDepth=0`? → no subdir scan, identical to v1.1 behaviour.
+- `configWatcher`-depth edge cases: what happens if `discoveryDepth=0`? → no subdir scan, identical to 1.1.0 behaviour.
 
 **Why fifth:** Everything depends on correct multi-path + subdir-scan behavior. Final phase is integration coverage + polish.
 
@@ -739,7 +739,7 @@ Apply to every log line and diagLog that references a single features location.
 
 ## Sources
 
-- Direct source analysis of the entire `src/` tree (commit 4a684d3, v1.1 shipped):
+- Direct source analysis of the entire `src/` tree (commit 4a684d3, 1.1.0 shipped):
   - `src/common.ts` (DiscoveryEntry, discoveryCache, `hasFeaturesFolder` closure)
   - `src/settings.ts` (WorkspaceSettings constructor, all field derivations)
   - `src/extension.ts` (`activate`, `updateDiscoveryUX`, `configurationChangedHandler`, `onStepMappingsRebuilt`)
@@ -755,10 +755,10 @@ Apply to every log line and diagLog that references a single features location.
   - `src/watchers/configWatcher.ts` (glob, debounce map, direct cache-invalidation path)
   - `src/handlers/*` (autoComplete, codeLens, fixtureProviders, fixtureDiagnostics, stepDiagnostics, findStepReferencesHandler)
   - `src/testWorkspaceConfig.ts` (test-harness singular fields that must mirror plural)
-- `.planning/PROJECT.md` — v1.2 scoping decisions (locked 2026-04-17)
-- `.planning/research/ARCHITECTURE.md` (prior v1.1 baseline — informs the "what exists today" section)
+- `.planning/PROJECT.md` — 1.2.0 scoping decisions (locked 2026-04-17)
+- `.planning/research/ARCHITECTURE.md` (prior 1.1.0 baseline — informs the "what exists today" section)
 - `package.json` — current `gs-behave-bdd.projectPath` / `.featuresPath` scope=resource schema
 
 ---
-*Architecture research for: v1.2 Multi-Path & Monorepo-Aware Discovery*
+*Architecture research for: 1.2.0 Multi-Path & Monorepo-Aware Discovery*
 *Researched: 2026-04-17*
