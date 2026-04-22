@@ -499,4 +499,48 @@ suite('configParser', () => {
 
   });
 
+
+  suite('findBehaveConfig - no paths key defaults to features (behave default)', () => {
+
+    test('INI with [behave] section but no paths key defaults to features/', () => {
+      const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'no-paths-ini'));
+      const result = findBehaveConfig(wkspUri);
+      assert.ok(result, 'should return a result (not undefined)');
+      assert.strictEqual(result.ok, true, 'should be ok:true');
+      if (!result.ok) return;
+      assert.deepStrictEqual(result.rawPaths, ['features'], 'rawPaths should default to features');
+      assert.ok(
+        result.resolvedPaths[0].fsPath.replace(/\\/g, '/').endsWith('no-paths-ini/features'),
+        `resolvedPaths[0] ${result.resolvedPaths[0].fsPath} should end with no-paths-ini/features`
+      );
+      assert.ok(
+        result.configFileUri.fsPath.replace(/\\/g, '/').endsWith('no-paths-ini/behave.ini'),
+        `configFileUri ${result.configFileUri.fsPath} should end with behave.ini`
+      );
+      assert.strictEqual(result.pathLineNumbers.length, 1, 'should have 1 line number');
+      // Line 0 is [behave] header
+      assert.strictEqual(result.pathLineNumbers[0], 0, 'line number should point to [behave] header');
+    });
+
+    test('TOML with [tool.behave] section but no paths key defaults to features/', () => {
+      const wkspUri = vscode.Uri.file(path.join(fixtureRoot, 'no-paths-toml'));
+      const result = findBehaveConfig(wkspUri);
+      assert.ok(result, 'should return a result (not undefined)');
+      assert.strictEqual(result.ok, true, 'should be ok:true');
+      if (!result.ok) return;
+      assert.deepStrictEqual(result.rawPaths, ['features'], 'rawPaths should default to features');
+      assert.ok(
+        result.resolvedPaths[0].fsPath.replace(/\\/g, '/').endsWith('no-paths-toml/features'),
+        `resolvedPaths[0] ${result.resolvedPaths[0].fsPath} should end with no-paths-toml/features`
+      );
+      assert.ok(
+        result.configFileUri.fsPath.replace(/\\/g, '/').endsWith('no-paths-toml/pyproject.toml'),
+        `configFileUri ${result.configFileUri.fsPath} should end with pyproject.toml`
+      );
+      assert.strictEqual(result.pathLineNumbers.length, 1, 'should have 1 line number');
+      assert.strictEqual(result.pathLineNumbers[0], 0, 'line number should point to [tool.behave] header');
+    });
+
+  });
+
 });

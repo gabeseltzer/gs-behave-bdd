@@ -63,6 +63,7 @@ function parseIniConfig(fileUri: vscode.Uri): BehaveConfigResult | undefined {
 
   const lines = content.split(/\r?\n/);
   let inBehaveSection = false;
+  let behaveHeaderLine = 0;
   let pathsLines: string[] = [];
   let pathLineNumbers: number[] = [];
   let collectingPaths = false;
@@ -75,6 +76,7 @@ function parseIniConfig(fileUri: vscode.Uri): BehaveConfigResult | undefined {
       // Section header — determine which section we are entering
       if (trimmed === '[behave]') {
         inBehaveSection = true;
+        behaveHeaderLine = lineIndex;
         collectingPaths = false;
         continue;
       } else if (inBehaveSection) {
@@ -115,7 +117,10 @@ function parseIniConfig(fileUri: vscode.Uri): BehaveConfigResult | undefined {
   }
 
   if (!inBehaveSection) return undefined; // DISC-06: no [behave] section found
-  if (pathsLines.length === 0) return undefined; // paths key absent or empty
+  if (pathsLines.length === 0) {
+    // [behave] section found but no paths key — behave defaults to 'features/' relative to config dir
+    return buildResult(fileUri, 'ini', ['features'], [behaveHeaderLine]);
+  }
 
   // Filter in lockstep: rawPaths and pathLineNumbers keep only non-empty entries
   const rawPaths: string[] = [];
@@ -157,15 +162,26 @@ function parseTomlConfig(fileUri: vscode.Uri): BehaveConfigResult | undefined {
   const behave = tool?.behave as Record<string, unknown> | undefined;
   if (!behave) return undefined;
 
+  // Derive line numbers from the raw text for diagnostic attachment (D-05)
+  const contentLines = content.split(/\r?\n/);
+
   // paths must be a TOML array — scalar string is a user error (see Pitfall 2 in RESEARCH.md)
   const paths = behave.paths;
+  if (paths === undefined) {
+    // [tool.behave] section found but no paths key — behave defaults to 'features/' relative to config dir
+    let sectionLine = 0;
+    for (let i = 0; i < contentLines.length; i++) {
+      if (/^\[tool\.behave\]/.test(contentLines[i].trim())) {
+        sectionLine = i;
+        break;
+      }
+    }
+    return buildResult(fileUri, 'toml', ['features'], [sectionLine]);
+  }
   if (!Array.isArray(paths) || paths.length === 0) return undefined;
 
   const rawPaths = paths.map(String).filter(p => p.length > 0);
   if (rawPaths.length === 0) return undefined;
-
-  // Derive line numbers from the raw text for diagnostic attachment (D-05)
-  const contentLines = content.split(/\r?\n/);
   let sectionStart = 0;
   for (let i = 0; i < contentLines.length; i++) {
     if (/^\[tool\.behave\]/.test(contentLines[i].trim())) {
