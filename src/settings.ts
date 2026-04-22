@@ -174,6 +174,13 @@ export class WorkspaceSettings {
       if (!fs.existsSync(this.projectUri.fsPath)) {
         this._fatalErrors.push(`project path ${this.projectUri.fsPath} not found.`);
       }
+    } else if (!hasExplicitSetting(wkspConfig, "projectPath", legacyConfig)
+               && entry?.source === 'config-file' && entry.configFileUri) {
+      // No explicit projectPath and config-file discovery found a config in a subdirectory —
+      // derive projectUri from the config file's directory (e.g. root/autotest/behave.ini → root/autotest/)
+      const configDirUri = vscode.Uri.joinPath(entry.configFileUri, '..');
+      this.workspaceRelativeProjectPath = path.relative(wkspUri.fsPath, configDirUri.fsPath).replace(/\\/g, '/');
+      this.projectUri = configDirUri;
     } else {
       this.projectUri = wkspUri;
     }
