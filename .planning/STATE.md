@@ -2,44 +2,37 @@
 gsd_state_version: 1.0
 milestone: 1.2.0
 milestone_name: Multi-Path & Monorepo-Aware Discovery
-status: unknown
-stopped_at: Phase 8 context gathered
-last_updated: "2026-04-21T15:55:30.236Z"
+status: completed
+stopped_at: Milestone 1.2.0 complete
+last_updated: "2026-04-22T00:00:00.000Z"
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 10
-  completed_plans: 10
+  total_phases: 11
+  completed_phases: 11
+  total_plans: 28
+  completed_plans: 28
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-17 — 1.2.0 milestone started)
+See: .planning/PROJECT.md (updated 2026-04-22 after 1.2.0 milestone)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Phase 10 — featurespaths-user-facing-setting
+**Current focus:** Between milestones — run `/gsd-new-milestone` to start next cycle.
 
 ## Current Position
 
-Phase: 11
-Plan: Not started
+Phase: None (milestone complete)
+Plan: N/A
 
 ## Performance Metrics
 
 **Velocity (cumulative):**
 
-- Milestones shipped: 2 (1.0.0 2026-04-16, 1.1.0 2026-04-17)
-- Total phases completed: 6 (1.0.0: 1-3, 1.1.0: 4-6)
-- Total plans completed: 15 (1.0.0: 6, 1.1.0: 9)
-
-**1.2.0 planned scope:**
-
-- Phases: 5 (Phase 7 → Phase 11)
-- Requirements: 20 (MP-01..06, SD-01..04, INT-01..04, TEST-10..15)
-- Plans: TBD per-phase
-- Dependencies: 7 → {8, 9 parallel} → 10 → 11
+- Milestones shipped: 3 (1.0.0 2026-04-16, 1.1.0 2026-04-17, 1.2.0 2026-04-22)
+- Total phases completed: 11 (1.0.0: 1-3, 1.1.0: 4-6, 1.2.0: 7-11)
+- Total plans completed: 28 (1.0.0: 6, 1.1.0: 9, 1.2.0: 13)
 
 *Reset per milestone after each `/gsd-complete-milestone` run.*
 
@@ -51,26 +44,18 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 
 - 1.0.0: `.planning/milestones/1.0.0-ROADMAP.md`
 - 1.1.0: `.planning/milestones/1.1.0-ROADMAP.md`
-
-**1.2.0 roadmap-level decisions:**
-
-- Primary-plus-list pattern: `featuresUri` kept as scalar getter returning `featuresUris[0]`; plural `featuresUris: Uri[]` added alongside — prevents 18-file rename blast radius (Pitfall 3).
-- Path-group TestItems (MP-05) assigned to Phase 8 (test-tree coupling), not Phase 11 — the intermediate-node logic lives in the `_getOrCreateFeatureTestItem…` cascade that Phase 8 already rewrites.
-- Per-path diagnostic (MP-04) assigned to Phase 8 — diagnostic emission is a direct consumer of `resolvePaths` failure, and Phase 8 owns the parser/consumer cascade.
-- `integrationTestRun` bypass (INT-04) assigned to Phase 9 — the new re-discovery triggers (scanner rebuild + two-tier watcher) are introduced in Phase 9 and must mirror 1.1.0 Pitfall 14 from day one.
-- Phase 7 (types only, compilation-only risk) MUST land first — unblocks Phases 8, 9, 10 per SUMMARY.md Phase Dependency Graph.
-- Phase 11 (regression + fixtures) MUST land last — fixtures (`multi-path/`, `monorepo-scan/`) and 3× flakiness gate lock the milestone for close.
+- 1.2.0: `.planning/milestones/1.2.0-ROADMAP.md`
 
 ### Key Architecture Constraints
 
-Carried into 1.2.0 from 1.0.0 + 1.1.0:
+Carried forward:
 
 - `getUrisOfWkspFoldersWithFeatures()` < 1ms hard budget — discovery results MUST stay cached.
-- Backward compat: explicit `projectPath` / `featuresPath` settings see zero behavior change.
-- Config-watcher routes through `configurationChangedHandler(undefined, undefined, true)` — single choke point for log clear + watcher rebuild + `clearNotifiedErrors=true`. **Exception for 1.2.0 (per 1.1.0 Pitfall 14 / INT-04):** subdir-scanner re-discovery paths call cache + parser directly, bypassing the handler to keep integration tests exercising those paths.
+- Backward compat: explicit `projectPath` / `featuresPath` / `featuresPaths` settings see zero behavior change.
+- Config-watcher routes through `configurationChangedHandler(undefined, undefined, true)` — single choke point.
 - Discovery cache is single source of truth (run guard + watcher + gatekeeper all read `getDiscoveryEntry()`).
-- INI/TOML parsing must match behave's own behavior for the `paths` key (continuation-line semantics for INI; native array for TOML).
-- Single TestItem root per workspace — never one-per-feature-path; multi-path features go as siblings/path-group children under the existing workspace node.
+- INI/TOML parsing must match behave's own behavior for the `paths` key.
+- Single TestItem root per workspace — multi-path features go as path-group children under the workspace node.
 
 ### Pending Todos
 
@@ -84,14 +69,15 @@ None.
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| Multi-project | Project quick-pick + multi-project-per-workspace (MULTI-01/02) | Milestone 3 / v2.0 | 1.0.0 init, reaffirmed 1.2.0 |
+| Deprecation | `featuresPath` deprecation + migration popup | Backlog 999.1 | 1.2.0 close |
+| Multi-project | Project quick-pick + multi-project-per-workspace (MULTI-01/02) | Next milestone candidate | 1.0.0 init, reaffirmed 1.2.0 |
 | Home configs | `~/.behaverc` support | Out of scope | 1.0.0 init |
 | Code action | Inline "Fix Config" quick-fix | Out of scope | 1.0.0 init |
-| Docs | README / marketplace docs updates | Milestone 3 | 1.2.0 init |
-| Run guard | Hard-blocking run guard on `alsoFoundConfigs` ambiguity | Anti-feature | 1.2.0 init |
+| Docs | README / marketplace docs updates | Next milestone candidate | 1.2.0 init |
+| Fixture scoping | Per-document-root fixture scoping (INT-01) | Dropped — behave loads globally | 1.2.0 Phase 8 |
 
 ## Session Continuity
 
-Last session: 2026-04-20T17:41:40.099Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/08-parser-test-tree-watcher-multi-root/08-CONTEXT.md
+Last session: Milestone 1.2.0 complete
+Stopped at: N/A
+Resume file: N/A

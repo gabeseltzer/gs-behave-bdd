@@ -52,6 +52,60 @@
 
 ---
 
+## Milestone: 1.2.0 — Multi-Path & Monorepo-Aware Discovery
+
+**Shipped:** 2026-04-22
+**Phases:** 5 (Phases 7-11) | **Plans:** 13 | **Requirements:** 19/20 (INT-01 intentionally dropped)
+
+### What Was Built
+
+- Primary-plus-list multi-path types end-to-end: `featuresUris[]` / `resolvedPaths[]` with singular getters preserving 20+ call sites unchanged (Phase 7)
+- 18-file consumer cascade: parser, test tree (path-group intermediate TestItems), watchers (fan-out per root), runner queue, fixture/step handlers, JUnit parser all iterate/union across `featuresUris[]` (Phase 8)
+- `configParser` dedup + per-path diagnostics: overlapping paths collapsed, unresolvable paths flagged individually in Problems panel without aborting the valid paths (Phase 8)
+- BFS subdirectory config scanner (`configScanner.ts`): exclude-dirs, symlink-cycle protection, circuit breaker, `discoveryDepth` setting (default 3, 0 = root-only) (Phase 9)
+- First-match-wins multi-config UX: non-modal notification listing all found configs with "Open Settings" to set `projectPath` (Phase 9)
+- Two-tier config watcher strategy: narrow watcher at discovered config + recursive `**/` fallback when no config found (Phase 9)
+- `featuresPaths[]` settings.json key: plural wins over singular, empty array = unset, info log when both set (Phase 10)
+- 3 integration fixtures (multi-path/, multi-path-settings/, monorepo-scan/) + 3 new integration suites + 3× Windows CI flakiness gate (Phase 11)
+
+### What Worked
+
+- **Primary-plus-list type strategy.** Adding `featuresUris: Uri[]` alongside `featuresUri` getter returning `[0]` meant 20+ existing call sites compiled without modification. Consumer migration happened incrementally across Phase 8 rather than in a single risky commit. Back-compat was never broken.
+- **Phase 7 → Phase 8 dependency.** Splitting "make types plural" (Phase 7) from "make consumers iterate" (Phase 8) avoided a combinatorial explosion of changes. Phase 7 was pure plumbing — easy to verify, easy to revert. Phase 8 could focus on correctness of iteration logic.
+- **INT-01 early drop.** Recognizing in Phase 8 discussion (D-08) that behave loads fixtures globally — not per-feature-path — saved a full phase of work that would have diverged from runtime semantics.
+- **BFS scanner with circuit breaker.** `maxEntriesScanned` guard plus `DEFAULT_EXCLUDE_DIRS` kept monorepo scanning under 100ms even with seeded `node_modules/` directories. No perf regressions.
+- **Two-tier watcher pattern.** Narrow watcher at discovered config directory handles edits/deletes; recursive fallback catches creation of new configs elsewhere. Covers both steady-state and initial-setup scenarios.
+
+### What Was Inefficient
+
+- **Phase 11 plan numbering collision.** Phase 11 plans were numbered `11-01`, `11-02`, `11-03` — same prefix as Phase 1's plans. This caused confusion in ROADMAP cross-references. Future milestones should use globally unique plan prefixes.
+- **Phase 7 plans also collided (listed Phase 11 plans).** The ROADMAP had Phase 7's plan list duplicated from Phase 11 entries. A copy-paste error during roadmap creation — caught late.
+- **Semver migration mid-milestone.** Converting from `v1.X` to semver `X.Y.0` format was the right call but introduced churn in planning docs mid-workflow. Better to align versioning at milestone start.
+
+### Patterns Established
+
+- **Primary-plus-list for plural type migration.** When expanding a singular field to an array, keep the singular as a getter returning `[0]`. Migrate consumers incrementally, never all-at-once.
+- **Per-path diagnostics over all-or-nothing.** When a multi-value config has some valid and some invalid entries, flag the bad ones individually and proceed with the good ones. Never abort discovery entirely.
+- **Two-tier watchers for scan-discovered paths.** Narrow watcher at the known path + recursive fallback for the unknown case. Avoids both missing events (narrow-only) and excessive events (recursive-only).
+- **`discoveryDepth: 0` as the escape hatch.** Any scan-based feature should offer depth=0 to restore pre-scan behavior. Makes rollback trivial for users who hit edge cases.
+- **First-match-wins + inform as the bridge to full multi-project.** When multiple configs exist but full multi-project isn't built yet, pick the first and tell the user about the others. Ships value immediately while deferring complexity.
+
+### Key Lessons
+
+1. **Behave loads fixtures globally, not per-feature-path.** Scoping fixtures to individual roots would diverge from behave's actual runtime model. When the extension models something the test runner doesn't do, the result is a bug, not a feature.
+2. **Consumer cascade is the real work in multi-path.** The type change is trivial; making 18 files correctly iterate/union/scope is where the bugs live. Budget phases accordingly.
+3. **Settings precedence chains get complex fast.** `featuresPaths[]` > `featuresPath` > config file `paths=` > convention, with `hasExplicitSetting` checking both singular and plural across 3 scope levels. Document the chain in code comments, not just planning docs.
+4. **Integration test fixtures are worth the upfront cost.** `multi-path/`, `multi-path-settings/`, and `monorepo-scan/` caught wiring bugs in Phase 11 that no unit test could have surfaced.
+5. **Drop requirements early when assumptions are wrong.** INT-01 was based on an incorrect mental model of behave's fixture loading. Dropping it during Phase 8 discussion saved a full phase of wasted work.
+
+### Cost Observations
+
+- 67 commits, 130 files changed, +15,786/-1,011 lines over 5 days (2026-04-17 → 2026-04-22)
+- 5 phases with 13 plans — the largest milestone to date
+- Scanner + two-tier watcher (Phase 9) was the most complex single phase
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -60,6 +114,7 @@
 |-----------|--------|-------|------------|
 | 1.0.0 | 3 | 6 | Initial MVP — config parsing, discovery cache, UX |
 | 1.1.0 | 3 | 9 | Introduced milestone audit + dedicated tech-debt phase at close; added predicate-polling test primitive |
+| 1.2.0 | 5 | 13 | Primary-plus-list type migration pattern; BFS scanner with circuit breaker; two-tier watcher strategy; semver alignment |
 
 ### Cumulative Quality
 
@@ -67,9 +122,12 @@
 |-----------|-----------|--------------------|--------------------:|---------------|
 | 1.0.0 | ~430 | 13 | 21 | 0 |
 | 1.1.0 | 539 | 14 | 13 | 0 |
+| 1.2.0 | 614 | 17 | 19 (1 dropped) | 0 |
 
 ### Top Lessons (Verified Across Milestones)
 
 1. **Cache-first architecture keeps runtime cheap.** Both 1.0.0 (discovery cache) and 1.1.0 (run guard reads the same cache) validated that a module-level Map read in the hot path is the right shape for sub-ms gatekeepers.
-2. **Integration tests earn their cost when they cover multi-module flows.** 1.0.0's config-only/pyproject-config/malformed-config suites and 1.1.0's watcher-integration suite both caught wiring bugs that unit tests by construction cannot see.
-3. **Non-blocking UX over blocking dialogs.** Ship warnings, not gates — validated in both milestones (malformed-config notification in 1.0.0, run guard in 1.1.0).
+2. **Integration tests earn their cost when they cover multi-module flows.** 1.0.0's config-only/pyproject-config/malformed-config suites, 1.1.0's watcher-integration suite, and 1.2.0's multi-path/monorepo-scan suites all caught wiring bugs that unit tests by construction cannot see.
+3. **Non-blocking UX over blocking dialogs.** Ship warnings, not gates — validated in all three milestones (malformed-config notification in 1.0.0, run guard in 1.1.0, first-match-wins notification in 1.2.0).
+4. **Primary-plus-list for safe plural migration.** When expanding a singular field to an array, keep the singular as a getter returning `[0]`. Proven in 1.2.0 across 20+ call sites with zero back-compat breaks.
+5. **Drop requirements when underlying assumptions are wrong.** INT-01 in 1.2.0 was based on incorrect behave fixture semantics. Early drop saved an entire phase of misdirected work.

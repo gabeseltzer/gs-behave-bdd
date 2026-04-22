@@ -1,5 +1,24 @@
 # Milestones
 
+## 1.2.0 Multi-Path & Monorepo-Aware Discovery (Shipped: 2026-04-22)
+
+**Phases completed:** 5 phases (7-11), 13 plans
+**Git range:** 1.1.0..1.2.0 (67 commits, 130 files, +15786/-1011 lines)
+**Requirements:** 19/20 satisfied (1 intentionally dropped: INT-01)
+**Timeline:** 2026-04-17 → 2026-04-22 (5 days)
+
+**Key accomplishments:**
+
+- `WorkspaceSettings` carries `featuresUris[]`, `stepsSearchUris[]`, `projectRelativeFeaturesPaths[]` end-to-end with singular getters for back-compat; 18-file consumer cascade updated to iterate/union across all roots
+- Path-group intermediate TestItems: multi-path workspaces show collapsible `features/`, `features-alt/` subtrees under the workspace node; single-path workspaces stay flat
+- BFS subdirectory config scanner (`configScanner.ts`) with exclude-dirs, symlink-cycle protection, circuit breaker, and `discoveryDepth` setting (default 3, 0 = v1.1 behavior)
+- Multi-config notification UX: first-match-wins + non-modal notification listing all found configs with "Open Settings" / "Show Details" / "Don't Show Again" buttons
+- Two-tier config watcher strategy (narrow at discovered config + recursive fallback) preserving debounce and brace-expansion fixes
+- `featuresPaths[]` user-facing setting in package.json; plural wins over singular with info log; `hasExplicitNonEmptyArraySetting` gate
+- 3 dedicated test fixtures (multi-path/, multi-path-settings/, monorepo-scan/) with 9 integration tests locked by 3× Windows CI flakiness gate
+
+---
+
 ## 1.1.0 Config File Watching (Shipped: 2026-04-17)
 
 **Phases completed:** 3 phases (4-6), 9 plans, 19 tasks
