@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
-milestone: 1.2.0
-milestone_name: Multi-Path & Monorepo-Aware Discovery
-status: completed
-stopped_at: Milestone 1.2.0 complete
+milestone: 1.3.0
+milestone_name: Multi-Project Support
+status: requirements
+stopped_at: Defining requirements
 last_updated: "2026-04-22T00:00:00.000Z"
 progress:
   total_phases: 11
@@ -16,15 +16,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-22 after 1.2.0 milestone)
+See: .planning/PROJECT.md (updated 2026-04-22 — milestone v1.3.0 started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Between milestones — run `/gsd-new-milestone` to start next cycle.
+**Current focus:** Milestone v1.3.0 Multi-Project Support — defining requirements.
 
 ## Current Position
 
-Phase: None (milestone complete)
-Plan: N/A
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-22 — Milestone v1.3.0 started
 
 ## Performance Metrics
 
