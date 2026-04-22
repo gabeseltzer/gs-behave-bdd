@@ -1,8 +1,8 @@
-# Pitfalls Research — v1.2 Multi-Path & Monorepo-Aware Discovery
+# Pitfalls Research — 1.2.0 Multi-Path & Monorepo-Aware Discovery
 
 **Domain:** VS Code extension — extending per-workspace discovery/watcher/test-tree architecture to support multiple feature paths and depth-3 subdirectory config scanning
 **Researched:** 2026-04-17
-**Confidence:** HIGH (every pitfall verified against concrete code references in `src/common.ts`, `src/watchers/configWatcher.ts`, `src/extension.ts`, `src/parsers/configParser.ts`, `src/settings.ts`, `src/watchers/workspaceWatcher.ts` or against shipped v1.0/v1.1 decisions in PROJECT.md)
+**Confidence:** HIGH (every pitfall verified against concrete code references in `src/common.ts`, `src/watchers/configWatcher.ts`, `src/extension.ts`, `src/parsers/configParser.ts`, `src/settings.ts`, `src/watchers/workspaceWatcher.ts` or against shipped 1.0.0/1.1.0 decisions in PROJECT.md)
 
 ---
 
@@ -15,7 +15,7 @@ This is an **integration-risk catalogue** for adding two orthogonal features on 
 
 These do **not** generically break "a VS Code extension." They specifically break integration seams in this codebase — most of them invisible (silent wrong behavior, not a thrown error). Prevention references the concrete file and line where the trap lives.
 
-The v1.1 pitfalls document is **still binding** (carry forward disposal leak, glob-not-filename, debounce, cache-is-source-of-truth). Those are not re-listed — this document only covers NEW traps from v1.2.
+The 1.1.0 pitfalls document is **still binding** (carry forward disposal leak, glob-not-filename, debounce, cache-is-source-of-truth). Those are not re-listed — this document only covers NEW traps from 1.2.0.
 
 ---
 
@@ -27,7 +27,7 @@ The v1.1 pitfalls document is **still binding** (carry forward disposal leak, gl
 
 **What goes wrong:** A naive depth-3 scan implemented as "`for each entry in wkspUri: if directory, recurse up to depth 3, probe for behave config files" hits every transitive directory within the depth budget. In a realistic monorepo, `workspaceRoot/node_modules/` alone can contain 10,000+ top-level packages, each with nested directories. Even a depth-3 scan will `fs.readdirSync` or `vwfs.readDirectory` tens of thousands of directories on activation — blowing past the `< 1ms` budget for `getUrisOfWkspFoldersWithFeatures()` by three orders of magnitude, and freezing the extension host for seconds on workspace open.
 
-**Why it happens:** VS Code's `vscode.workspace.findFiles` honors the user's `files.exclude` and `search.exclude` settings by default, so developers building from scratch don't notice the problem. But `src/common.ts` already established (v1.0, line 447) that `vscode.workspace.findFiles` is unreliable on Windows for workspace-root features discovery — and the project rolled its own `findFiles` that walks `vwfs.readDirectory` recursively. v1.2's subdir scan is likely to follow the same hand-rolled pattern for consistency. The existing hand-rolled `findFiles` (line 449) takes an `excludeDirs` parameter with a `DEFAULT_EXCLUDE_DIRS` fallback (line 431: `__pycache__, .git, node_modules, .venv, .tox, .mypy_cache, .pytest_cache, .eggs, *.egg-info`). A scan that forgets to pass or honor that set will eat the monorepo alive.
+**Why it happens:** VS Code's `vscode.workspace.findFiles` honors the user's `files.exclude` and `search.exclude` settings by default, so developers building from scratch don't notice the problem. But `src/common.ts` already established (1.0.0, line 447) that `vscode.workspace.findFiles` is unreliable on Windows for workspace-root features discovery — and the project rolled its own `findFiles` that walks `vwfs.readDirectory` recursively. 1.2.0's subdir scan is likely to follow the same hand-rolled pattern for consistency. The existing hand-rolled `findFiles` (line 449) takes an `excludeDirs` parameter with a `DEFAULT_EXCLUDE_DIRS` fallback (line 431: `__pycache__, .git, node_modules, .venv, .tox, .mypy_cache, .pytest_cache, .eggs, *.egg-info`). A scan that forgets to pass or honor that set will eat the monorepo alive.
 
 **Consequences:**
 - Activation time goes from <100ms to 5-30s; status bar shows "Behave: Parsing..." for the whole window
@@ -69,7 +69,7 @@ The v1.1 pitfalls document is **still binding** (carry forward disposal leak, gl
 - **Unit test the dedup matrix:** `[features, features/api]` → `[features]`; `[features/a, features/b]` → both retained; `[features, FEATURES]` on Windows → `[features]` only.
 
 **Warning signs:**
-- Integration test scenario count doubles silently after v1.2 merges
+- Integration test scenario count doubles silently after 1.2.0 merges
 - "Run All" takes 2× as long on an unchanged fixture
 - Find-step-refs returns duplicate entries in a fixture with no duplicates in the raw step files
 
@@ -105,7 +105,7 @@ The v1.1 pitfalls document is **still binding** (carry forward disposal leak, gl
 
 ### Pitfall 4: Empty `featuresPaths: []` Silently Disables Discovery
 
-**What goes wrong:** A user reads the v1.2 release notes, sees the new `gs-behave-bdd.featuresPaths` array setting, and adds `"gs-behave-bdd.featuresPaths": []` to settings.json as a "placeholder" before filling it in. The `hasExplicitSetting` check at `src/common.ts:142` fires true (the setting exists at workspace-folder scope), Branch A runs, and `featuresPath` (the singular legacy key) is undefined. The current code (`common.ts:189-246`) interprets "no featuresPath and default features/ folder exists" as success with convention fallback — but if `featuresPaths` is set to `[]`, the plural-wins rule from the PROJECT.md key decisions says "empty array = user explicitly said no paths." The test tree is empty, no error surfaces, user thinks v1.2 broke their setup.
+**What goes wrong:** A user reads the 1.2.0 release notes, sees the new `gs-behave-bdd.featuresPaths` array setting, and adds `"gs-behave-bdd.featuresPaths": []` to settings.json as a "placeholder" before filling it in. The `hasExplicitSetting` check at `src/common.ts:142` fires true (the setting exists at workspace-folder scope), Branch A runs, and `featuresPath` (the singular legacy key) is undefined. The current code (`common.ts:189-246`) interprets "no featuresPath and default features/ folder exists" as success with convention fallback — but if `featuresPaths` is set to `[]`, the plural-wins rule from the PROJECT.md key decisions says "empty array = user explicitly said no paths." The test tree is empty, no error surfaces, user thinks 1.2.0 broke their setup.
 
 **Why it happens:** There are two overlapping signals: "plural setting wins if both are set" and "plural empty is distinct from plural unset." VS Code's `getConfiguration` returns `[]` (empty array) and `undefined` (never set) as different values, and the extension must pick a reasonable interpretation. The behave-native behavior for `paths =` (empty) in INI is "fall back to default," not "no paths."
 
@@ -123,7 +123,7 @@ The v1.1 pitfalls document is **still binding** (carry forward disposal leak, gl
 **Warning signs:**
 - A user's test tree is empty but `settings.json` contains `gs-behave-bdd.featuresPaths: []` or `[""]`
 - Output channel log: "Discovery source: settings" followed by no further output
-- Integration test that passed in v1.1 fails in v1.2 after adding `featuresPaths` to testConfig
+- Integration test that passed in 1.1.0 fails in 1.2.0 after adding `featuresPaths` to testConfig
 
 **Phase to address:** DISC-08 — settings wiring phase. Must cover this in unit tests for `WorkspaceSettings` before wiring through to `WkspRun`.
 
@@ -131,17 +131,17 @@ The v1.1 pitfalls document is **still binding** (carry forward disposal leak, gl
 
 ### Pitfall 5: Config Watcher Glob Fans Out in Monorepos — 50 Watchers on a Single Save
 
-**What goes wrong:** v1.1 shipped `CONFIG_GLOB = '{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}'` anchored to `wkspUri` (`configWatcher.ts:9`). This is a workspace-root glob — it fires only for config files in the workspace root. With v1.2 subdir scanning, the watcher glob must become `**/{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}` to catch config files created/edited/deleted at any depth. But VS Code's FileSystemWatcher with `**/` globs has documented performance issues on Windows (spawns a per-directory listener under the hood, receives 2-3 event duplicates per change, and is one of the top contributors to reported extension-host slowdowns per VS Code issues #3025, #60813). A monorepo with 50 `pyproject.toml` files under `packages/` (one per sub-package, typical for a pnpm/yarn monorepo) generates 50 watcher registrations, each firing on every save.
+**What goes wrong:** 1.1.0 shipped `CONFIG_GLOB = '{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}'` anchored to `wkspUri` (`configWatcher.ts:9`). This is a workspace-root glob — it fires only for config files in the workspace root. With 1.2.0 subdir scanning, the watcher glob must become `**/{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}` to catch config files created/edited/deleted at any depth. But VS Code's FileSystemWatcher with `**/` globs has documented performance issues on Windows (spawns a per-directory listener under the hood, receives 2-3 event duplicates per change, and is one of the top contributors to reported extension-host slowdowns per VS Code issues #3025, #60813). A monorepo with 50 `pyproject.toml` files under `packages/` (one per sub-package, typical for a pnpm/yarn monorepo) generates 50 watcher registrations, each firing on every save.
 
 **Why it happens:** `**/` is the natural glob for "I don't know where the config is." But VS Code's watcher wraps chokidar on Windows, which iterates on every match. Subdir scanning at discovery time is one-shot and bounded; watcher fan-out is continuous.
 
 **Consequences:**
 - Saving any `.toml` file anywhere in the workspace triggers the watcher, invokes the 500ms debounce per workspace, and re-runs `getUrisOfWkspFoldersWithFeatures(true)`. In a workspace with a dozen `pyproject.toml` files, unrelated TOML edits (e.g. Poetry dependency bumps) silently re-run discovery.
 - On Windows with antivirus scanning, watcher event storms can produce 100ms+ of extension-host blocking per save.
-- The user's `files.watcherExclude` is honored (v1.1 Pitfall 12), but defaults don't exclude `packages/*/pyproject.toml` — only `node_modules`.
+- The user's `files.watcherExclude` is honored (1.1.0 Pitfall 12), but defaults don't exclude `packages/*/pyproject.toml` — only `node_modules`.
 
 **Prevention:**
-- **Anchor the watcher glob to the discovered config file's directory, not the workspace root.** After subdir scan finds `packages/frontend/behave.ini`, create the watcher with `new vscode.RelativePattern(wkspUri, 'packages/frontend/{behave.ini,...}')` — a narrow glob, one directory deep. The old v1.1 workspace-root watcher stays as a fallback for "config deleted, need to know when one is re-created."
+- **Anchor the watcher glob to the discovered config file's directory, not the workspace root.** After subdir scan finds `packages/frontend/behave.ini`, create the watcher with `new vscode.RelativePattern(wkspUri, 'packages/frontend/{behave.ini,...}')` — a narrow glob, one directory deep. The old 1.1.0 workspace-root watcher stays as a fallback for "config deleted, need to know when one is re-created."
 - **Two-tier watcher strategy:**
   - Tier 1: narrow watcher at the discovered config's directory — fires on the specific file's change/delete. This is the hot path.
   - Tier 2: one workspace-wide `**/{behave.ini,.behaverc,...}` watcher but **only registered if no config was discovered.** Fires once when a user creates their first config file, which triggers re-discovery and the creation of the Tier 1 watcher. This avoids the fan-out on normal operation.
@@ -161,7 +161,7 @@ The v1.1 pitfalls document is **still binding** (carry forward disposal leak, gl
 
 **What goes wrong:** `searchConfigFiles` in `configParser.ts:36-49` already has the right shape: malformed configs (`ok:false`) are captured as `firstError` but the loop continues; a later valid config (`ok:true`) wins over the captured error. This is the D-06 decision, already correct.
 
-The v1.2 subdir scan must preserve this semantic across both dimensions:
+The 1.2.0 subdir scan must preserve this semantic across both dimensions:
 1. Priority-order (behave.ini, .behaverc, setup.cfg, tox.ini, pyproject.toml)
 2. Depth-order (wkspRoot, depth 1, depth 2, depth 3)
 
@@ -195,22 +195,22 @@ First-match-wins at depth level has a secondary trap: if a malformed config is f
 
 ### Pitfall 7: Run Guard Reads `configError` — Subdir Scan Changes Config File Identity Without Changing Error State
 
-**What goes wrong:** v1.1 shipped `checkRunGuard` (from `runners/testRunHandler.ts`) reading `getDiscoveryEntry(wkspUri)?.configError` as the single source of truth (per D-decision "discovery cache is the single source of truth for runtime guards"). That works when the config file is at workspace root: the user edits `behave.ini`, watcher fires, cache rebuilds with new `configError`, guard reads correctly.
+**What goes wrong:** 1.1.0 shipped `checkRunGuard` (from `runners/testRunHandler.ts`) reading `getDiscoveryEntry(wkspUri)?.configError` as the single source of truth (per D-decision "discovery cache is the single source of truth for runtime guards"). That works when the config file is at workspace root: the user edits `behave.ini`, watcher fires, cache rebuilds with new `configError`, guard reads correctly.
 
-Under v1.2 subdir scanning, the discovered config might be at `packages/a/behave.ini`. User edits an unrelated file at `packages/b/behave.ini` (a different, not-yet-discovered config). The Tier 2 `**/` watcher fires (assuming it's active), debounce runs, `getUrisOfWkspFoldersWithFeatures(true)` re-runs the subdir scan, and first-match-wins re-selects `packages/a/behave.ini` (same as before) — but now the scanner also encountered `packages/b/behave.ini`, which is malformed. The first-match is healthy, so `configError` is undefined. The run guard sees a healthy cache and proceeds. User's run fails because behave itself, invoked with `cwd = packages/a/`, doesn't see `packages/b/behave.ini` and neither does the extension's discovery — this scenario is actually fine.
+Under 1.2.0 subdir scanning, the discovered config might be at `packages/a/behave.ini`. User edits an unrelated file at `packages/b/behave.ini` (a different, not-yet-discovered config). The Tier 2 `**/` watcher fires (assuming it's active), debounce runs, `getUrisOfWkspFoldersWithFeatures(true)` re-runs the subdir scan, and first-match-wins re-selects `packages/a/behave.ini` (same as before) — but now the scanner also encountered `packages/b/behave.ini`, which is malformed. The first-match is healthy, so `configError` is undefined. The run guard sees a healthy cache and proceeds. User's run fails because behave itself, invoked with `cwd = packages/a/`, doesn't see `packages/b/behave.ini` and neither does the extension's discovery — this scenario is actually fine.
 
 The real trap: user now moves `packages/a/behave.ini` (the chosen config) to be malformed, AND `packages/b/behave.ini` is valid. First-match at `packages/a/` returns ok:false with configError. But if the scanner's iteration caches results across scans, `packages/b` might be silently preferred in a later scan because its result is cached from last time. Result: run guard sometimes shows the error, sometimes doesn't, depending on which scan state is live.
 
-**Why it happens:** The v1.0 `searchConfigFiles` is stateless (pure function of `wkspUri`). If v1.2 adds any memoization or pre-computed depth index for perf, statefulness creeps in. The existing `discoveryCache` is the only state, and it's per-workspace, which is fine. Per-config-file caching inside `searchConfigFiles` is where the bug enters.
+**Why it happens:** The 1.0.0 `searchConfigFiles` is stateless (pure function of `wkspUri`). If 1.2.0 adds any memoization or pre-computed depth index for perf, statefulness creeps in. The existing `discoveryCache` is the only state, and it's per-workspace, which is fine. Per-config-file caching inside `searchConfigFiles` is where the bug enters.
 
 **Consequences:**
 - Run guard is non-deterministic across rapid config edits
-- The watcher's 500ms debounce (v1.1) interacts with stale cache (v1.1 Pitfall 5) — stacking instead of isolated
+- The watcher's 500ms debounce (1.1.0) interacts with stale cache (1.1.0 Pitfall 5) — stacking instead of isolated
 - Flaky integration tests that depend on "edit config, run test, see error" timing
 
 **Prevention:**
 - **Keep `findBehaveConfig` stateless.** No per-config-file memoization. The discovery cache at the workspace level is sufficient; the subdir scan must re-enter `findBehaveConfig` on every refresh.
-- **On `onDidChange` for a discovered config file, invalidate ONLY that workspace's discoveryCache entry, then re-scan.** This is what v1.1 already does — preserve it.
+- **On `onDidChange` for a discovered config file, invalidate ONLY that workspace's discoveryCache entry, then re-scan.** This is what 1.1.0 already does — preserve it.
 - **On `onDidCreate` of a config file in a different location than the current discovered one:** full re-scan. Do not assume the existing discovered config still wins — a new higher-priority or shallower config might be introduced.
 - **On `onDidDelete` of the currently-discovered config:** full re-scan from scratch. Any cached knowledge about the scanner's traversal from the previous scan must not be reused.
 - **Integration test: move `packages/a/behave.ini` to `packages/b/` (delete + create sequence). Assert the cache reflects `packages/b/` as the new `configFileUri` within ≤ 1s, verified via `waitForTestTree` predicate.**
@@ -220,7 +220,7 @@ The real trap: user now moves `packages/a/behave.ini` (the chosen config) to be 
 - `getDiscoveryEntry(wkspUri)?.configFileUri` doesn't match the result of a fresh `findBehaveConfig` call
 - Integration tests flake on a "move config across directories" scenario
 
-**Phase to address:** DISC-07 scanner phase. Defensive: write the scanner as a pure function. The full re-scan on every watcher event is the v1.1 pattern — don't optimize it away in v1.2 without careful thought.
+**Phase to address:** DISC-07 scanner phase. Defensive: write the scanner as a pure function. The full re-scan on every watcher event is the 1.1.0 pattern — don't optimize it away in 1.2.0 without careful thought.
 
 ---
 
@@ -233,16 +233,16 @@ paths = features
   features-alt
   packages\foo\features
 ```
-On Windows, the third continuation value contains a backslash. Python's `configparser` treats it literally as a path string; behave does `os.path` operations on it which silently normalize backslashes. The v1.0 INI parser (`configParser.ts:57-118`) handles continuation correctly but produces raw strings from `line.trim()`, preserving whatever separators the user wrote.
+On Windows, the third continuation value contains a backslash. Python's `configparser` treats it literally as a path string; behave does `os.path` operations on it which silently normalize backslashes. The 1.0.0 INI parser (`configParser.ts:57-118`) handles continuation correctly but produces raw strings from `line.trim()`, preserving whatever separators the user wrote.
 
 When `resolvePaths` (currently at `configParser.ts:158`) resolves the path:
 - For Unix absolute `/foo/bar`: `vscode.Uri.file()` handles it.
 - For Windows absolute `C:\foo`: the regex `/^[a-zA-Z]:[\\/]/` matches; `vscode.Uri.file()` handles it.
 - For relative `packages\foo\features`: `vscode.Uri.joinPath(configDirUri, rawPath)` is called. `vscode.Uri.joinPath` is platform-native and on Windows **does** accept backslash separators, converting to forward slash internally. BUT on Unix, a backslash in the rawPath is treated as part of the filename — `packages\foo\features` becomes a single-segment name.
 
-For v1.2 multi-path, this extends to every entry in `rawPaths[]`. A Windows user writing `paths = features-win\alt` in their committed `behave.ini` ships a config that fails silently on macOS coworkers' machines — the path becomes a literal filename, `fs.existsSync` returns false, and the discovery falls through to convention with no warning.
+For 1.2.0 multi-path, this extends to every entry in `rawPaths[]`. A Windows user writing `paths = features-win\alt` in their committed `behave.ini` ships a config that fails silently on macOS coworkers' machines — the path becomes a literal filename, `fs.existsSync` returns false, and the discovery falls through to convention with no warning.
 
-**Why it happens:** Python-on-Windows is forgiving about separators; Node-on-Unix is not. The existing `resolvePaths` already lives with this compromise for single-path (v1.0), but the blast radius of silently-wrong paths grows linearly with the number of paths in `featuresUris[]`.
+**Why it happens:** Python-on-Windows is forgiving about separators; Node-on-Unix is not. The existing `resolvePaths` already lives with this compromise for single-path (1.0.0), but the blast radius of silently-wrong paths grows linearly with the number of paths in `featuresUris[]`.
 
 **Consequences:**
 - Cross-platform monorepo team: Windows dev commits `behave.ini` with backslashes, macOS CI runs behave successfully (behave normalizes), but the VS Code test tree on the macOS dev's machine is empty. Extension looks broken on Mac, works on Windows — hard to diagnose.
@@ -262,7 +262,7 @@ For v1.2 multi-path, this extends to every entry in `rawPaths[]`. A Windows user
 - The output channel log shows `Features directory: /workspace/features\alt` on Unix (backslash visible in the path)
 - `fs.existsSync` returns false for a path the user swears exists
 
-**Phase to address:** DISC-08 multi-path parsing phase. Normalization lives in `resolvePaths` and applies to every rawPath, not just `rawPaths[0]` (which is all v1.0 does).
+**Phase to address:** DISC-08 multi-path parsing phase. Normalization lives in `resolvePaths` and applies to every rawPath, not just `rawPaths[0]` (which is all 1.0.0 does).
 
 ---
 
@@ -279,7 +279,7 @@ For v1.2 multi-path, this extends to every entry in `rawPaths[]`. A Windows user
 **Prevention:**
 - **Track visited real-paths in the scanner.** `const visited = new Set<string>()` keyed by `fs.realpathSync(dirPath)`. Before descending into a subdirectory, check and add. Skip if already visited.
 - **Use `fs.realpath` not `fs.realpathSync`** for async-friendly behavior; but given the scan is bounded, sync is acceptable.
-- **This does NOT apply to feature-file discovery** (`findFiles` under `featuresUri`) because feature paths are user-asserted to be valid directories and typically don't contain symlink cycles. Only the v1.2 config subdir scanner needs this protection.
+- **This does NOT apply to feature-file discovery** (`findFiles` under `featuresUri`) because feature paths are user-asserted to be valid directories and typically don't contain symlink cycles. Only the 1.2.0 config subdir scanner needs this protection.
 
 **Warning signs:**
 - Subdir scan time is 10× higher on a pnpm/yarn-workspaces monorepo than on a plain repo of the same nominal size
@@ -297,7 +297,7 @@ For v1.2 multi-path, this extends to every entry in `rawPaths[]`. A Windows user
 
 **What goes wrong:** User starts a test run. Watcher fires mid-run (unrelated config edit), debounce elapses, `parser.clearTestItemsAndParseFilesForAllWorkspaces(...)` is invoked from the config watcher callback. This clears TestItems that are currently part of the active `TestRun.queue`. VS Code's Test Controller allows this but emits warnings; the scenarios being cleared may be stuck in "Running" state forever because no result is ever reported for a deleted `TestItem`.
 
-**Why it happens:** v1.1's `configWatcher.ts:58-59` calls `onConfigChanged` AND `parser.parseFilesForWorkspace` without checking whether a test run is active. For v1.1 with a single config file and a single features path, the blast radius was small: the watcher fires on an actual config change, which is rare mid-run. v1.2's subdir scan + multi-path means watcher events are more frequent, and mid-run config edits become more likely (e.g. a user saving `pyproject.toml` while debugging a scenario).
+**Why it happens:** 1.1.0's `configWatcher.ts:58-59` calls `onConfigChanged` AND `parser.parseFilesForWorkspace` without checking whether a test run is active. For 1.1.0 with a single config file and a single features path, the blast radius was small: the watcher fires on an actual config change, which is rare mid-run. 1.2.0's subdir scan + multi-path means watcher events are more frequent, and mid-run config edits become more likely (e.g. a user saving `pyproject.toml` while debugging a scenario).
 
 **Consequences:**
 - Scenario stuck in "Running" state; user has to manually cancel the run
@@ -318,7 +318,7 @@ For v1.2 multi-path, this extends to every entry in `rawPaths[]`. A Windows user
 
 ### Pitfall 11: `waitForTestTree` Predicate Must Handle Multi-Path Tree Structure
 
-**What goes wrong:** v1.1 introduced `waitForTestTree` (`test/integration/suite-shared/waitForTestTree.ts`) as a predicate-polling primitive. Existing predicates likely check "top-level node has N children" or "scenario X exists under feature Y." With multi-path, the top-level tree structure changes: instead of one "features/" node per workspace, there could be N sibling nodes (one per path in `featuresUris[]`). Existing predicates that count top-level children break silently (N instead of 1).
+**What goes wrong:** 1.1.0 introduced `waitForTestTree` (`test/integration/suite-shared/waitForTestTree.ts`) as a predicate-polling primitive. Existing predicates likely check "top-level node has N children" or "scenario X exists under feature Y." With multi-path, the top-level tree structure changes: instead of one "features/" node per workspace, there could be N sibling nodes (one per path in `featuresUris[]`). Existing predicates that count top-level children break silently (N instead of 1).
 
 **Why it happens:** The test-tree builder at `parsers/testFile.ts` groups features by their `featuresUri`. Multi-path means N groups, and any test that asserted "I can find my scenario by walking `topLevel.children[0]`" now has to walk all children and search.
 
@@ -329,25 +329,25 @@ For v1.2 multi-path, this extends to every entry in `rawPaths[]`. A Windows user
 **Prevention:**
 - **Audit `waitForTestTree` usage before merging multi-path.** Every predicate function that walks `ctrl.items` must handle multiple top-level paths. Pattern: use `TestItem.uri` to identify scenarios, never positional index.
 - **Extend `waitForTestTree` helpers with `findScenario(ctrl, featurePath, scenarioName)` that searches all top-level nodes.** Centralizes the search logic; prevents ad-hoc index-based walks.
-- **Run the full integration suite against a single-path fixture AND a multi-path fixture** (new in v1.2) as separate parametrizations. Any predicate that passes on single-path but fails on multi-path is a bug.
+- **Run the full integration suite against a single-path fixture AND a multi-path fixture** (new in 1.2.0) as separate parametrizations. Any predicate that passes on single-path but fails on multi-path is a bug.
 
 **Warning signs:**
-- An integration test that passed in v1.1 fails in v1.2 with "expected TestItem X not found" where X exists under a non-first features path
+- An integration test that passed in 1.1.0 fails in 1.2.0 with "expected TestItem X not found" where X exists under a non-first features path
 - `waitForTestTree` times out against a multi-path fixture but a manual inspection shows the expected state is present
 
-**Phase to address:** Integration-test phase of v1.2. Fixture changes + predicate audit together.
+**Phase to address:** Integration-test phase of 1.2.0. Fixture changes + predicate audit together.
 
 ---
 
 ### Pitfall 12: Fixture Pollution Across Suites — Multi-Path Fixture Needs Its Own Root
 
-**What goes wrong:** v1.1 established the pattern "dedicated `example-projects/` fixture per fs-mutating suite" (D-05; pattern codified as `watcher-integration/`). v1.2 adds two new test surfaces:
+**What goes wrong:** 1.1.0 established the pattern "dedicated `example-projects/` fixture per fs-mutating suite" (D-05; pattern codified as `watcher-integration/`). 1.2.0 adds two new test surfaces:
 1. Multi-path: config file with `paths = features\n  features-alt`.
 2. Subdir scan: config file at `packages/frontend/behave.ini`.
 
-If either test reuses an existing fixture (e.g. `watcher-integration/` for its fs-mutation convenience), the tests silently cross-pollinate: a v1.2 test edits `watcher-integration/behave.ini` to add a second path, subsequent v1.1 tests fail because the fixture state is no longer the single-path baseline they expected.
+If either test reuses an existing fixture (e.g. `watcher-integration/` for its fs-mutation convenience), the tests silently cross-pollinate: a 1.2.0 test edits `watcher-integration/behave.ini` to add a second path, subsequent 1.1.0 tests fail because the fixture state is no longer the single-path baseline they expected.
 
-**Why it happens:** Fixture reuse is tempting for developer convenience. The v1.1 retrospective flagged this explicitly (D-05), and the pattern worked because one suite per fixture was enforced. v1.2's two-axis feature expansion pressures the pattern.
+**Why it happens:** Fixture reuse is tempting for developer convenience. The 1.1.0 retrospective flagged this explicitly (D-05), and the pattern worked because one suite per fixture was enforced. 1.2.0's two-axis feature expansion pressures the pattern.
 
 **Prevention:**
 - **Two new fixtures:** `example-projects/multi-path/` (single config, `paths=features,features-alt`) and `example-projects/monorepo-scan/` (config at `packages/app/behave.ini`, multi-package structure).
@@ -358,13 +358,13 @@ If either test reuses an existing fixture (e.g. `watcher-integration/` for its f
 - A test passes in isolation but fails when the full suite runs
 - `suiteTeardown` leaves artifacts (the one failure mode D-05 called out specifically)
 
-**Phase to address:** Integration-test phase of v1.2. Plan the fixture matrix before writing the tests.
+**Phase to address:** Integration-test phase of 1.2.0. Plan the fixture matrix before writing the tests.
 
 ---
 
 ### Pitfall 13: Migration Path — User With `featuresPath: "features"` Plus `featuresPaths: ["features-alt"]`
 
-**What goes wrong:** User upgrades from v1.1 to v1.2, reads the changelog, and adds `featuresPaths: ["features-alt"]` to settings.json alongside their existing `featuresPath: "features"`. PROJECT.md's locked decision says "plural wins if both set," so `featuresPaths[0] = features-alt` becomes the only path; `features` is silently dropped. User expected both to be combined (plural = additive on top of singular).
+**What goes wrong:** User upgrades from 1.1.0 to 1.2.0, reads the changelog, and adds `featuresPaths: ["features-alt"]` to settings.json alongside their existing `featuresPath: "features"`. PROJECT.md's locked decision says "plural wins if both set," so `featuresPaths[0] = features-alt` becomes the only path; `features` is silently dropped. User expected both to be combined (plural = additive on top of singular).
 
 **Why it happens:** "Wins" is one of three reasonable semantics: "replaces", "merges", or "invalid configuration". Users are as likely to assume merge as replace. Without a warning, they lose coverage silently.
 
@@ -373,9 +373,9 @@ If either test reuses an existing fixture (e.g. `watcher-integration/` for its f
 - User reports "upgrade broke my tests" — hard to diagnose without output channel logs.
 
 **Prevention:**
-- **When both are set, log a high-visibility info message** (not a popup — anti-feature per v1.0 key decisions): `"Both 'featuresPath' and 'featuresPaths' are set. 'featuresPaths' takes precedence; 'featuresPath' is ignored. Remove 'featuresPath' from settings.json to suppress this message."`. Use `config.logger.logInfo` so it's one line in the Behave BDD output channel.
+- **When both are set, log a high-visibility info message** (not a popup — anti-feature per 1.0.0 key decisions): `"Both 'featuresPath' and 'featuresPaths' are set. 'featuresPaths' takes precedence; 'featuresPath' is ignored. Remove 'featuresPath' from settings.json to suppress this message."`. Use `config.logger.logInfo` so it's one line in the Behave BDD output channel.
 - **Consider: auto-migrate `featuresPath` into `featuresPaths[0]` (in-memory, not settings.json) when only singular is set.** Internally the code always reads `featuresUris[]`; the migration is transparent and keeps `featuresPath` semantically additive if a user adds a plural later. This is a scoping choice — the "plural wins" decision might need a caveat about "plural wins but singular is concatenated as [0]" for merge semantics. Document whichever choice is made in PROJECT.md key decisions.
-- **Release notes call-out:** explicit paragraph on the interaction. Not a README update (out of scope for v1.2 per PROJECT.md), but a CHANGELOG entry.
+- **Release notes call-out:** explicit paragraph on the interaction. Not a README update (out of scope for 1.2.0 per PROJECT.md), but a CHANGELOG entry.
 
 **Warning signs:**
 - Post-release bug reports of "upgrade lost my features"
@@ -387,22 +387,22 @@ If either test reuses an existing fixture (e.g. `watcher-integration/` for its f
 
 ### Pitfall 14: Integration-Test `integrationTestRun` Bypass Still Lives in `configurationChangedHandler`
 
-**What goes wrong:** v1.1 explicitly documented this in Pitfall 14 of the previous PITFALLS doc: `configurationChangedHandler` has `if (config.integrationTestRun && !testCfg) return;` at `extension.ts:582`. v1.1's fix was "config watcher calls cache refresh directly, not through `configurationChangedHandler`" (confirmed at `configWatcher.ts:53-59`).
+**What goes wrong:** 1.1.0 explicitly documented this in Pitfall 14 of the previous PITFALLS doc: `configurationChangedHandler` has `if (config.integrationTestRun && !testCfg) return;` at `extension.ts:582`. 1.1.0's fix was "config watcher calls cache refresh directly, not through `configurationChangedHandler`" (confirmed at `configWatcher.ts:53-59`).
 
-For v1.2, any new code path that triggers full re-discovery (e.g. "subdir scan found a new config") must follow the same rule: do not delegate through `configurationChangedHandler`. The temptation is to route through the single choke point (v1.1's "single choke-point callback" pattern from the retrospective), but that pattern's reuse-semantics were carefully calibrated for watcher-triggered changes. A full re-scan on detection of a new config file at depth 2 is architecturally similar but not identical — and silently hitting the `integrationTestRun` guard breaks integration tests for that path.
+For 1.2.0, any new code path that triggers full re-discovery (e.g. "subdir scan found a new config") must follow the same rule: do not delegate through `configurationChangedHandler`. The temptation is to route through the single choke point (1.1.0's "single choke-point callback" pattern from the retrospective), but that pattern's reuse-semantics were carefully calibrated for watcher-triggered changes. A full re-scan on detection of a new config file at depth 2 is architecturally similar but not identical — and silently hitting the `integrationTestRun` guard breaks integration tests for that path.
 
 **Why it happens:** The retrospective key lesson was "make the main handler absorb the work." Applied mechanically, that means routing every re-discovery through `configurationChangedHandler`. The asterisk — "except under integration test, which the single choke point bypasses" — is easy to forget for new code.
 
 **Prevention:**
-- **For any new v1.2 trigger of re-discovery (subdir scan detecting config creation, watcher handling a file create event at an unexpected depth), call `getUrisOfWkspFoldersWithFeatures(true) + config.reloadSettings(wkspUri) + parser.parseFilesForWorkspace(...)` directly.** Mirror the v1.1 `configWatcher.ts:56-59` pattern exactly.
+- **For any new 1.2.0 trigger of re-discovery (subdir scan detecting config creation, watcher handling a file create event at an unexpected depth), call `getUrisOfWkspFoldersWithFeatures(true) + config.reloadSettings(wkspUri) + parser.parseFilesForWorkspace(...)` directly.** Mirror the 1.1.0 `configWatcher.ts:56-59` pattern exactly.
 - **Do NOT remove the `integrationTestRun` guard from `configurationChangedHandler`.** It's load-bearing for `runAllTestsAndAssertTheResults`.
-- **Integration tests for v1.2 subdir scanning MUST invoke the scanner without going through `configurationChangedHandler`.** Use the `testCfg` path or the direct `parser.parseFilesForWorkspace` call.
+- **Integration tests for 1.2.0 subdir scanning MUST invoke the scanner without going through `configurationChangedHandler`.** Use the `testCfg` path or the direct `parser.parseFilesForWorkspace` call.
 
 **Warning signs:**
 - Integration test for "create a new `behave.ini` at depth 2" passes trivially (the re-discovery never fired because of the bypass)
 - `config.integrationTestRun` is never set-true in a test that should exercise the watcher path
 
-**Phase to address:** Any phase that adds a new discovery trigger. Propagate the v1.1 pattern.
+**Phase to address:** Any phase that adds a new discovery trigger. Propagate the 1.1.0 pattern.
 
 ---
 
@@ -410,7 +410,7 @@ For v1.2, any new code path that triggers full re-discovery (e.g. "subdir scan f
 
 **What goes wrong:** `workspaceWatcher.ts:13-14` creates a FileSystemWatcher with `new vscode.RelativePattern(wkspSettings.uri, '${wkspSettings.workspaceRelativeFeaturesPath}/**')` — one watcher, glob anchored to the single features path. With multi-path, adding a `.feature` file under `featuresUris[1]` won't fire this watcher; the tree silently doesn't update.
 
-**Why it happens:** The watcher's pattern was correct for v1.0 (one features path). v1.2's per-path expansion must touch this file.
+**Why it happens:** The watcher's pattern was correct for 1.0.0 (one features path). 1.2.0's per-path expansion must touch this file.
 
 **Prevention:**
 - **`startWatchingWorkspace` iterates `featuresUris[]` and creates one watcher per path.** Returns the union as `FileSystemWatcher[]`. The existing `wkspWatchers: Map<Uri, FileSystemWatcher[]>` already supports multiple watchers per workspace, so the Map shape doesn't change.
@@ -437,7 +437,7 @@ For v1.2, any new code path that triggers full re-discovery (e.g. "subdir scan f
 | Cache subdir scan results per-file inside `searchConfigFiles` | Avoid re-reading files on back-to-back scans | Run guard becomes non-deterministic; watcher invalidation races | Never — rely on the per-workspace `discoveryCache` |
 | Skip symlink detection in depth scan | Simpler recursive function | 10× scan time on pnpm monorepos; possible infinite recursion on pathological graphs | Never — pnpm is table stakes for JS monorepos |
 | Inline backslash normalization only when tested | Fewer code paths | Cross-platform regression slips through; macOS user gets silent empty tree | Always normalize — safe on both platforms |
-| Delegate v1.2 re-discovery through `configurationChangedHandler` for "single choke point" | Mirrors v1.1 retrospective wisdom | Integration tests silently bypass via `integrationTestRun` guard | Never — call cache+parser directly per v1.1 Pitfall 14 |
+| Delegate 1.2.0 re-discovery through `configurationChangedHandler` for "single choke point" | Mirrors 1.1.0 retrospective wisdom | Integration tests silently bypass via `integrationTestRun` guard | Never — call cache+parser directly per 1.1.0 Pitfall 14 |
 
 ---
 
@@ -447,7 +447,7 @@ For v1.2, any new code path that triggers full re-discovery (e.g. "subdir scan f
 |---|---|---|
 | `WorkspaceSettings` singular → plural | Rename `featuresUri` to `featuresUris` | Keep `featuresUri` as primary; add `featuresUris[]` list; add `isFileInFeatures(uri)` helper (Pitfall 3) |
 | `common.ts` `hasExplicitSetting` | Treat any-defined array as "explicitly set" | Empty-array and whitespace-only array → "unset" for multi-path (Pitfall 4) |
-| `configParser.resolvePaths` | Resolve only `rawPaths[0]` (v1.0 behavior) | Resolve every entry; dedup subsumed paths; normalize backslashes (Pitfalls 2, 8) |
+| `configParser.resolvePaths` | Resolve only `rawPaths[0]` (1.0.0 behavior) | Resolve every entry; dedup subsumed paths; normalize backslashes (Pitfalls 2, 8) |
 | `configWatcher.ts` glob | Extend to `**/{configs}` everywhere | Two-tier: narrow watcher at discovered dir + fallback workspace-wide only when no config (Pitfall 5) |
 | `workspaceWatcher.ts` pattern | Keep single pattern; assume featuresUri scalar | Iterate `featuresUris[]`; one watcher per path (Pitfall 15) |
 | `testRunHandler` `idMatch` | `uriId(featuresUri)` — single id | Compute `idMatches = featuresUris.map(uriId)` and check `.some()` |
@@ -519,14 +519,14 @@ For v1.2, any new code path that triggers full re-discovery (e.g. "subdir scan f
 | Pitfall 11 (`waitForTestTree` predicates) | MEDIUM | Audit all predicates; extract `findScenario` helper |
 | Pitfall 12 (fixture pollution) | LOW if caught early | Two new fixtures; snapshot-restore in setup |
 | Pitfall 13 (migration surprise) | LOW | Info log; changelog callout |
-| Pitfall 14 (`integrationTestRun` bypass) | LOW | Call cache+parser directly per v1.1 pattern |
+| Pitfall 14 (`integrationTestRun` bypass) | LOW | Call cache+parser directly per 1.1.0 pattern |
 | Pitfall 15 (workspace watcher per-path) | LOW | Loop over `featuresUris[]`; array of watchers |
 
 ---
 
 ## Pitfall-to-Phase Mapping
 
-The v1.2 milestone is expected to split into approximately 3 phases (parsing, discovery-scan, integration-plus-watchers). This maps each pitfall to the phase that must prevent it.
+The 1.2.0 milestone is expected to split into approximately 3 phases (parsing, discovery-scan, integration-plus-watchers). This maps each pitfall to the phase that must prevent it.
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
@@ -553,20 +553,20 @@ The v1.2 milestone is expected to split into approximately 3 phases (parsing, di
 ### Primary (codebase verification — HIGH confidence)
 
 - `src/common.ts` — discovery cache, `getUrisOfWkspFoldersWithFeatures`, `hasExplicitSetting`, `DEFAULT_EXCLUDE_DIRS` (lines 168-320, 142-155, 431, 449-484)
-- `src/watchers/configWatcher.ts` — v1.1 brace-glob + 500ms debounce; direct cache invalidation (lines 9-74)
+- `src/watchers/configWatcher.ts` — 1.1.0 brace-glob + 500ms debounce; direct cache invalidation (lines 9-74)
 - `src/extension.ts` — `updateDiscoveryUX`, `configurationChangedHandler`, watcher lifecycle, `integrationTestRun` guard (lines 62-118, 577-645, 582)
 - `src/parsers/configParser.ts` — `searchConfigFiles` (malformed falls through D-06), `parseIniConfig` continuation semantics, `resolvePaths` single-path only (lines 36-49, 57-118, 158-169)
 - `src/settings.ts` — `WorkspaceSettings.featuresUri` scalar + derived `stepsSearchUri` (lines 77-158)
 - `src/watchers/workspaceWatcher.ts` — single-pattern feature watcher, needs per-path expansion (lines 9-86)
 - `src/runners/testRunHandler.ts` — single `idMatch = uriId(featuresUri)` scope check (line 199)
-- Prior research: `.planning/research/PITFALLS.md` (v1.1 baseline — carried forward: watcher disposal, glob-not-filename, 500ms debounce, cache-is-source-of-truth, integrationTestRun bypass, Windows delete latency)
-- Prior research: `.planning/RETROSPECTIVE.md` (v1.1 lessons — D-05 fixture isolation; `waitForTestTree` primitive; single choke-point callback; predicate-polling beats wall-clock sleeps)
-- `.planning/PROJECT.md` (Key Decisions — all v1.0 + v1.1 decisions treated as constraints: singular-in-v1.0, no-subdir-scan-in-v1.0, brace-glob, 500ms debounce, `configurationChangedHandler(undefined, undefined, true)` choke point, cache-first guard, non-blocking UX, dedicated fs-mutation fixture, `waitForTestTree`)
+- Prior research: `.planning/research/PITFALLS.md` (1.1.0 baseline — carried forward: watcher disposal, glob-not-filename, 500ms debounce, cache-is-source-of-truth, integrationTestRun bypass, Windows delete latency)
+- Prior research: `.planning/RETROSPECTIVE.md` (1.1.0 lessons — D-05 fixture isolation; `waitForTestTree` primitive; single choke-point callback; predicate-polling beats wall-clock sleeps)
+- `.planning/PROJECT.md` (Key Decisions — all 1.0.0 + 1.1.0 decisions treated as constraints: singular-in-1.0.0, no-subdir-scan-in-1.0.0, brace-glob, 500ms debounce, `configurationChangedHandler(undefined, undefined, true)` choke point, cache-first guard, non-blocking UX, dedicated fs-mutation fixture, `waitForTestTree`)
 
 ### Secondary (known VS Code platform behavior — MEDIUM confidence)
 
-- VS Code issue #164925: FileSystemWatcher bare-filename silent failure — v1.1 baseline
-- VS Code issue #72831: FileSystemWatcher onDidChange stale-read — v1.1 baseline (500ms debounce)
+- VS Code issue #164925: FileSystemWatcher bare-filename silent failure — 1.1.0 baseline
+- VS Code issue #72831: FileSystemWatcher onDidChange stale-read — 1.1.0 baseline (500ms debounce)
 - VS Code issue #56549: FileSystemWatcher rename inconsistency — affects subdir scan move scenarios (Pitfall 7)
 - VS Code issues #3025 / #60813: `**/` glob perf on Windows (Pitfall 5)
 - Node.js `fs.readdirSync` symlink behavior (follows by default) — source for Pitfall 9 protection
@@ -574,13 +574,13 @@ The v1.2 milestone is expected to split into approximately 3 phases (parsing, di
 
 ### Confidence notes
 
-- Every Critical Pitfall has either a specific line citation or a cross-reference to a shipped v1.1 decision — HIGH confidence in the *pattern*.
+- Every Critical Pitfall has either a specific line citation or a cross-reference to a shipped 1.1.0 decision — HIGH confidence in the *pattern*.
 - The specific perf threshold "< 100ms with 1000-file `node_modules/`" in Pitfall 1 is a hypothesis; exact threshold depends on target hardware. Benchmark in the implementing phase and revise.
-- Pitfall 10 (mid-run race) is plausible but not observed in v1.1 — flagged MODERATE because v1.2's increased event frequency raises the hit rate. May not materialize; safe to implement the guard defensively.
+- Pitfall 10 (mid-run race) is plausible but not observed in 1.1.0 — flagged MODERATE because 1.2.0's increased event frequency raises the hit rate. May not materialize; safe to implement the guard defensively.
 - Pitfall 11 (`waitForTestTree` predicates) depends on how those predicates were actually written — an audit during Phase planning will either confirm or downgrade this.
 
 ---
 
-*Pitfalls research for: v1.2 Multi-Path & Monorepo-Aware Discovery*
+*Pitfalls research for: 1.2.0 Multi-Path & Monorepo-Aware Discovery*
 *Researched: 2026-04-17*
-*Supersedes (additively): `.planning/research/PITFALLS.md` v1.1 baseline — v1.1 pitfalls still apply.*
+*Supersedes (additively): `.planning/research/PITFALLS.md` 1.1.0 baseline — 1.1.0 pitfalls still apply.*

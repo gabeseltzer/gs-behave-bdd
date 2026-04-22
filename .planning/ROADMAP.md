@@ -2,35 +2,35 @@
 
 ## Milestones
 
-- **v1.0 Auto-Discover Behave Projects** — Phases 1-3 (shipped 2026-04-16)
-- **v1.1 Config File Watching** — Phases 4-6 (shipped 2026-04-17)
-- **v1.2 Multi-Path & Monorepo-Aware Discovery** — Phases 7-11 (started 2026-04-17)
+- **1.0.0 Auto-Discover Behave Projects** — Phases 1-3 (shipped 2026-04-16)
+- **1.1.0 Config File Watching** — Phases 4-6 (shipped 2026-04-17)
+- **1.2.0 Multi-Path & Monorepo-Aware Discovery** — Phases 7-11 (started 2026-04-17)
 
 ## Phases
 
 <details>
-<summary>v1.0 Auto-Discover Behave Projects (Phases 1-3) — SHIPPED 2026-04-16</summary>
+<summary>1.0.0 Auto-Discover Behave Projects (Phases 1-3) — SHIPPED 2026-04-16</summary>
 
 - [x] Phase 1: Config Parsing (2/2 plans) — completed 2026-04-15
 - [x] Phase 2: Integration (2/2 plans) — completed 2026-04-15
 - [x] Phase 3: UX & Verification (2/2 plans) — completed 2026-04-16
 
-Archive: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
+Archive: [milestones/1.0.0-ROADMAP.md](milestones/1.0.0-ROADMAP.md)
 
 </details>
 
 <details>
-<summary>v1.1 Config File Watching (Phases 4-6) — SHIPPED 2026-04-17</summary>
+<summary>1.1.0 Config File Watching (Phases 4-6) — SHIPPED 2026-04-17</summary>
 
 - [x] Phase 4: Watcher & Run Guard (2/2 plans) — completed 2026-04-16
 - [x] Phase 5: Integration Verification (5/5 plans) — completed 2026-04-17
-- [x] Phase 6: v1.1 Tech Debt & Admin Cleanup (2/2 plans) — completed 2026-04-17
+- [x] Phase 6: 1.1.0 Tech Debt & Admin Cleanup (2/2 plans) — completed 2026-04-17
 
-Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
+Archive: [milestones/1.1.0-ROADMAP.md](milestones/1.1.0-ROADMAP.md)
 
 </details>
 
-### v1.2 Multi-Path & Monorepo-Aware Discovery (Phases 7-11)
+### 1.2.0 Multi-Path & Monorepo-Aware Discovery (Phases 7-11)
 
 - [x] **Phase 7: Internal Multi-Path Types** — Introduce primary-plus-list plural types end-to-end (`featuresUris[]`, `resolvedPaths[]`) with singular getters so the codebase still compiles — completed 2026-04-20 (3/3 plans)
 - [x] **Phase 8: Parser / Test-Tree / Watcher Multi-Root Iteration** — Make every consumer iterate/union/per-root-scope across `featuresUris[]`; user-visible multi-path when a behave.ini already lists multiple `paths=` entries — completed 2026-04-21 (3/3 plans)
@@ -44,13 +44,13 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 
 ### Phase 7: Internal Multi-Path Types
 **Goal**: The codebase carries multi-path shape end-to-end (`featuresUris: Uri[]`, `resolvedPaths: Uri[]`) without changing any user-visible behavior; singular getters preserve back-compat for every existing consumer
-**Depends on**: Phase 6 (v1.1 close)
+**Depends on**: Phase 6 (1.1.0 close)
 **Requirements**: MP-02, TEST-12
 **Success Criteria** (what must be TRUE):
-  1. A single-path workspace (e.g. the v1.0 `config-only/` fixture) still discovers its features correctly and shows its test tree with zero visible change
+  1. A single-path workspace (e.g. the 1.0.0 `config-only/` fixture) still discovers its features correctly and shows its test tree with zero visible change
   2. `WorkspaceSettings.featuresUri` / `projectRelativeFeaturesPath` / `stepsSearchUri` singular getters return the corresponding `…s[0]` element for all 20+ existing call sites
   3. A workspace with an INI config containing `paths = features\n  features-alt` populates `WorkspaceSettings.featuresUris.length === 2` internally, even though nothing downstream consumes the second entry yet
-  4. Setting `featuresPath: "."` (invalid token) or an empty string is still rejected exactly as in v1.1
+  4. Setting `featuresPath: "."` (invalid token) or an empty string is still rejected exactly as in 1.1.0
   5. `npm run test:unit` passes with new unit coverage for the plural/singular precedence matrix (plural set / singular set / both set / neither set / plural empty array)
 **Plans**: 3 plans
 Plans:
@@ -83,9 +83,9 @@ Plans:
   1. Opening a workspace whose only behave config is at `backend/behave.ini` (no workspace-root config) surfaces backend features in the Test Explorer automatically — no settings.json intervention required
   2. Scanning a workspace with a seeded 1000-file `node_modules/` completes within the discovery performance budget (<100ms target) because the scanner respects `DEFAULT_EXCLUDE_DIRS` and circuit-breaks at `maxEntriesScanned`
   3. When the scan finds multiple configs (e.g. `app-a/behave.ini` + `app-b/behave.ini`), a single non-modal information notification lists all of them, says which is primary, and offers "Open Settings" to set `projectPath`; the same session does NOT re-notify for the same pair
-  4. Setting `gs-behave-bdd.discoveryDepth: 0` restores v1.1 behavior exactly (workspace-root-only scan) with no subdir traversal
+  4. Setting `gs-behave-bdd.discoveryDepth: 0` restores 1.1.0 behavior exactly (workspace-root-only scan) with no subdir traversal
   5. Editing or deleting the currently-discovered subdirectory config fires the config watcher correctly (two-tier strategy: narrow watcher at the discovered config's directory + `**/` fallback only when no config is discovered); the tree rebuilds via `waitForTestTree` predicate
-  6. Setting `gs-behave-bdd.projectPath` manually still overrides scan results — the v1.0 priority chain (manual > config > convention) is preserved and re-tested
+  6. Setting `gs-behave-bdd.projectPath` manually still overrides scan results — the 1.0.0 priority chain (manual > config > convention) is preserved and re-tested
 **Plans**: 3 plans
 **Plans:**
 - [x] 09-01-PLAN.md — Settings declarations + DiscoveryEntry type extension
@@ -98,23 +98,23 @@ Plans:
 **Requirements**: MP-03
 **Success Criteria** (what must be TRUE):
   1. A workspace with `"gs-behave-bdd.featuresPaths": ["featuresA", "featuresB"]` in settings.json shows both as path-group TestItems in the Test Explorer (identical to the behave.ini-driven multi-path behavior from Phase 8)
-  2. A workspace with only the legacy `"gs-behave-bdd.featuresPath": "features"` set sees zero behavior change from v1.1 — single path, single tree
+  2. A workspace with only the legacy `"gs-behave-bdd.featuresPath": "features"` set sees zero behavior change from 1.1.0 — single path, single tree
   3. A workspace with BOTH `featuresPath` and `featuresPaths` set uses the plural value and writes an info-level line to the Behave BDD output channel noting that the singular is being ignored
   4. `"gs-behave-bdd.featuresPaths": []` (empty array) is treated as if the setting is not set — discovery falls back to config file / convention with no silent empty tree
-  5. `hasExplicitSetting` returns true when either `featuresPath` OR `featuresPaths` is set at any scope, preserving the v1.0 manual-override priority
+  5. `hasExplicitSetting` returns true when either `featuresPath` OR `featuresPaths` is set at any scope, preserving the 1.0.0 manual-override priority
 **Plans**: 1 plan
 Plans:
 - [x] 10-01-PLAN.md — package.json declaration + settings.ts info log + common.ts hasExplicitNonEmptyArraySetting + unit tests
 
 ### Phase 11: UX Polish + Regression Hardening
-**Goal**: The v1.2 feature set is locked in by a multi-scenario integration test matrix running against dedicated fixtures, with a 3× Windows CI flakiness gate matching v1.1 precedent
+**Goal**: The 1.2.0 feature set is locked in by a multi-scenario integration test matrix running against dedicated fixtures, with a 3× Windows CI flakiness gate matching 1.1.0 precedent
 **Depends on**: Phase 8, Phase 9, Phase 10
 **Requirements**: TEST-13, TEST-14, TEST-15
 **Success Criteria** (what must be TRUE):
   1. New `example-projects/multi-path/` fixture (single config with `paths = features\nfeatures-alt`) is isolated from all other suites per D-05 — no suite reads or mutates it cross-boundary
   2. New `example-projects/monorepo-scan/` fixture (nested `app-a/behave.ini` + `app-b/behave.ini` + seeded `node_modules/` for perf assertion) is isolated equivalently and exercises the subdir-scan happy path + ambiguity notification
   3. Integration suite covers: multi-path from `behave.ini`, multi-path from `settings.json.featuresPaths`, subdir scan with multi-path inside the discovered config, config-edit that adds a new path rebuilding the tree via `waitForTestTree`, `discoveryDepth=0` edge case
-  4. 3-run green pass on Windows CI matches the v1.1 D-21 flakiness gate before milestone close
+  4. 3-run green pass on Windows CI matches the 1.1.0 D-21 flakiness gate before milestone close
   5. `logSettings` output in `settings.ts` renders the plural `featuresUris` as a comma-joined list — no single-path lie in the output channel
 **Plans**: 3 plans
 Plans:
@@ -147,14 +147,14 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Config Parsing | v1.0 | 2/2 | Complete | 2026-04-15 |
-| 2. Integration | v1.0 | 2/2 | Complete | 2026-04-15 |
-| 3. UX & Verification | v1.0 | 2/2 | Complete | 2026-04-16 |
-| 4. Watcher & Run Guard | v1.1 | 2/2 | Complete | 2026-04-16 |
-| 5. Integration Verification | v1.1 | 5/5 | Complete | 2026-04-17 |
-| 6. v1.1 Tech Debt & Admin Cleanup | v1.1 | 2/2 | Complete | 2026-04-17 |
-| 7. Internal Multi-Path Types | v1.2 | 3/3 | Complete | 2026-04-20 |
-| 8. Parser / Test-Tree / Watcher Multi-Root Iteration | v1.2 | 3/3 | Complete | 2026-04-21 |
-| 9. Subdirectory Config Scan | v1.2 | 3/3 | Complete | 2026-04-21 |
-| 10. `featuresPaths` User-Facing Settings Key | v1.2 | 1/1 | Complete    | 2026-04-21 |
-| 11. UX Polish + Regression Hardening | v1.2 | 3/3 | Complete   | 2026-04-21 |
+| 1. Config Parsing | 1.0.0 | 2/2 | Complete | 2026-04-15 |
+| 2. Integration | 1.0.0 | 2/2 | Complete | 2026-04-15 |
+| 3. UX & Verification | 1.0.0 | 2/2 | Complete | 2026-04-16 |
+| 4. Watcher & Run Guard | 1.1.0 | 2/2 | Complete | 2026-04-16 |
+| 5. Integration Verification | 1.1.0 | 5/5 | Complete | 2026-04-17 |
+| 6. 1.1.0 Tech Debt & Admin Cleanup | 1.1.0 | 2/2 | Complete | 2026-04-17 |
+| 7. Internal Multi-Path Types | 1.2.0 | 3/3 | Complete | 2026-04-20 |
+| 8. Parser / Test-Tree / Watcher Multi-Root Iteration | 1.2.0 | 3/3 | Complete | 2026-04-21 |
+| 9. Subdirectory Config Scan | 1.2.0 | 3/3 | Complete | 2026-04-21 |
+| 10. `featuresPaths` User-Facing Settings Key | 1.2.0 | 1/1 | Complete    | 2026-04-21 |
+| 11. UX Polish + Regression Hardening | 1.2.0 | 3/3 | Complete   | 2026-04-21 |
