@@ -35,8 +35,10 @@ Archive: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 - [x] **Phase 7: Internal Multi-Path Types** — Introduce primary-plus-list plural types end-to-end (`featuresUris[]`, `resolvedPaths[]`) with singular getters so the codebase still compiles — completed 2026-04-20 (3/3 plans)
 - [x] **Phase 8: Parser / Test-Tree / Watcher Multi-Root Iteration** — Make every consumer iterate/union/per-root-scope across `featuresUris[]`; user-visible multi-path when a behave.ini already lists multiple `paths=` entries — completed 2026-04-21 (3/3 plans)
 - [x] **Phase 9: Subdirectory Config Scan** — New `src/discovery/configScanner.ts` module: BFS depth-3 default, `discoveryDepth` setting, first-match-wins + `alsoFoundConfigs` notification, two-tier config watcher — completed 2026-04-21 (3/3 plans)
-- [x] **Phase 10: `featuresPaths` User-Facing Settings Key** — `gs-behave-bdd.featuresPaths: string[]` in package.json; plural wins over singular `featuresPath`; legacy key still honored (completed 2026-04-21)
-- [x] **Phase 11: UX Polish + Regression Hardening** — Integration test matrix, dedicated `multi-path/` + `monorepo-scan/` fixtures, 3× Windows CI flakiness gate (completed 2026-04-21)
+- [x] **Phase 10: `featuresPaths` User-Facing Settings Key** — `gs-behave-bdd.featuresPaths: string[]` in package.json; plural wins over singular `featuresPath`; legacy key still honored
+ (completed 2026-04-21)
+- [x] **Phase 11: UX Polish + Regression Hardening** — Integration test matrix, dedicated `multi-path/` + `monorepo-scan/` fixtures, 3× Windows CI flakiness gate
+ (completed 2026-04-21)
 
 ## Phase Details
 
@@ -119,6 +121,28 @@ Plans:
 - [x] 11-01-PLAN.md — Fixtures (multi-path/, multi-path-settings/, monorepo-scan/) + logSettings plural unit test
 - [x] 11-02-PLAN.md — Integration test suites (multi-path, multi-path-settings, monorepo-scan) + runTestSuites.ts wiring
 - [x] 11-03-PLAN.md — 3× Windows CI flakiness gate (checkpoint)
+## Backlog
+
+### Phase 999.1: Deprecate `featuresPath` + Reusable Notification Suppression (BACKLOG)
+
+**Goal:** Deprecate the singular `featuresPath` setting in favor of `featuresPaths`, with a migration popup and reusable infrastructure for future deprecations.
+
+**Scope:**
+- Mark `featuresPath` as deprecated in package.json (`markdownDeprecationMessage`)
+- Show a deprecation notification when singular setting is detected, with 3 buttons:
+  - **Migrate** — auto-convert `featuresPath: "x"` → `featuresPaths: ["x"]` in the user's settings
+  - **Dismiss for now** — suppress until next session
+  - **Never ask again** — permanently suppress via a reusable mechanism
+- Reusable deprecation warning/migration utility (expect more deprecations in future milestones)
+- Reusable "never ask again" infrastructure: single `suppressedNotifications: string[]` setting (list of notification IDs) instead of per-notification boolean settings
+- Update setting description to indicate deprecation
+
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
