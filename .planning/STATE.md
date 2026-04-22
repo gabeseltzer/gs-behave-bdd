@@ -1,7 +1,7 @@
 ---
 gsd_state_version: 1.0
 milestone: 1.3.0
-milestone_name: Multi-Project Support
+milestone_name: Project Switching
 status: requirements
 stopped_at: Defining requirements
 last_updated: "2026-04-22T00:00:00.000Z"

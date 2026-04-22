@@ -17,15 +17,16 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 - 1.2.0: Multi-path types end-to-end, BFS monorepo scanner, `featuresPaths[]` setting, 3 integration fixtures (5 phases, 13 plans)
 - 614 unit tests passing; 17 integration suites passing (3-run flakiness gate cleared on Windows)
 
-## Current Milestone: v1.3.0 Multi-Project Support
+## Current Milestone: v1.3.0 Project Switching
 
-**Goal:** Support multiple behave projects per workspace folder with all projects active simultaneously in the Test Explorer, plus incremental README documentation updates.
+**Goal:** Let users switch between multiple discovered behave projects within a workspace folder — one active project at a time, with a quick-pick command and status bar indicator, plus incremental README documentation.
 
 **Target features:**
-- Multiple behave projects per workspace folder — each discovered config becomes a separate project in the test tree
-- Project node in Test Explorer tree (Workspace > Project > features > scenarios)
-- Run All at workspace level runs every project's features
-- Per-project settings overrides (env vars, tags, etc.)
+- `Behave BDD: Select Project` quick-pick command to switch active project
+- Status bar item showing current active project (click to switch)
+- Remember last selected project across sessions
+- Auto-select first match when no prior selection exists
+- Scanner promotes all discovered configs as switchable projects (no more first-match-wins notification)
 - Incremental README documentation additions for discovery features
 
 ## Requirements
@@ -80,7 +81,8 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 
 ### Out of Scope
 
-- `Behave BDD: Select Project` quick-pick command — deferred from 1.3.0; revisit if needed
+- All discovered projects active simultaneously (multiple test tree roots per workspace) — future milestone candidate
+- Per-project settings overrides (env vars, tags) — future milestone candidate
 - Deprecate singular `featuresPath` setting — backlog Phase 999.1
 - Home directory configs (`~/.behaverc`) — affects runtime, not project structure
 - Inline "Fix Config" code action — nice-to-have, not table stakes
@@ -161,4 +163,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-22 — milestone v1.3.0 started*
+*Last updated: 2026-04-22 — milestone v1.3.0 scope revised to project switching*
