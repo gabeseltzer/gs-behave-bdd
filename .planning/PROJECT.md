@@ -2,7 +2,7 @@
 
 ## What This Is
 
-An enhancement to the gs-behave-bdd VS Code extension that automatically discovers behave project structure by reading behave's native configuration files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`). Opening a folder with a behave config file surfaces tests in the Test Explorer with zero manual configuration, and — since 1.1.0 — the test tree reacts in real time when those config files are edited, created, or deleted. Test execution is guarded when a workspace's config is malformed.
+An enhancement to the gs-behave-bdd VS Code extension that automatically discovers behave project structure by reading behave's native configuration files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`). Opening a folder with a behave config file surfaces tests in the Test Explorer with zero manual configuration. The test tree reacts in real time when config files are edited, created, or deleted. Multi-path configs (e.g. `paths = features\n  features-alt`) and configs nested in monorepo subdirectories are discovered automatically.
 
 ## Core Value
 
@@ -10,28 +10,21 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 
 ## Current State
 
-**Shipped:** 1.1.0 Config File Watching (2026-04-17)
-**In flight:** 1.2.0 Multi-Path & Monorepo-Aware Discovery (started 2026-04-17)
+**Shipped:** 1.2.0 Multi-Path & Monorepo-Aware Discovery (2026-04-22)
 
 - 1.0.0: Config parsing, discovery cache, UX (3 phases, 6 plans)
 - 1.1.0: Real-time config watching, malformed-config run guard, E2E integration coverage (3 phases, 9 plans)
-- 539 unit tests passing; 14 integration suites passing (3-run flakiness gate cleared on Windows)
+- 1.2.0: Multi-path types end-to-end, BFS monorepo scanner, `featuresPaths[]` setting, 3 integration fixtures (5 phases, 13 plans)
+- 614 unit tests passing; 17 integration suites passing (3-run flakiness gate cleared on Windows)
 
-## Current Milestone: 1.2.0 Multi-Path & Monorepo-Aware Discovery
+## Next Milestone Goals
 
-**Goal:** Extend auto-discovery to support behave projects with multiple feature paths and configs nested inside monorepo subdirectories — without touching multi-project scope.
+Candidates for next milestone (see backlog Phase 999.1 and Out of Scope items):
 
-**Target features:**
-
-- **Multi-path features (DISC-08)** — Parse `paths=` as array; internal `featuresUris[]`; downstream consumers (test tree, feature parser, watchers, find-step-refs, discovery cache) updated; new `featuresPaths[]` settings.json key added (legacy singular `featuresPath` still honored).
-- **Subdirectory config scanning (DISC-07)** — Depth-3 scan by default (opt-out via `discoveryDepth`); first-match-wins when multiple configs found; warning + notification guides the user toward `projectPath` override.
-- **Watcher + run-guard compatibility** — Config watcher glob covers subdirectory paths; run guard still works per-workspace with multi-path test trees.
-
-**Key scoping decisions:**
-
-- First-match + warn when subdir scan finds >1 config (MULTI-01/02 stays deferred to Milestone 3 / v2.0)
-- Depth 3, opt-out (monorepo-friendly by default; `discoveryDepth` setting tunes scope)
-- Add `featuresPaths[]` settings.json key (both singular `featuresPath` and plural supported; plural wins if both set)
+- **Deprecate `featuresPath`** — migration popup with reusable notification suppression infrastructure
+- **Multiple behave projects per workspace folder** — full MULTI-01/02 support
+- **`Behave BDD: Select Project` quick-pick** — UI for switching between discovered projects
+- **README documentation updates** — user-facing docs for all discovery features
 
 ## Requirements
 
@@ -62,36 +55,57 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 - ✓ Malformed-config run guard (non-blocking; Run/Open/Cancel) covering runs and debug — 1.1.0 (GUARD-01..04)
 - ✓ End-to-end integration coverage of config-edit → tree-update flow (TEST-08) — 1.1.0
 - ✓ Unit tests for watcher debounce + run-guard response paths — 1.1.0 (TEST-07, TEST-09)
+- ✓ Multi-path `paths=` parsed as array; `featuresUris[]` end-to-end with singular getters for back-compat — 1.2.0 (MP-01, MP-02)
+- ✓ `featuresPaths[]` array setting in package.json; plural wins over singular — 1.2.0 (MP-03)
+- ✓ Per-path resolution failure surfaces as Problems-panel diagnostic — 1.2.0 (MP-04)
+- ✓ Path-group intermediate TestItems for multi-path workspaces — 1.2.0 (MP-05)
+- ✓ 18-file consumer cascade iterates/unions over `featuresUris[]` — 1.2.0 (MP-06)
+- ✓ BFS subdirectory config scanner with exclude-dirs, symlink-cycle protection, circuit breaker — 1.2.0 (SD-01)
+- ✓ `discoveryDepth` setting (default 3; 0 = root-only) — 1.2.0 (SD-02)
+- ✓ First-match-wins + `alsoFoundConfigs` notification — 1.2.0 (SD-03)
+- ✓ Two-tier config watcher strategy (narrow + recursive fallback) — 1.2.0 (SD-04)
+- ✓ `workspaceWatcher` fan-out per `featuresUris[]` entry — 1.2.0 (INT-02)
+- ✓ `projectPath` manual override still wins over subdir scan — 1.2.0 (INT-03)
+- ✓ `integrationTestRun` bypass for scanner-triggered rebuild — 1.2.0 (INT-04)
+- ✓ Unit tests for configParser multi-path and configScanner BFS — 1.2.0 (TEST-10, TEST-11, TEST-12)
+- ✓ Integration tests for multi-path, monorepo-scan, config-edit flows — 1.2.0 (TEST-13)
+- ✓ Dedicated test fixtures (multi-path/, multi-path-settings/, monorepo-scan/) — 1.2.0 (TEST-14)
+- ✓ 3× Windows CI flakiness gate — 1.2.0 (TEST-15)
 
 ### Active
 
-(1.2.0 requirements drafted during this milestone cycle; see `.planning/REQUIREMENTS.md`.)
+(No active milestone — run `/gsd-new-milestone` to start next cycle.)
 
 ### Out of Scope
 
-- Multiple behave projects per workspace folder — Milestone 3 candidate
-- `Behave BDD: Select Project` quick-pick command — Milestone 3 candidate
-- README documentation updates — Milestone 3 candidate
+- Multiple behave projects per workspace folder — next milestone candidate
+- `Behave BDD: Select Project` quick-pick command — next milestone candidate
+- README documentation updates — next milestone candidate
+- Deprecate singular `featuresPath` setting — backlog Phase 999.1
 - Home directory configs (`~/.behaverc`) — affects runtime, not project structure
 - Inline "Fix Config" code action — nice-to-have, not table stakes
 - Hard-blocking run guard (no "Run Anyway") — anti-feature; user must always be able to proceed
 - "Reload Window" prompt on config change — anti-feature; ESLint explicitly removed this pattern
+- Per-document-root fixture scoping (INT-01) — dropped in 1.2.0; behave loads fixtures globally
 
 ## Context
 
 **Tech stack:** TypeScript, VS Code Extension API, Mocha/Sinon, smol-toml.
-**Test coverage:** 539 unit tests; 14 integration suites (watcher-integration added in 1.1.0 as the 14th).
-**Shipped:** 2 milestones, 6 phases, 15 plans across 1.0.0 + 1.1.0.
+**Test coverage:** 614 unit tests; 17 integration suites.
+**Shipped:** 3 milestones, 11 phases, 28 plans across 1.0.0 + 1.1.0 + 1.2.0.
 
-**Key files added during 1.0.0 + 1.1.0:**
+**Key files added during 1.0.0 + 1.1.0 + 1.2.0:**
 
-- `src/parsers/configParser.ts` — stateless parser for all 5 behave config formats (1.0.0)
+- `src/parsers/configParser.ts` — stateless parser for all 5 behave config formats (1.0.0); dedup + per-path diagnostics (1.2.0)
 - `src/handlers/configDiagnostics.ts` — Problems panel diagnostics for config parse errors (1.0.0)
-- `src/watchers/configWatcher.ts` — per-workspace FileSystemWatcher with 500ms debounce (1.1.0)
-- `src/extension.ts` — `updateDiscoveryUX()`, discovery cache integration, watcher lifecycle (1.0.0 + 1.1.0)
+- `src/watchers/configWatcher.ts` — per-workspace FileSystemWatcher with 500ms debounce (1.1.0); two-tier strategy (1.2.0)
+- `src/discovery/configScanner.ts` — BFS subdirectory config scanner with exclude-dirs, symlink-cycle protection (1.2.0)
+- `src/extension.ts` — `updateDiscoveryUX()`, discovery cache, watcher lifecycle, scanner IIFE (1.0.0–1.2.0)
 - `src/runners/testRunHandler.ts` — `checkRunGuard()` (1.1.0)
 - `test/integration/suite-shared/waitForTestTree.ts` — deterministic test-tree state polling (1.1.0)
-- `example-projects/watcher-integration/` — dedicated fs-mutation fixture (1.1.0)
+- `example-projects/multi-path/` — multi-value `paths=` fixture (1.2.0)
+- `example-projects/multi-path-settings/` — `featuresPaths[]` setting fixture (1.2.0)
+- `example-projects/monorepo-scan/` — nested configs fixture (1.2.0)
 
 ## Constraints
 
@@ -119,6 +133,13 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 | Dedicated fs-mutation test fixture (`watcher-integration/`) (1.1.0) | Prevent cross-suite pollution (D-05) | ✓ Good |
 | `waitForTestTree` predicate polling replaces wall-clock sleeps (1.1.0) | Deterministic state gating; handles Windows FileSystemWatcher 1-5s delete latency | ✓ Good |
 | Phase 6 tech-debt cleanup as explicit phase (1.1.0) | Clears all code-review findings + admin hygiene before milestone close | ✓ Good — zero debt shipped |
+| Primary-plus-list pattern for multi-path types (1.2.0) | `featuresUris[]` with `featuresUri` getter returning `[0]` — 20+ singular call sites unchanged | ✓ Good — minimal disruption |
+| Drop INT-01 per-root fixture scoping (1.2.0) | Behave loads fixtures globally, not per-feature-path — scoping would diverge from runtime | ✓ Good — avoids false isolation |
+| BFS depth-3 default with `discoveryDepth` opt-out (1.2.0) | Monorepo-friendly out of the box; 0 = v1.1 behavior; 10 = practical max | ✓ Good |
+| First-match-wins when scanner finds multiple configs (1.2.0) | Full multi-project support deferred to next milestone; notification guides user to `projectPath` | ✓ Good — ships faster |
+| Two-tier watcher strategy (1.2.0) | Narrow watcher at discovered config + recursive fallback; avoids missing new configs | ✓ Good |
+| `featuresPaths[]` plural wins over singular `featuresPath` (1.2.0) | Clear precedence; info log when both set; empty array = unset | ✓ Good |
+| Semver versioning aligned with package.json (1.2.0) | Planning milestone versions match package.json; real semantic versioning going forward | ✓ Good |
 
 ## Evolution
 
@@ -140,4 +161,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-17 — 1.2.0 milestone started (multi-path + monorepo-aware discovery)*
+*Last updated: 2026-04-22 after 1.2.0 milestone*
