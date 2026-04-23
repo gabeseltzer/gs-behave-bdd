@@ -74,30 +74,30 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DISC-01 | — | Pending |
-| DISC-02 | — | Pending |
-| DISC-03 | — | Pending |
-| DISC-04 | — | Pending |
-| DISC-05 | — | Pending |
-| UX-01 | — | Pending |
-| UX-02 | — | Pending |
-| UX-03 | — | Pending |
-| UX-04 | — | Pending |
-| UX-05 | — | Pending |
-| INT-01 | — | Pending |
-| INT-02 | — | Pending |
-| INT-03 | — | Pending |
-| INT-04 | — | Pending |
-| TEST-01 | — | Pending |
-| TEST-02 | — | Pending |
-| TEST-03 | — | Pending |
-| DOC-01 | — | Pending |
+| DISC-01 | Phase 12 | Pending |
+| DISC-02 | Phase 12 | Pending |
+| DISC-03 | Phase 12 | Pending |
+| DISC-04 | Phase 12 | Pending |
+| DISC-05 | Phase 12 | Pending |
+| UX-01 | Phase 13 | Pending |
+| UX-02 | Phase 13 | Pending |
+| UX-03 | Phase 13 | Pending |
+| UX-04 | Phase 13 | Pending |
+| UX-05 | Phase 13 | Pending |
+| INT-01 | Phase 14 | Pending |
+| INT-02 | Phase 14 | Pending |
+| INT-03 | Phase 13 | Pending |
+| INT-04 | Phase 12 | Pending |
+| TEST-01 | Phase 12 | Pending |
+| TEST-02 | Phase 13 | Pending |
+| TEST-03 | Phase 14 | Pending |
+| DOC-01 | Phase 14 | Pending |
 
 **Coverage:**
 - v1.3.0 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 ⚠️
+- Mapped to phases: 18
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-22*
-*Last updated: 2026-04-22*
+*Last updated: 2026-04-23*
