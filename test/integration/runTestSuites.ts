@@ -191,6 +191,16 @@ async function runTestSuites() {
       launchArgs
     });
 
+
+    launchArgs = ["example-projects/project-switch"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './project-switch suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
     console.log("test run complete");
 
   } catch (err) {
