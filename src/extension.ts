@@ -35,8 +35,9 @@ import { scanForBehaveConfig, setCachedScanResult, getCachedScanResult, clearSca
 import { findBehaveConfig } from './parsers/configParser';
 import {
   initProjectListPersistence, rebuildProjectList, getActiveProject, getProjectList,
-  setActiveProject, isManualProjectPathMode, ProjectEntry
+  setActiveProject, isManualProjectPathMode
 } from './discovery/projectList';
+import { buildQuickPickItems, computeStatusBarState, ProjectQuickPickItem } from './discovery/selectProjectHelpers';
 import { JunitWatcher } from './watchers/junitWatcher';
 
 
@@ -213,21 +214,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     projectStatusBar.name = 'Behave BDD Active Project';
 
     const updateProjectStatusBar = (wkspUri: vscode.Uri): void => {
-      const list = getProjectList(wkspUri);
-      const active = getActiveProject(wkspUri);
-      if (list.length <= 1 || isManualProjectPathMode(wkspUri) || !active) {
+      const state = computeStatusBarState(getProjectList(wkspUri), getActiveProject(wkspUri), isManualProjectPathMode(wkspUri));
+      if (!state.visible) {
         projectStatusBar.hide();
         return;
       }
-      // D-03: Root-level projects labeled "(root)"
-      const displayLabel = active.label === '.' ? '(root)' : active.label;
-      // D-06: Status bar text format
-      projectStatusBar.text = `Behave: ${displayLabel}`;
-      // D-07: Detailed tooltip
-      const configType = active.configFileUri.path.split('/').pop() ?? 'config';
-      projectStatusBar.tooltip = `Active: ${displayLabel} (${configType})\n${list.length} projects discovered \u2014 click to switch`;
+      projectStatusBar.text = state.text ?? '';
+      projectStatusBar.tooltip = state.tooltip;
       projectStatusBar.show();
-    }
+    };
     updateProjectStatusBarFn = updateProjectStatusBar;
     parser.clearTestItemsAndParseFilesForAllWorkspaces(testData, ctrl, "activate", true);
 
@@ -593,24 +588,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
 
       const activeProject = getActiveProject(targetWkspUri);
 
-      interface ProjectQuickPickItem extends vscode.QuickPickItem {
-        entry: ProjectEntry;
-      }
 
-      const items: ProjectQuickPickItem[] = projects.map(p => {
-        const isActive = activeProject && urisMatch(p.configFileUri, activeProject.configFileUri);
-        const configType = p.configFileUri.path.split('/').pop() ?? 'config';
-        // D-03: Root-level projects labeled "(root)"
-        const displayLabel = p.label === '.' ? '(root)' : p.label;
-        return {
-          // D-02: Label = workspace-relative dir, Description = config type, Detail = full path
-          label: displayLabel,
-          description: isActive ? `${configType} \u2014 \u2713 active` : configType,
-          detail: p.configFileUri.fsPath,
-          buttons: [openConfigButton],
-          entry: p
-        };
-      });
+      const items = buildQuickPickItems(projects, activeProject, openConfigButton, urisMatch);
 
       const quickPick = vscode.window.createQuickPick<ProjectQuickPickItem>();
       quickPick.items = items;
