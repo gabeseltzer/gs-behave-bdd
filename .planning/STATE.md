@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: 1.3.0
-milestone_name: Project Switching
-status: roadmap
-stopped_at: Roadmap created, ready for planning
-last_updated: "2026-04-23T00:00:00.000Z"
+milestone: v1.0
+milestone_name: milestone
+status: Ready to execute
+last_updated: "2026-04-23T19:57:56.018Z"
 progress:
-  total_phases: 14
-  completed_phases: 11
-  total_plans: 28
-  completed_plans: 28
+  total_phases: 4
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -19,18 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-22 — milestone v1.3.0 started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Milestone v1.3.0 Project Switching — roadmap created, ready for Phase 12 planning.
+**Current focus:** Phase 13 — switching-ux-quick-pick-status-bar
 
 ## Current Position
 
-Phase: 12 (Project List Discovery & Persistence)
-Plan: —
-Status: Not started
-Last activity: 2026-04-23 — v1.3.0 roadmap created
-
-```
-[========================================>..........] 11/14 phases (79%)
-```
+Phase: 13 (switching-ux-quick-pick-status-bar) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -55,6 +49,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 ### v1.3.0 Architecture Decision
 
 **One active project at a time with switching** (not all projects simultaneously):
+
 - No 1:N WorkspaceSettings refactor needed
 - No test item ID collision concerns
 - No step mapping partitioning
