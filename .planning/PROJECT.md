@@ -8,6 +8,17 @@ An enhancement to the gs-behave-bdd VS Code extension that automatically discove
 
 Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
 
+
+## Current Milestone: v1.4.0 Deprecate featuresPath & Notification Suppression
+
+**Goal:** Remove the singular eaturesPath setting with automatic migration to eaturesPaths, and build reusable notification suppression infrastructure.
+
+**Target features:**
+- Hard-remove eaturesPath from package.json settings schema
+- Auto-migrate existing eaturesPath values to eaturesPaths[] on activation
+- Reusable notification suppression module (replacing ad-hoc suppressMultiConfigNotification pattern)
+- Migrate existing ad-hoc suppression to the new infrastructure
+
 ## Current State
 
 **Shipped:** 1.3.0 Project Switching (2026-04-23)
@@ -84,13 +95,12 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 
 ### Active
 
-(No active requirements — next milestone not yet started.)
+(Requirements for v1.4.0 — to be defined.)
 
 ### Out of Scope
 
 - All discovered projects active simultaneously (multiple test tree roots per workspace) — future milestone candidate
 - Per-project settings overrides (env vars, tags) — future milestone candidate
-- Deprecate singular `featuresPath` setting — backlog Phase 999.1
 - Home directory configs (`~/.behaverc`) — affects runtime, not project structure
 - Inline "Fix Config" code action — nice-to-have, not table stakes
 - Hard-blocking run guard (no "Run Anyway") — anti-feature; user must always be able to proceed
@@ -119,7 +129,7 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 ## Constraints
 
 - **Performance:** `getUrisOfWkspFoldersWithFeatures()` < 1ms hard requirement. Discovery results cached in-process.
-- **Backward compatibility:** Users with explicit `projectPath`/`featuresPath` settings see zero behavior change.
+- **Backward compatibility:** Auto-migration ensures users with `featuresPath` see zero behavior change after upgrade.
 - **Bundle size:** Extension remains lightweight. `smol-toml` adds ~5KB (acceptable).
 - **Config fidelity:** INI/TOML parsing matches behave's own behavior for the `paths` key.
 
@@ -155,4 +165,4 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 This document evolves at phase transitions and milestone boundaries.
 
 ---
-*Last updated: 2026-04-23 after v1.3.0 milestone*
+*Last updated: 2026-04-23 after v1.4.0 milestone started*

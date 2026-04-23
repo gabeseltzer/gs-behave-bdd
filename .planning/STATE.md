@@ -1,28 +1,31 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3.0
-milestone_name: Project Switching
-status: complete
-last_updated: "2026-04-23T22:30:00Z"
+milestone: v1.4.0
+milestone_name: Deprecate featuresPath & Notification Suppression
+status: active
+last_updated: "2026-04-23T23:00:00Z"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.3.0 completed)
+See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.4.0 started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Planning next milestone
+**Current focus:** Defining requirements for v1.4.0
 
 ## Current Position
 
-Milestone v1.3.0 complete. No active milestone.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-23 — Milestone v1.4.0 started
 
 ## Performance Metrics
 
