@@ -177,6 +177,11 @@ export function hasExplicitNonEmptyArraySetting(
 let workspaceFoldersWithFeatures: vscode.Uri[];
 const discoveryCache = new Map<string, DiscoveryEntry>();
 
+// Phase 14: Project switch rebuild guard
+let _projectSwitchInProgress = false;
+export function setProjectSwitchInProgress(value: boolean) { _projectSwitchInProgress = value; }
+export function isProjectSwitchInProgress(): boolean { return _projectSwitchInProgress; }
+
 // Export getter so WorkspaceSettings can read discovery results without coupling to the Map
 export function getDiscoveryEntry(wkspUri: vscode.Uri): DiscoveryEntry | undefined {
   return discoveryCache.get(uriId(wkspUri));
