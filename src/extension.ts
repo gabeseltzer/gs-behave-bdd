@@ -31,7 +31,12 @@ import { validateFixtureTags } from './handlers/fixtureDiagnostics';
 import { validateStepDefinitions } from './handlers/stepDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
 import { startWatchingConfigFiles, clearConfigDebounceTimers } from './watchers/configWatcher';
-import { scanForBehaveConfig, setCachedScanResult, clearScanResultCache } from './discovery/configScanner';
+import { scanForBehaveConfig, setCachedScanResult, getCachedScanResult, clearScanResultCache, ScanResultEntry, ScanResult } from './discovery/configScanner';
+import { findBehaveConfig } from './parsers/configParser';
+import {
+  initProjectListPersistence, rebuildProjectList, getActiveProject,
+  isManualProjectPathMode
+} from './discovery/projectList';
 import { JunitWatcher } from './watchers/junitWatcher';
 
 
@@ -178,6 +183,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     config.logger.syncChannelsToWorkspaceFolders();
     logExtensionVersion(context);
     const ctrl = vscode.tests.createTestController(`gs-behave-bdd.TestController`, 'Feature Tests');
+    initProjectListPersistence(context.workspaceState);
     parser.clearTestItemsAndParseFilesForAllWorkspaces(testData, ctrl, "activate", true);
 
     const cleanExtensionTempDirectoryCancelSource = new vscode.CancellationTokenSource();
@@ -193,6 +199,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       const configWatchers = startWatchingConfigFiles(wkspUri, ctrl, testData, parser, updateDiscoveryUX);
       wkspConfigWatchers.set(wkspUri, configWatchers);
       configWatchers.forEach(w => context.subscriptions.push(w));
+    }
+
+    // Phase 12: Populate project list for sync-discovered workspaces
+    for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
+      if (isManualProjectPathMode(wkspUri)) continue;
+      const existingScan = getCachedScanResult(wkspUri);
+      if (existingScan) {
+        rebuildProjectList(wkspUri, existingScan);
+      } else {
+        const entry = getDiscoveryEntry(wkspUri);
+        if (entry?.configFileUri) {
+          const configFileName = entry.configFileUri.path.split('/').pop() ?? '';
+          const CONFIG_PRIORITY: Record<string, number> = {
+            'behave.ini': 0, '.behaverc': 1, 'setup.cfg': 2, 'tox.ini': 3, 'pyproject.toml': 4
+          };
+          const rootEntry: ScanResultEntry = {
+            configFileUri: entry.configFileUri,
+            dirUri: wkspUri,
+            depth: 0,
+            configPriority: CONFIG_PRIORITY[configFileName] ?? 99,
+          };
+          const minimalScan: ScanResult = {
+            primary: undefined, alsoFound: [], scannedDirs: 0,
+            circuitBreakerFired: false, maxDepthReached: 0
+          };
+          rebuildProjectList(wkspUri, minimalScan, rootEntry);
+        }
+      }
     }
 
     const junitWatcher = new JunitWatcher();
@@ -615,6 +649,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
 
           // Cache the result so hasFeaturesFolder can read it on force-refresh
           setCachedScanResult(folder.uri, result);
+
+          // Phase 12: Populate project list from scan results
+          if (!isManualProjectPathMode(folder.uri)) {
+            const rootConfigResult = findBehaveConfig(folder.uri);
+            let rootEntry: ScanResultEntry | undefined;
+            if (rootConfigResult && rootConfigResult.ok) {
+              const configFileName = rootConfigResult.configFileUri.path.split('/').pop() ?? '';
+              const CONFIG_PRIORITY: Record<string, number> = {
+                'behave.ini': 0, '.behaverc': 1, 'setup.cfg': 2, 'tox.ini': 3, 'pyproject.toml': 4
+              };
+              rootEntry = {
+                configFileUri: rootConfigResult.configFileUri,
+                dirUri: folder.uri,
+                depth: 0,
+                configPriority: CONFIG_PRIORITY[configFileName] ?? 99,
+              };
+            }
+            const projects = rebuildProjectList(folder.uri, result, rootEntry);
+            const active = getActiveProject(folder.uri);
+            if (active) {
+              config.logger.logInfo(
+                `Project list: ${projects.length} project(s) discovered. Active: ${active.label}`,
+                folder.uri
+              );
+            }
+          }
 
           // INT-04: Call cache + parser directly, NOT through configurationChangedHandler
           getUrisOfWkspFoldersWithFeatures(true);
