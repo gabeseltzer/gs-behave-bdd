@@ -24,6 +24,9 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
 7. Support for tests that aren't in the root workspace directory (ie for monorepos).
 8. Support for [step libraries](https://github.com/behave/behave/blob/main/features/step.use_step_library.feature).
 9. Fix issues with step parsing that was inconsistent with Behave (case sensitivity and colons).
+10. **Auto-discovery** of behave projects from native config files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`). No `featuresPath` or `projectPath` settings needed in most cases.
+11. **Monorepo support** with automatic subdirectory scanning for behave configs. Multi-path `paths` entries in config files are fully supported.
+12. **Project switching** for workspaces with multiple behave projects. A status bar indicator and "Select Project" command let you switch between discovered projects.
 
 ### Old from the original extension
 
@@ -96,6 +99,8 @@ Example 3:
   .       |   |   +-- steps.py    
 ```
 
+> **Note:** In most cases you don't need these settings. The extension auto-discovers your behave project from config files. Use `projectPath` and `featuresPath` only as manual overrides when auto-discovery doesn't suit your setup.
+
 - If your features folder is not called "features", or is not in your project root, then you can add a behave config file (e.g. `behave.ini` or `.behaverc`) to your project folder and add a `paths` setting and then update the `featuresPath` setting in extension settings to match. This is a relative path to your project folder. For example:
 
 ```text
@@ -126,6 +131,26 @@ paths=my_tests/behave_features
   "gs-behave-bdd.featuresPath": "features"
 }
 ```
+
+---
+
+## Auto-Discovery & Project Switching
+
+The extension automatically discovers your behave project by reading native behave configuration files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`). If any of these files exist in your workspace, the extension reads the `paths` setting and configures itself — no manual `featuresPath` or `projectPath` settings needed.
+
+### Multi-path configs
+
+If your behave config specifies multiple paths (e.g. `paths = tests/features other_tests/features`), all paths are used for test discovery and step navigation.
+
+### Monorepo scanning
+
+For monorepos, the extension scans subdirectories (up to a configurable depth) looking for behave config files. The first discovered project becomes active automatically. You can control scan depth with the `discoveryDepth` setting (default: 3) and stop on the first hit with `discoveryStopOnFirstHit`.
+
+### Project switching
+
+When multiple behave projects are discovered in a workspace, a status bar indicator shows which project is active. Click it or use the **"Behave BDD: Select Project"** command to switch between projects. Switching triggers a full rebuild of the test tree and step navigation.
+
+The status bar indicator is hidden when only one project exists or when `projectPath` is manually set.
 
 ---
 
