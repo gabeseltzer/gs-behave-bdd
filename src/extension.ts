@@ -34,8 +34,8 @@ import { startWatchingConfigFiles, clearConfigDebounceTimers } from './watchers/
 import { scanForBehaveConfig, setCachedScanResult, getCachedScanResult, clearScanResultCache, ScanResultEntry, ScanResult } from './discovery/configScanner';
 import { findBehaveConfig } from './parsers/configParser';
 import {
-  initProjectListPersistence, rebuildProjectList, getActiveProject,
-  isManualProjectPathMode
+  initProjectListPersistence, rebuildProjectList, getActiveProject, getProjectList,
+  setActiveProject, isManualProjectPathMode, ProjectEntry
 } from './discovery/projectList';
 import { JunitWatcher } from './watchers/junitWatcher';
 
@@ -47,6 +47,7 @@ export const parser = new FileParser();
 export interface QueueItem { test: vscode.TestItem; scenario: Scenario; }
 let initialParsingComplete = false;
 const notifiedConfigErrors = new Set<string>();
+let updateProjectStatusBarFn: ((wkspUri: vscode.Uri) => void) | undefined;
 
 
 export type TestSupport = {
@@ -83,6 +84,21 @@ function updateDiscoveryUX(
       config.logger.logInfo(`Config file: ${entry.configFileUri.fsPath}`, wkspUri);
     }
     config.logger.logInfo(`Features directories: ${entry.featuresUris.map(u => u.fsPath).join(", ")}`, wkspUri);
+
+    // Phase 13: D-10 — Log bulleted project list on startup when multiple projects exist
+    if (!isManualProjectPathMode(wkspUri)) {
+      const projects = getProjectList(wkspUri);
+      const active = getActiveProject(wkspUri);
+      if (projects.length > 1 && active) {
+        config.logger.logInfo(`Discovered ${projects.length} behave projects:`, wkspUri);
+        for (const p of projects) {
+          const configType = p.configFileUri.path.split('/').pop() ?? 'config';
+          const displayLabel = p.label === '.' ? '(root)' : p.label;
+          const marker = urisMatch(p.configFileUri, active.configFileUri) ? ' (active)' : '';
+          config.logger.logInfo(`  \u2022 ${displayLabel} \u2014 ${configType}${marker}`, wkspUri);
+        }
+      }
+    }
 
     // D-02: xRay full discovery chain
     diagLog(
@@ -143,16 +159,17 @@ function updateDiscoveryUX(
         for (const alsoUri of entry.alsoFoundConfigs) {
           configLines.push(`\u2022 ${vscode.workspace.asRelativePath(alsoUri, false)}`);
         }
-        const message = `Behave BDD: Found ${totalConfigs} behave configs:\n${configLines.join('\n')}\nSet projectPath to choose a different project.`;
+        // Phase 13: D-12 — Updated to reference Select Project command
+        const message = `Behave BDD: Found ${totalConfigs} behave configs:\n${configLines.join('\n')}\nUse "Behave BDD: Select Project" to switch.`;
 
         vscode.window.showInformationMessage(
           message,
-          'Open Settings',
+          'Select Project',
           'Show Details',
           "Don't Show Again"
         ).then(action => {
-          if (action === 'Open Settings') {
-            vscode.commands.executeCommand('workbench.action.openSettings', 'gs-behave-bdd.projectPath');
+          if (action === 'Select Project') {
+            vscode.commands.executeCommand('gs-behave-bdd.selectProject');
           } else if (action === 'Show Details') {
             vscode.commands.executeCommand('gs-behave-bdd.openOutput');
           } else if (action === "Don't Show Again") {
@@ -163,6 +180,11 @@ function updateDiscoveryUX(
       }
     }
 
+
+    // Phase 13: D-08 \u2014 Update status bar visibility when discovery changes
+    if (updateProjectStatusBarFn) {
+      updateProjectStatusBarFn(wkspUri);
+    }
   }
 }
 
@@ -184,6 +206,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     logExtensionVersion(context);
     const ctrl = vscode.tests.createTestController(`gs-behave-bdd.TestController`, 'Feature Tests');
     initProjectListPersistence(context.workspaceState);
+
+    // Phase 13: Project status bar item
+    const projectStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
+    projectStatusBar.command = 'gs-behave-bdd.selectProject';
+    projectStatusBar.name = 'Behave BDD Active Project';
+
+    const updateProjectStatusBar = (wkspUri: vscode.Uri): void => {
+      const list = getProjectList(wkspUri);
+      const active = getActiveProject(wkspUri);
+      if (list.length <= 1 || isManualProjectPathMode(wkspUri) || !active) {
+        projectStatusBar.hide();
+        return;
+      }
+      // D-03: Root-level projects labeled "(root)"
+      const displayLabel = active.label === '.' ? '(root)' : active.label;
+      // D-06: Status bar text format
+      projectStatusBar.text = `Behave: ${displayLabel}`;
+      // D-07: Detailed tooltip
+      const configType = active.configFileUri.path.split('/').pop() ?? 'config';
+      projectStatusBar.tooltip = `Active: ${displayLabel} (${configType})\n${list.length} projects discovered \u2014 click to switch`;
+      projectStatusBar.show();
+    }
+    updateProjectStatusBarFn = updateProjectStatusBar;
     parser.clearTestItemsAndParseFilesForAllWorkspaces(testData, ctrl, "activate", true);
 
     const cleanExtensionTempDirectoryCancelSource = new vscode.CancellationTokenSource();
@@ -259,6 +304,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     // Phase 3: Surface discovery results (UX-01 through UX-05)
     updateDiscoveryUX(getUrisOfWkspFoldersWithFeatures(), false);
 
+    // Phase 13: Initialize status bar for all workspaces
+    for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
+      updateProjectStatusBar(wkspUri);
+    }
+
     // D-07: Status bar click opens the Behave BDD output channel
     statusItem.command = {
       title: 'Show Behave BDD Output',
@@ -294,6 +344,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       cleanExtensionTempDirectoryCancelSource,
       junitWatcher,
       statusItem,
+      projectStatusBar,
       { dispose: () => clearConfigDebounceTimers() },
       vscode.commands.registerCommand('gs-behave-bdd.openOutput', () => {
         const wkspUris = getUrisOfWkspFoldersWithFeatures();
@@ -493,6 +544,107 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       () => vscode.commands.executeCommand("gs-behave-bdd.selectEnvPreset"));
 
     context.subscriptions.push(selectEnvPresetCommand, legacySelectEnvPresetCommand);
+
+    // Phase 13: Select Project command (quick-pick + project switching)
+    const openConfigButton: vscode.QuickInputButton = {
+      iconPath: new vscode.ThemeIcon("go-to-file"),
+      tooltip: "Open config file"
+    };
+
+    const selectProjectCommand = vscode.commands.registerCommand('gs-behave-bdd.selectProject', async () => {
+      const wkspUris = getUrisOfWkspFoldersWithFeatures();
+      if (wkspUris.length === 0) {
+        vscode.window.showWarningMessage('No workspace folders with features found.');
+        return;
+      }
+
+      let targetWkspUri: vscode.Uri;
+      if (wkspUris.length === 1) {
+        targetWkspUri = wkspUris[0];
+      } else {
+        const wkspItems = wkspUris.map(uri => ({
+          label: vscode.workspace.getWorkspaceFolder(uri)?.name ?? uri.fsPath,
+          uri: uri
+        }));
+        const selected = await vscode.window.showQuickPick(wkspItems, {
+          placeHolder: 'Select workspace'
+        });
+        if (!selected) return;
+        targetWkspUri = selected.uri;
+      }
+
+      if (isManualProjectPathMode(targetWkspUri)) {
+        vscode.window.showInformationMessage(
+          'Project switching is disabled when projectPath is manually set. Remove projectPath to enable switching.',
+          'Open Settings'
+        ).then(action => {
+          if (action === 'Open Settings') {
+            vscode.commands.executeCommand('workbench.action.openSettings', 'gs-behave-bdd.projectPath');
+          }
+        });
+        return;
+      }
+
+      const projects = getProjectList(targetWkspUri);
+      if (projects.length === 0) {
+        vscode.window.showWarningMessage('No behave projects discovered in this workspace.');
+        return;
+      }
+
+      const activeProject = getActiveProject(targetWkspUri);
+
+      interface ProjectQuickPickItem extends vscode.QuickPickItem {
+        entry: ProjectEntry;
+      }
+
+      const items: ProjectQuickPickItem[] = projects.map(p => {
+        const isActive = activeProject && urisMatch(p.configFileUri, activeProject.configFileUri);
+        const configType = p.configFileUri.path.split('/').pop() ?? 'config';
+        // D-03: Root-level projects labeled "(root)"
+        const displayLabel = p.label === '.' ? '(root)' : p.label;
+        return {
+          // D-02: Label = workspace-relative dir, Description = config type, Detail = full path
+          label: displayLabel,
+          description: isActive ? `${configType} \u2014 \u2713 active` : configType,
+          detail: p.configFileUri.fsPath,
+          buttons: [openConfigButton],
+          entry: p
+        };
+      });
+
+      const quickPick = vscode.window.createQuickPick<ProjectQuickPickItem>();
+      quickPick.items = items;
+      quickPick.placeholder = `Select behave project (${projects.length} discovered)`;
+
+      quickPick.onDidTriggerItemButton(async e => {
+        quickPick.hide();
+        await vscode.commands.executeCommand('vscode.open', (e.item as ProjectQuickPickItem).entry.configFileUri);
+      });
+
+      quickPick.onDidAccept(() => {
+        const selected = quickPick.selectedItems[0];
+        quickPick.hide();
+        if (selected) {
+          const wasActive = activeProject && urisMatch(selected.entry.configFileUri, activeProject.configFileUri);
+          if (!wasActive) {
+            setActiveProject(targetWkspUri, selected.entry);
+            // D-09: Log switch to output channel
+            const configType = selected.entry.configFileUri.path.split('/').pop() ?? 'config';
+            const displayLabel = selected.entry.label === '.' ? '(root)' : selected.entry.label;
+            config.logger.logInfo(`Active project switched to: ${displayLabel} (${configType})`, targetWkspUri);
+            updateProjectStatusBar(targetWkspUri);
+          }
+        }
+      });
+
+      quickPick.onDidHide(() => quickPick.dispose());
+      quickPick.show();
+    });
+
+    const legacySelectProjectCommand = vscode.commands.registerCommand('behave-vsc.selectProject',
+      () => vscode.commands.executeCommand('gs-behave-bdd.selectProject'));
+
+    context.subscriptions.push(selectProjectCommand, legacySelectProjectCommand);
 
     ctrl.createRunProfile("Run Tests", vscode.TestRunProfileKind.Run,
       async (request: vscode.TestRunRequest) => {
