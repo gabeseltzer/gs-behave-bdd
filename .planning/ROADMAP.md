@@ -47,7 +47,7 @@ Archive: [milestones/1.2.0-ROADMAP.md](milestones/1.2.0-ROADMAP.md)
 ### 1.3.0 Project Switching (Phases 12-14)
 
 - [x] **Phase 12: Project List Discovery & Persistence** - Scanner promotes all configs as switchable projects; active selection persisted and auto-selected (completed 2026-04-23)
-- [ ] **Phase 13: Switching UX (Quick-Pick & Status Bar)** - Select Project command, status bar indicator, output channel logging
+- [x] **Phase 13: Switching UX (Quick-Pick & Status Bar)** - Select Project command, status bar indicator, output channel logging (completed 2026-04-23)
 - [ ] **Phase 14: Rebuild, Integration Testing & Documentation** - Switch triggers tree + step rebuild; integration test; README additions
 
 ## Phase Details
@@ -77,11 +77,11 @@ Plans:
   2. Status bar shows the active project's workspace-relative directory and clicking it opens the quick-pick
   3. Status bar item is hidden when only one project exists or `projectPath` is manually set
   4. Discovery output channel log shows which project is active and lists available alternatives
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 13-01-PLAN.md — Select Project command, status bar, output logging, notification update
-- [ ] 13-02-PLAN.md — Unit tests for quick-pick command and status bar lifecycle
+- [x] 13-02-PLAN.md — Unit tests for quick-pick command and status bar lifecycle
 
 ### Phase 14: Rebuild, Integration Testing & Documentation
 **Goal**: Switching the active project triggers full tree and step mapping rebuild; end-to-end integration test verifies the flow; README documents the complete discovery feature set
@@ -132,5 +132,5 @@ Plans:
 | 10. `featuresPaths` User-Facing Settings Key | 1.2.0 | 1/1 | Complete | 2026-04-21 |
 | 11. UX Polish + Regression Hardening | 1.2.0 | 3/3 | Complete | 2026-04-21 |
 | 12. Project List Discovery & Persistence | 1.3.0 | 2/2 | Complete   | 2026-04-23 |
-| 13. Switching UX (Quick-Pick & Status Bar) | 1.3.0 | 1/2 | In Progress|  |
+| 13. Switching UX (Quick-Pick & Status Bar) | 1.3.0 | 2/2 | Complete   | 2026-04-23 |
 | 14. Rebuild, Integration Testing & Documentation | 1.3.0 | 0/? | Not started | - |
