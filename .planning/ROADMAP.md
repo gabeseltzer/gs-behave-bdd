@@ -62,7 +62,11 @@ Archive: [milestones/1.2.0-ROADMAP.md](milestones/1.2.0-ROADMAP.md)
   3. First discovered project is auto-selected when no prior selection exists
   4. Single-project workspaces and manual `projectPath` users see zero behavior change
   5. Config file creation/deletion/modification updates the project list in real time
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 12-01-PLAN.md — ProjectList module with types, CRUD, persistence, auto-selection, fallback + unit tests
+- [ ] 12-02-PLAN.md — Wire project list into extension activation, discovery cache, and config watcher
 
 ### Phase 13: Switching UX (Quick-Pick & Status Bar)
 **Goal**: Users can see which project is active and switch between discovered projects via command palette or status bar
@@ -123,6 +127,6 @@ Plans:
 | 9. Subdirectory Config Scan | 1.2.0 | 3/3 | Complete | 2026-04-21 |
 | 10. `featuresPaths` User-Facing Settings Key | 1.2.0 | 1/1 | Complete | 2026-04-21 |
 | 11. UX Polish + Regression Hardening | 1.2.0 | 3/3 | Complete | 2026-04-21 |
-| 12. Project List Discovery & Persistence | 1.3.0 | 0/? | Not started | - |
+| 12. Project List Discovery & Persistence | 1.3.0 | 0/2 | Planned | - |
 | 13. Switching UX (Quick-Pick & Status Bar) | 1.3.0 | 0/? | Not started | - |
 | 14. Rebuild, Integration Testing & Documentation | 1.3.0 | 0/? | Not started | - |
