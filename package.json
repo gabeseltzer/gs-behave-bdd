@@ -146,6 +146,11 @@
 				"command": "gs-behave-bdd.selectEnvPreset",
 				"title": "Behave: Select Environment Preset",
 				"icon": "$(server-environment)"
+			},
+			{
+				"command": "gs-behave-bdd.selectProject",
+				"title": "Behave BDD: Select Project",
+				"icon": "$(folder-active)"
 			}
 		],
 		"keybindings": [
