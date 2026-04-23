@@ -4,7 +4,10 @@ import { diagLog } from '../logger';
 import { FileParser } from '../parsers/fileParser';
 import { TestData } from '../parsers/testFile';
 import { getUrisOfWkspFoldersWithFeatures, uriId, getDiscoveryEntry } from '../common';
-import { clearScanResultCache } from '../discovery/configScanner';
+import { clearScanResultCache, scanForBehaveConfig, setCachedScanResult, ScanResultEntry } from '../discovery/configScanner';
+import { findBehaveConfig } from '../parsers/configParser';
+import { rebuildProjectList, getActiveProject, isManualProjectPathMode } from '../discovery/projectList';
+import { urisMatch } from '../common';
 
 
 const CONFIG_GLOB = '{behave.ini,.behaverc,setup.cfg,tox.ini,pyproject.toml}';
@@ -51,11 +54,61 @@ export function startWatchingConfigFiles(
         );
         // Phase 9: Clear scan cache so force-refresh triggers a full re-evaluation
         clearScanResultCache();
+
+        // Phase 12: Re-scan and rebuild project list before re-evaluating discovery
+        if (!isManualProjectPathMode(wkspUri)) {
+          const wkspConfig = vscode.workspace.getConfiguration('gs-behave-bdd', wkspUri);
+          const discoveryDepth = wkspConfig.get<number>('discoveryDepth') ?? 3;
+          const stopOnFirstHit = wkspConfig.get<boolean>('discoveryStopOnFirstHit') ?? false;
+
+          if (discoveryDepth > 0) {
+            const scanResult = await scanForBehaveConfig(wkspUri, discoveryDepth, stopOnFirstHit);
+            setCachedScanResult(wkspUri, scanResult);
+
+            // Include root-level config
+            const rootConfigResult = findBehaveConfig(wkspUri);
+            let rootEntry: ScanResultEntry | undefined;
+            if (rootConfigResult && rootConfigResult.ok) {
+              const configFileName = rootConfigResult.configFileUri.path.split('/').pop() ?? '';
+              const CONFIG_PRIORITY: Record<string, number> = {
+                'behave.ini': 0, '.behaverc': 1, 'setup.cfg': 2, 'tox.ini': 3, 'pyproject.toml': 4
+              };
+              rootEntry = {
+                configFileUri: rootConfigResult.configFileUri,
+                dirUri: wkspUri,
+                depth: 0,
+                configPriority: CONFIG_PRIORITY[configFileName] ?? 99,
+              };
+            }
+
+            const oldActive = getActiveProject(wkspUri);
+            rebuildProjectList(wkspUri, scanResult, rootEntry);
+            const newActive = getActiveProject(wkspUri);
+
+            // D-01: If active project changed due to deletion, notify user
+            if (oldActive && newActive && !urisMatch(oldActive.configFileUri, newActive.configFileUri)) {
+              config.logger.logInfo(
+                `Active project config deleted. Switched to: ${newActive.label}`,
+                wkspUri
+              );
+              vscode.window.showInformationMessage(
+                `Behave BDD: Active project config deleted. Switched to "${newActive.label}".`,
+                'Show Details'
+              ).then(action => {
+                if (action === 'Show Details') {
+                  config.logger.show(wkspUri);
+                }
+              });
+            }
+          }
+        }
+
         // Direct cache invalidation — do NOT call configurationChangedHandler (PITFALL-04):
         // configurationChangedHandler has an integrationTestRun early-exit guard that would
         // silently skip re-discovery during integration tests.
         getUrisOfWkspFoldersWithFeatures(true);
         config.reloadSettings(wkspUri);
+
         onConfigChanged([wkspUri], true);  // clearNotifiedErrors=true per WATCH-06
         parser.parseFilesForWorkspace(wkspUri, testData, ctrl, 'configWatcher', false);
       } catch (e: unknown) {

@@ -9,7 +9,8 @@ import { WorkspaceSettings } from './settings';
 import { diagLog } from './logger';
 import { getJunitDirUri } from './watchers/junitWatcher';
 import { findBehaveConfig } from './parsers/configParser';
-import { getCachedScanResult } from './discovery/configScanner';
+import { getCachedScanResult, ScanResultEntry } from './discovery/configScanner';
+import { getActiveProject, isManualProjectPathMode } from './discovery/projectList';
 import { clearPathDiagnostics, setPathResolutionDiagnostics, setSubsumptionDiagnostics } from './handlers/configDiagnostics';
 
 
@@ -352,7 +353,62 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
       return true;
     }
 
-    // === Phase 9: Check cached subdirectory scan result ===
+    // === Phase 12: Check active project from project list ===
+    if (!isManualProjectPathMode(folder.uri)) {
+      const activeProject = getActiveProject(folder.uri);
+      if (activeProject) {
+        const subdirConfigResult = findBehaveConfig(activeProject.dirUri);
+        if (subdirConfigResult && subdirConfigResult.ok) {
+          clearPathDiagnostics(subdirConfigResult.configFileUri);
+
+          const dedupResult = dedupResolvedPaths(
+            subdirConfigResult.resolvedPaths, subdirConfigResult.rawPaths, subdirConfigResult.pathLineNumbers
+          );
+
+          if (dedupResult.subsumedPaths.length > 0) {
+            setSubsumptionDiagnostics(subdirConfigResult.configFileUri, dedupResult.subsumedPaths);
+          }
+
+          const validPaths: vscode.Uri[] = [];
+          const invalidPaths: { rawPath: string; lineNumber: number }[] = [];
+          for (let i = 0; i < dedupResult.resolvedPaths.length; i++) {
+            if (fs.existsSync(dedupResult.resolvedPaths[i].fsPath)) {
+              validPaths.push(dedupResult.resolvedPaths[i]);
+            } else {
+              invalidPaths.push({
+                rawPath: dedupResult.rawPaths[i],
+                lineNumber: dedupResult.pathLineNumbers[i],
+              });
+            }
+          }
+
+          if (invalidPaths.length > 0) {
+            setPathResolutionDiagnostics(subdirConfigResult.configFileUri, invalidPaths);
+          }
+
+          if (validPaths.length > 0) {
+            // Build alsoFoundConfigs from the full scan result for Phase 9 notification compatibility
+            const cachedScan = getCachedScanResult(folder.uri);
+            const alsoFound = cachedScan
+              ? [cachedScan.primary, ...cachedScan.alsoFound]
+                  .filter((e): e is ScanResultEntry => e !== undefined)
+                  .filter(e => !urisMatch(e.configFileUri, activeProject.configFileUri))
+                  .map(e => e.configFileUri)
+              : [];
+
+            discoveryCache.set(uriId(folder.uri), {
+              source: "config-file",
+              configFileUri: subdirConfigResult.configFileUri,
+              featuresUris: validPaths,
+              alsoFoundConfigs: alsoFound.length > 0 ? alsoFound : undefined,
+            });
+            return true;
+          }
+        }
+      }
+    }
+
+    // === Phase 9: Fallback — check cached subdirectory scan result ===
     const scanResult = getCachedScanResult(folder.uri);
     if (scanResult?.primary) {
       const subdirConfigResult = findBehaveConfig(scanResult.primary.dirUri);
