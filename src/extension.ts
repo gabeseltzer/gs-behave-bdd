@@ -5,7 +5,7 @@ import {
   getContentFromFilesystem,
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, isFeatureFile,
   logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile,
-  getDiscoveryEntry, basename
+  getDiscoveryEntry, basename, setProjectSwitchInProgress
 } from './common';
 import { setConfigParseErrorDiagnostic, clearConfigParseErrorDiagnostic } from './handlers/configDiagnostics';
 import { StepFileStep } from './parsers/stepsParser';
@@ -612,6 +612,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
             const displayLabel = selected.entry.label === '.' ? '(root)' : selected.entry.label;
             config.logger.logInfo(`Active project switched to: ${displayLabel} (${configType})`, targetWkspUri);
             updateProjectStatusBar(targetWkspUri);
+
+            // Phase 14: Trigger full rebuild after project switch (INT-01, INT-02)
+            setProjectSwitchInProgress(true);
+            vscode.window.withProgress(
+              { location: vscode.ProgressLocation.Notification, title: `Switching to project: ${displayLabel}...` },
+              async () => {
+                try {
+                  await configurationChangedHandler(undefined, undefined, true);
+                } finally {
+                  setProjectSwitchInProgress(false);
+                }
+              }
+            );
           }
         }
       });

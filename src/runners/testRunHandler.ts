@@ -7,7 +7,7 @@ import { runOrDebugAllFeaturesInOneInstance, runOrDebugFeatures, runOrDebugFeatu
 import {
   countTestItems, getAllTestItems, getContentFromFilesystem, uriId,
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, rndNumeric,
-  getDiscoveryEntry, basename
+  getDiscoveryEntry, basename, isProjectSwitchInProgress
 } from '../common';
 import { QueueItem } from '../extension';
 import { FileParser } from '../parsers/fileParser';
@@ -91,6 +91,12 @@ export async function checkRunGuard(
   request: vscode.TestRunRequest,
   ctrl: vscode.TestController
 ): Promise<boolean> {
+
+  // GUARD-05: Block test runs while project switch rebuild is in progress
+  if (isProjectSwitchInProgress()) {
+    vscode.window.showWarningMessage('Project switch in progress — please wait for the rebuild to complete.');
+    return false;
+  }
 
   // GUARD-04: Collect workspace URIs only for tests that are actually queued
   const wkspUriSet = new Set<string>();
