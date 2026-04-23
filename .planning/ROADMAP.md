@@ -48,7 +48,7 @@ Archive: [milestones/1.2.0-ROADMAP.md](milestones/1.2.0-ROADMAP.md)
 
 - [x] **Phase 12: Project List Discovery & Persistence** - Scanner promotes all configs as switchable projects; active selection persisted and auto-selected (completed 2026-04-23)
 - [x] **Phase 13: Switching UX (Quick-Pick & Status Bar)** - Select Project command, status bar indicator, output channel logging (completed 2026-04-23)
-- [ ] **Phase 14: Rebuild, Integration Testing & Documentation** - Switch triggers tree + step rebuild; integration test; README additions
+- [x] **Phase 14: Rebuild, Integration Testing & Documentation** - Switch triggers tree + step rebuild; integration test; README additions (completed 2026-04-23)
 
 ## Phase Details
 
@@ -92,12 +92,12 @@ Plans:
   2. Go-to-step, hover, and completion reflect the new project's step definitions after a switch
   3. Integration test with a multi-project fixture verifies tree rebuilds after switching
   4. README covers auto-discovery, multi-path configs, monorepo scanning, and project switching with examples
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 14-01-PLAN.md — Rebuild on switch + run guard (withProgress, configurationChangedHandler, projectSwitchInProgress flag)
+- [x] 14-01-PLAN.md — Rebuild on switch + run guard (withProgress, configurationChangedHandler, projectSwitchInProgress flag)
 - [ ] 14-02-PLAN.md — Integration test fixture + suite (project-switch example-project, runTestSuites wiring)
-- [ ] 14-03-PLAN.md — README documentation (auto-discovery, multi-path, monorepo scanning, project switching)
+- [x] 14-03-PLAN.md — README documentation (auto-discovery, multi-path, monorepo scanning, project switching)
 
 ## Backlog
 
@@ -138,4 +138,4 @@ Plans:
 | 11. UX Polish + Regression Hardening | 1.2.0 | 3/3 | Complete | 2026-04-21 |
 | 12. Project List Discovery & Persistence | 1.3.0 | 2/2 | Complete   | 2026-04-23 |
 | 13. Switching UX (Quick-Pick & Status Bar) | 1.3.0 | 2/2 | Complete   | 2026-04-23 |
-| 14. Rebuild, Integration Testing & Documentation | 1.3.0 | 0/3 | Planning | - |
+| 14. Rebuild, Integration Testing & Documentation | 1.3.0 | 2/3 | Complete    | 2026-04-23 |
