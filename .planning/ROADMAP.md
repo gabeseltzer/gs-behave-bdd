@@ -77,7 +77,11 @@ Plans:
   2. Status bar shows the active project's workspace-relative directory and clicking it opens the quick-pick
   3. Status bar item is hidden when only one project exists or `projectPath` is manually set
   4. Discovery output channel log shows which project is active and lists available alternatives
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md — Select Project command, status bar, output logging, notification update
+- [ ] 13-02-PLAN.md — Unit tests for quick-pick command and status bar lifecycle
 
 ### Phase 14: Rebuild, Integration Testing & Documentation
 **Goal**: Switching the active project triggers full tree and step mapping rebuild; end-to-end integration test verifies the flow; README documents the complete discovery feature set
