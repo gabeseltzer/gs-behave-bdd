@@ -299,6 +299,10 @@ export class SemanticTokensBuilder {
   build() { return new SemanticTokens(new Uint32Array(0)); }
 }
 
+export class ThemeIcon {
+  constructor(public readonly id: string, public readonly color?: unknown) { }
+}
+
 export class CodeLens {
   public command?: { title: string; command: string; arguments?: unknown[] };
   constructor(
