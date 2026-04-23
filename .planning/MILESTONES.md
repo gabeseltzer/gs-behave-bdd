@@ -1,5 +1,22 @@
 # Milestones
 
+## v1.3.0 Project Switching (Shipped: 2026-04-23)
+
+**Phases completed:** 3 phases (12-14), 7 plans
+**Git range:** 1.2.0..v1.3.0 (20 commits, 40 files, +3715/-40 lines)
+**Requirements:** 18/18 satisfied
+**Timeline:** 2026-04-23 (single day)
+
+**Key accomplishments:**
+
+- `ProjectList` module (`projectList.ts`) with per-workspace CRUD, `workspaceState` persistence, auto-selection, and fallback logic — scanner promotes all discovered configs as switchable projects
+- `Behave BDD: Select Project` quick-pick command with status bar indicator; pure helper extraction (`selectProjectHelpers.ts`) with 35 unit tests (14 project list + 21 select project)
+- Switch triggers full test tree + step mapping rebuild via `configurationChangedHandler` with `withProgress` notification and `projectSwitchInProgress` run guard (GUARD-05)
+- Dedicated `project-switch/` integration test fixture (alpha + beta sub-projects) verifying tree rebuilds after switching; 18th integration suite
+- README documentation covering auto-discovery, multi-path configs, monorepo scanning, and project switching
+
+---
+
 ## 1.2.0 Multi-Path & Monorepo-Aware Discovery (Shipped: 2026-04-22)
 
 **Phases completed:** 5 phases (7-11), 13 plans
