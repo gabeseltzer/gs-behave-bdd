@@ -106,6 +106,54 @@
 
 ---
 
+
+## Milestone: 1.3.0 — Project Switching
+
+**Shipped:** 2026-04-23
+**Phases:** 3 (Phases 12-14) | **Plans:** 7 | **Requirements:** 18/18
+
+### What Was Built
+
+- Per-workspace `ProjectList` module with CRUD, `workspaceState` persistence, auto-selection, and fallback logic — scanner promotes all configs as switchable projects (Phase 12)
+- `Behave BDD: Select Project` quick-pick command with status bar indicator, output channel logging, and multi-config notification update (Phase 13)
+- Pure helper extraction (`selectProjectHelpers.ts`) with 35 unit tests covering quick-pick item building and status bar visibility (Phase 13)
+- Switch triggers full test tree + step mapping rebuild via `configurationChangedHandler` with `withProgress` notification and `projectSwitchInProgress` run guard (Phase 14)
+- Dedicated `project-switch/` integration test fixture (alpha + beta sub-projects) with 18th integration suite (Phase 14)
+- README documentation covering auto-discovery, multi-path, monorepo scanning, and project switching (Phase 14)
+
+### What Worked
+
+- **One-active-at-a-time architecture decision.** Avoiding the 1:N `WorkspaceSettings` refactor saved massive complexity. The ProjectList module is self-contained (~170 lines) and the switch operation reuses the existing `configurationChangedHandler` choke point.
+- **Pure helper extraction for testability.** Instead of testing activate() closures, extracting `buildQuickPickItems`/`computeStatusBarState` into `selectProjectHelpers.ts` yielded 21 unit tests with zero mock complexity.
+- **Single-day milestone.** 3 phases, 7 plans, 20 commits completed in one day — the fastest milestone. The well-established infrastructure from 1.0.0-1.2.0 made this incremental.
+- **Reusing configurationChangedHandler for rebuild.** Rather than building a parallel switch-rebuild path, calling the existing handler with `(undefined, undefined, true)` preserved all side effects (log clearing, watcher rebuild, notification dedup).
+
+### What Was Inefficient
+
+- **No VERIFICATION.md files created.** All three phases skipped the verification step during execute-phase. The milestone audit had to verify requirements via code inspection rather than reading structured verification files. Not a blocker but adds audit overhead.
+- **SUMMARY frontmatter missing `requirements-completed` on most plans.** Only Phase 13 plans populated this field. The audit cross-reference relied on code inspection for Phase 12 and 14 requirements.
+- **ROADMAP 14-02 checkbox not ticked.** Minor admin drift — the SUMMARY existed on disk but the ROADMAP checkbox wasn't updated.
+
+### Patterns Established
+
+- **Module-level callback pattern for cross-scope bridging.** `updateProjectStatusBarFn` arrow function assigned inside `activate()` and called from `updateDiscoveryUX` — cleanest way to bridge closure scope to module-level functions.
+- **`isManualProjectPathMode` as universal gate.** A single function checking whether `projectPath` is explicitly set gates status bar visibility, quick-pick behavior, project list operations, and config watcher logic.
+- **`projectSwitchInProgress` flag as rebuild guard.** Temporary boolean flag with `try/finally` cleanup prevents test runs during the brief rebuild window after project switch.
+
+### Key Lessons
+
+1. **One-active-at-a-time is sufficient for first-generation multi-project.** Users can switch; the extension rebuilds. Simultaneous projects is a future milestone only if user feedback demands it.
+2. **Helper extraction > mock-heavy closure testing.** When VS Code API code lives inside `activate()` closures, extract the pure logic into companion `*Helpers.ts` files. Tests stay simple, coverage stays high.
+3. **Reuse the existing choke point for new trigger paths.** The `configurationChangedHandler` already handles settings changes, config watcher events, and initial load. Adding project switch as another caller (not a parallel path) prevents state management divergence.
+
+### Cost Observations
+
+- 20 commits, 40 files changed, +3715/-40 lines in a single day
+- 3 phases with 7 plans — smallest milestone (1.0.0 was also 3 phases/6 plans)
+- Notable: Built entirely on 1.2.0 infrastructure; zero new external dependencies
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -115,6 +163,7 @@
 | 1.0.0 | 3 | 6 | Initial MVP — config parsing, discovery cache, UX |
 | 1.1.0 | 3 | 9 | Introduced milestone audit + dedicated tech-debt phase at close; added predicate-polling test primitive |
 | 1.2.0 | 5 | 13 | Primary-plus-list type migration pattern; BFS scanner with circuit breaker; two-tier watcher strategy; semver alignment |
+| 1.3.0 | 3 | 7 | One-active-at-a-time project switching; pure helper extraction for testability; single-day milestone on established infrastructure |
 
 ### Cumulative Quality
 
@@ -123,6 +172,7 @@
 | 1.0.0 | ~430 | 13 | 21 | 0 |
 | 1.1.0 | 539 | 14 | 13 | 0 |
 | 1.2.0 | 614 | 17 | 19 (1 dropped) | 0 |
+| 1.3.0 | 655 | 18 | 18 | 0 |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -131,3 +181,4 @@
 3. **Non-blocking UX over blocking dialogs.** Ship warnings, not gates — validated in all three milestones (malformed-config notification in 1.0.0, run guard in 1.1.0, first-match-wins notification in 1.2.0).
 4. **Primary-plus-list for safe plural migration.** When expanding a singular field to an array, keep the singular as a getter returning `[0]`. Proven in 1.2.0 across 20+ call sites with zero back-compat breaks.
 5. **Drop requirements when underlying assumptions are wrong.** INT-01 in 1.2.0 was based on incorrect behave fixture semantics. Early drop saved an entire phase of misdirected work.
+6. **Reuse existing choke points for new trigger paths.** `configurationChangedHandler` serves settings changes (1.0.0), config watcher events (1.1.0), and project switches (1.3.0). One entry point, zero state divergence.
