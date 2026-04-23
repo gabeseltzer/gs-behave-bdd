@@ -6,6 +6,7 @@
 - ✅ **1.1.0 Config File Watching** — Phases 4-6 (shipped 2026-04-17)
 - ✅ **1.2.0 Multi-Path & Monorepo-Aware Discovery** — Phases 7-11 (shipped 2026-04-22)
 - ✅ **1.3.0 Project Switching** — Phases 12-14 (shipped 2026-04-23)
+- 🔄 **1.4.0 Deprecate featuresPath & Notification Suppression** — Phases 15-17
 
 ## Phases
 
@@ -55,14 +56,51 @@ Archive: [milestones/v1.3.0-ROADMAP.md](milestones/v1.3.0-ROADMAP.md)
 
 </details>
 
-## Backlog
+### Phase 15: Notification Suppression Infrastructure
 
-### Phase 999.1: Deprecate `featuresPath` + Reusable Notification Suppression (BACKLOG)
+**Goal:** Build reusable notification suppression module and migrate existing multi-config notification to use it
 
-**Goal:** Deprecate the singular `featuresPath` setting in favor of `featuresPaths`, with a migration popup and reusable infrastructure for future deprecations.
+**Requirements:** [NOTIF-01, NOTIF-02, NOTIF-03, NOTIF-04, NOTIF-05, NOTIF-06, NOTIF-07, NOTIF-08]
+**Plans:** [To be planned]
+**Depends on:** None
 
-**Requirements:** TBD
-**Plans:** 0 plans
+**Success criteria:**
+1. `suppressedNotifications` array setting exists in package.json with default `[]`
+2. Reusable suppression module checks array and appends key on "Don't Show Again"
+3. "Don't Show Again" writes to WorkspaceFolder scope by default
+4. Multi-config notification uses new infrastructure with key `multiConfigNotification`
+5. `suppressMultiConfigNotification` boolean setting removed from package.json
+6. Existing `suppressMultiConfigNotification: true` auto-migrated to array on activation
+7. `testWorkspaceConfig` mock updated for new setting shape
+8. Unit tests cover check/suppress/migrate paths
 
-Plans:
-- [ ] TBD (promote with /gsd-review-backlog when ready)
+### Phase 16: Deprecate featuresPath
+
+**Goal:** Remove `featuresPath` from schema, auto-migrate to `featuresPaths[]` with user notification
+
+**Requirements:** [DEP-01, DEP-02, DEP-03, DEP-04, DEP-05, DEP-06, DEP-07]
+**Plans:** [To be planned]
+**Depends on:** Phase 15 (migration notification should use suppression infrastructure)
+
+**Success criteria:**
+1. `featuresPath` setting absent from package.json schema
+2. On activation, existing `featuresPath` value migrated to `featuresPaths[]` at correct scope level
+3. User sees migration notification after successful migration
+4. Internal code reads only `featuresPaths[]` — no `featuresPath` references in runtime code
+5. `testWorkspaceConfig` mock updated to remove `featuresPath` support
+6. Unit tests cover migration edge cases (value present, absent, already has featuresPaths, multiple scopes)
+
+### Phase 17: Cross-Cutting Verification
+
+**Goal:** End-to-end regression pass across both migrations
+
+**Requirements:** Verification of DEP-* and NOTIF-*
+**Plans:** [To be planned]
+**Depends on:** Phase 15, Phase 16
+
+**Success criteria:**
+1. All existing unit tests pass (655+)
+2. All 18 integration suites pass
+3. Fresh activation with no deprecated settings works correctly
+4. Activation with old `featuresPath` + `suppressMultiConfigNotification` migrates both cleanly
+5. Migration notification shown and suppressible

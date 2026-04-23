@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.4.0
 milestone_name: Deprecate featuresPath & Notification Suppression
 status: active
-last_updated: "2026-04-23T23:00:00Z"
+last_updated: "2026-04-23T23:30:00Z"
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.4.0 started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Defining requirements for v1.4.0
+**Current focus:** Roadmap defined; ready to plan Phase 15
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 15 — Notification Suppression Infrastructure (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-23 — Milestone v1.4.0 started
+Status: Ready to plan
+Last activity: 2026-04-23 — Milestone v1.4.0 roadmap created (3 phases, 15 requirements)
 
 ## Performance Metrics
 
@@ -45,3 +45,10 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - 1.1.0: `.planning/milestones/1.1.0-ROADMAP.md`
 - 1.2.0: `.planning/milestones/1.2.0-ROADMAP.md`
 - 1.3.0: `.planning/milestones/v1.3.0-ROADMAP.md`
+
+### v1.4.0 Decisions
+
+- Migration notification: show user-visible notification after `featuresPath` → `featuresPaths[]` migration
+- Suppression infrastructure: single `suppressedNotifications` string array setting (not per-key booleans)
+- Suppression writes to WorkspaceFolder scope by default
+- Setting is visible in settings UI (not hidden in workspaceState)

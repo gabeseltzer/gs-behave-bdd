@@ -52,27 +52,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DEP-01 | TBD | Pending |
-| DEP-02 | TBD | Pending |
-| DEP-03 | TBD | Pending |
-| DEP-04 | TBD | Pending |
-| DEP-05 | TBD | Pending |
-| DEP-06 | TBD | Pending |
-| DEP-07 | TBD | Pending |
-| NOTIF-01 | TBD | Pending |
-| NOTIF-02 | TBD | Pending |
-| NOTIF-03 | TBD | Pending |
-| NOTIF-04 | TBD | Pending |
-| NOTIF-05 | TBD | Pending |
-| NOTIF-06 | TBD | Pending |
-| NOTIF-07 | TBD | Pending |
-| NOTIF-08 | TBD | Pending |
+| NOTIF-01 | Phase 15 | Pending |
+| NOTIF-02 | Phase 15 | Pending |
+| NOTIF-03 | Phase 15 | Pending |
+| NOTIF-04 | Phase 15 | Pending |
+| NOTIF-05 | Phase 15 | Pending |
+| NOTIF-06 | Phase 15 | Pending |
+| NOTIF-07 | Phase 15 | Pending |
+| NOTIF-08 | Phase 15 | Pending |
+| DEP-01 | Phase 16 | Pending |
+| DEP-02 | Phase 16 | Pending |
+| DEP-03 | Phase 16 | Pending |
+| DEP-04 | Phase 16 | Pending |
+| DEP-05 | Phase 16 | Pending |
+| DEP-06 | Phase 16 | Pending |
+| DEP-07 | Phase 16 | Pending |
 
 **Coverage:**
 - v1.4.0 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-23*
-*Last updated: 2026-04-23 after milestone v1.4.0 started*
+*Last updated: 2026-04-23 after roadmap creation*
