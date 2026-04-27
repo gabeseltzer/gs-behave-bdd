@@ -79,6 +79,7 @@ suite('verboseLogging setting', () => {
         discoveryDepth: 3,
         discoveryStopOnFirstHit: false,
         suppressMultiConfigNotification: false,
+        suppressedNotifications: [],
         workspaceRelativeProjectPath: '',
         projectRelativeFeaturesPath: 'features',
         uri: mockUri,
