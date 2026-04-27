@@ -39,6 +39,7 @@ import {
 } from './discovery/projectList';
 import { buildQuickPickItems, computeStatusBarState, ProjectQuickPickItem } from './discovery/selectProjectHelpers';
 import { JunitWatcher } from './watchers/junitWatcher';
+import { migrateLegacySuppressMultiConfig, showSuppressibleNotification } from './notifications';
 
 
 const testData = new WeakMap<vscode.TestItem, BehaveTestData>();
@@ -138,10 +139,8 @@ function updateDiscoveryUX(
     }
 
     // Phase 9: Multi-config notification (D-06, D-07, D-08, D-10)
+    // Phase 15 / NOTIF-04: suppression delegated to showSuppressibleNotification wrapper.
     if (entry.alsoFoundConfigs && entry.alsoFoundConfigs.length > 0) {
-      const wkspSettings = config.workspaceSettings[wkspUri.path];
-      const suppress = wkspSettings?.suppressMultiConfigNotification ?? false;
-
       // D-09: Always log full results to output channel regardless of suppression
       config.logger.logInfo(`Multiple behave configs found:`, wkspUri);
       const primaryRelPath = entry.configFileUri
@@ -153,32 +152,29 @@ function updateDiscoveryUX(
         config.logger.logInfo(`  \u2022 ${relPath}`, wkspUri);
       }
 
-      // D-08: Only show notification if not suppressed
-      if (!suppress) {
-        const totalConfigs = entry.alsoFoundConfigs.length + 1;
-        const configLines = [`\u2022 ${primaryRelPath} (active)`];
-        for (const alsoUri of entry.alsoFoundConfigs) {
-          configLines.push(`\u2022 ${vscode.workspace.asRelativePath(alsoUri, false)}`);
-        }
-        // Phase 13: D-12 — Updated to reference Select Project command
-        const message = `Behave BDD: Found ${totalConfigs} behave configs:\n${configLines.join('\n')}\nUse "Behave BDD: Select Project" to switch.`;
-
-        vscode.window.showInformationMessage(
-          message,
-          'Select Project',
-          'Show Details',
-          "Don't Show Again"
-        ).then(action => {
-          if (action === 'Select Project') {
-            vscode.commands.executeCommand('gs-behave-bdd.selectProject');
-          } else if (action === 'Show Details') {
-            vscode.commands.executeCommand('gs-behave-bdd.openOutput');
-          } else if (action === "Don't Show Again") {
-            const wkspCfg = vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri);
-            wkspCfg.update("suppressMultiConfigNotification", true, vscode.ConfigurationTarget.WorkspaceFolder);
-          }
-        });
+      const totalConfigs = entry.alsoFoundConfigs.length + 1;
+      const configLines = [`\u2022 ${primaryRelPath} (active)`];
+      for (const alsoUri of entry.alsoFoundConfigs) {
+        configLines.push(`\u2022 ${vscode.workspace.asRelativePath(alsoUri, false)}`);
       }
+      // Phase 13: D-12 — Updated to reference Select Project command
+      const message = `Behave BDD: Found ${totalConfigs} behave configs:\n${configLines.join('\n')}\nUse "Behave BDD: Select Project" to switch.`;
+
+      // Wrapper checks suppression, appends "Don't Show Again", and intercepts DSA internally.
+      // Fire-and-forget — preserves the prior unawaited shape.
+      showSuppressibleNotification(
+        "multiConfigNotification",
+        message,
+        ['Select Project', 'Show Details'],
+        wkspUri,
+      ).then(action => {
+        if (action === 'Select Project') {
+          vscode.commands.executeCommand('gs-behave-bdd.selectProject');
+        } else if (action === 'Show Details') {
+          vscode.commands.executeCommand('gs-behave-bdd.openOutput');
+        }
+        // "Don't Show Again" is intercepted internally by the wrapper — never returned here.
+      });
     }
 
 
@@ -295,6 +291,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         statusItem.detail = undefined;
       }
     });
+
+    // Phase 15 / NOTIF-06: migrate legacy suppressMultiConfigNotification → suppressedNotifications.
+    // Must complete BEFORE updateDiscoveryUX so notifications honor the migrated suppression state (Pitfall 3).
+    for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
+      try {
+        await migrateLegacySuppressMultiConfig(wkspUri); // D-05; D-07 ensures it never throws
+        config.reloadSettings(wkspUri); // Pitfall 4: refresh WorkspaceSettings cache
+      } catch (e) {
+        // Defense-in-depth — D-07 prevents throws from the migration helper, but wrap to ensure
+        // activation continues if reloadSettings ever throws.
+        config.logger.logInfo(`Phase 15 migration error: ${e}`, wkspUri);
+      }
+    }
 
     // Phase 3: Surface discovery results (UX-01 through UX-05)
     updateDiscoveryUX(getUrisOfWkspFoldersWithFeatures(), false);
