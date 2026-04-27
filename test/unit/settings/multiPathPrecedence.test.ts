@@ -63,6 +63,7 @@ const BASE_CFG = {
   discoveryDepth: 3,
   discoveryStopOnFirstHit: false,
   suppressMultiConfigNotification: false,
+  suppressedNotifications: [],
 };
 
 function buildSettings(overrides: Record<string, unknown>): WorkspaceSettings {
