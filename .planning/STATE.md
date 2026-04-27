@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-27T17:39:47.000Z"
-last_activity: 2026-04-27 -- Phase 15 Plan 05 complete (NOTIF-04 wired + NOTIF-05 schema removal + NOTIF-06 migration loop in activate() + structural ordering tests)
+last_updated: "2026-04-27T18:05:00.000Z"
+last_activity: 2026-04-27 -- Phase 15 Plan 06 complete (phase verification gate — lint/typecheck/unit/webpack all GREEN; 28 new tests; 15-SUMMARY.md aggregated; Phase 15 ready for verifier)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.4.0 started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Phase 15 — Notification Suppression Infrastructure (executing)
+**Current focus:** Phase 15 — Notification Suppression Infrastructure (verification gate complete; awaiting verifier)
 
 ## Current Position
 
-Phase: 15 — Notification Suppression Infrastructure (in progress)
-Plan: 15-06 (Wave 5 — final cleanup; next, if scoped — Phase 15 functional work is complete after Plan 05)
-Status: Executing (Plans 01-05 complete; Phase 15 is functionally complete — wrapper wired, migration runs in activate(), legacy key removed from schema/field/mock/fixture; only the migration helper itself still references the legacy key string by design)
-Last activity: 2026-04-27 -- Phase 15 Plan 05 complete: extension.ts L141-L181 inline notification block replaced with showSuppressibleNotification('multiConfigNotification', ...) wrapper call (NOTIF-04 wired). Per-workspace migration loop added in activate() before updateDiscoveryUX — awaits migrateLegacySuppressMultiConfig + config.reloadSettings, wrapped in defense-in-depth try/catch (D-05, Pitfall 3, Pitfall 4). Legacy gs-behave-bdd.suppressMultiConfigNotification schema entry deleted from package.json (NOTIF-05). WorkspaceSettings legacy field, TestWorkspaceConfig legacy mock entries, and the four cascading settings test fixture entries all removed. Three new structural tests guard the activation-ordering invariant (Pitfall 3) + the wrapper call shape + the legacy-key-literal absence in extension.ts. Full unit suite GREEN: 683 tests passing (680 baseline + 3 new structural). Lint clean, typecheck clean (only pre-existing smol-toml baseline noise), webpack compile succeeds.
+Phase: 15 — Notification Suppression Infrastructure (verified — awaiting orchestrator)
+Plan: All 6 plans complete (15-01..15-06)
+Status: Phase 15 functionally complete and verified. Ready for `gsd-verifier` (phase-level checker) and orchestrator-owned ROADMAP.md update.
+Last activity: 2026-04-27 -- Phase 15 Plan 06 complete (verification gate). Ran lint (clean), typecheck test (clean), full unit suite (683 passing, 0 failing — +28 vs. 655 pre-Phase-15 baseline), webpack compile (success), targeted mocha sub-suites (Phase 15: 28 passing, schema: 2 passing, migrate: 9 passing, ordering/activation: 4 passing, settings: 36 passing), inline schema-shape `node -e` checks (passed both presence and absence), and source/test legacy-reference greps. All 8 NOTIF-* requirements verified GREEN. One minor finding documented (leftover `if (key === 'suppressMultiConfigNotification')` get() fallback in `test/unit/vscode.mock.ts` — pre-existing dead code, no behavioral impact, reported per verification-only constraint, not silently fixed). Phase-level 15-SUMMARY.md aggregating all 5 implementation plan summaries plus this verification gate written. STATE.md updated. ROADMAP.md left untouched per orchestrator boundary.
 
 ## Performance Metrics
 
@@ -97,3 +97,12 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - Comment text in `extension.ts` rephrased to drop the literal string `suppressMultiConfigNotification` so the new structural test (`!src.includes('suppressMultiConfigNotification')`) passes. The migration helper itself in `src/notifications.ts` is the only remaining source-tree reference to the legacy key — that's by design (it's the literal key the migration inspects/removes from settings.json).
 - Activation-ordering structural test uses `indexOf('updateDiscoveryUX(getUrisOfWkspFoldersWithFeatures()')` — the call site signature, not the bare function name. There's also a `function updateDiscoveryUX` declaration earlier in the file that would have produced a false-positive ordering match. Discovered as a Rule 1 fix during the first run of the new structural test; landed in Task 5 commit before any further work.
 - Phase 15 functional work is complete after Plan 05. STATE.md and ROADMAP.md show total_plans=6 — if Plan 06 has scoped cleanup work, it can land separately; otherwise Phase 15 closes here.
+
+### Phase 15 Decisions (Plan 06)
+
+- Verification-only gate. No code edits in `src/` or `test/`. Battery: lint + typecheck (test) + full unit suite + webpack + targeted mocha sub-suites + inline schema-shape `node -e` checks + source/test legacy-reference greps.
+- All 8 NOTIF-* requirements verified GREEN. 683 unit tests passing (655 pre-Phase-15 baseline + 28 new); 28 Phase-15-specific tests covering A1 probe, isSuppressed, suppressNotification, showSuppressibleNotification, migrateLegacySuppressMultiConfig (8 sub-cases), 3 activation-ordering structural tests, and 2 schema tests.
+- One minor finding raised, NOT silently fixed (per verification-only mandate): `test/unit/vscode.mock.ts` retains a defensive `if (key === 'suppressMultiConfigNotification') return false` get() fallback at lines 171-173 — pre-existing leftover from before Plan 05's schema removal, no behavioral impact (migration uses `inspect()` not `get()`; no production code calls `cfg.get<boolean>("suppressMultiConfigNotification")` anymore). Disposition deferred to a follow-up small-fix plan or absorbed into Phase 16/17 work that touches `vscode.mock.ts`.
+- Integration test (`npm run test:integration`) deferred — requires VSCode Insiders/Stable launch via `@vscode/test-electron`, not feasible in headless verification environment. Matches the Phase 17 manual smoke check already documented in `15-VALIDATION.md` Manual-Only Verifications.
+- `--grep` does not propagate through `npm run test:unit` on this Windows shell because the runner script (`out/test/test/unit/run.js`) does not parse `argv`. Used `npx mocha --require ./out/test/test/unit/setup.js --ui tdd 'out/test/test/unit/**/*.test.js' --grep <pattern>` directly — same approach Plan 03 fell back to.
+- Phase-level `15-SUMMARY.md` aggregates all 5 implementation plan summaries plus this verification gate. ROADMAP.md left untouched (orchestrator-owned per `<critical_constraints>`).
