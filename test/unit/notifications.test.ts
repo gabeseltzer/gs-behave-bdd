@@ -5,6 +5,7 @@ import {
   isSuppressed,
   suppressNotification,
   showSuppressibleNotification,
+  migrateLegacySuppressMultiConfig,
 } from '../../src/notifications';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -245,3 +246,141 @@ suite('Phase 15 — notifications: showSuppressibleNotification (NOTIF-04 + D-04
 });
 
 export { makeScopedConfig };
+
+/**
+ * Builds a fake WorkspaceConfiguration whose inspect() returns DIFFERENT
+ * scope sets for different keys. Required because migration calls inspect()
+ * twice (once for the legacy boolean, once for the new array).
+ */
+function makePerKeyScopedConfig(perKey: {
+  [key: string]: { globalValue?: unknown; workspaceValue?: unknown; workspaceFolderValue?: unknown };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+}, updateSpy?: sinon.SinonSpy): any {
+  return {
+    get: (_key: string) => undefined,
+    has: () => false,
+    inspect: (key: string) => {
+      const s = perKey[key] ?? {};
+      return {
+        key,
+        defaultValue: undefined,
+        globalValue: s.globalValue,
+        workspaceValue: s.workspaceValue,
+        workspaceFolderValue: s.workspaceFolderValue,
+      };
+    },
+    update: updateSpy ?? (() => Promise.resolve()),
+  };
+}
+
+suite('Phase 15 — notifications: migrateLegacySuppressMultiConfig (NOTIF-06)', () => {
+  let updateSpy: sinon.SinonSpy;
+  let logInfoSpy: sinon.SinonSpy;
+
+  setup(() => {
+    updateSpy = sinon.spy(() => Promise.resolve());
+    logInfoSpy = sinon.spy();
+    sinon.stub(configModule.config, 'logger').value({ logInfo: logInfoSpy });
+  });
+  teardown(() => sinon.restore());
+
+  test('migrate at WorkspaceFolder scope: writes array + removes legacy key', async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      suppressMultiConfigNotification: { workspaceFolderValue: true },
+      suppressedNotifications: {},
+    }, updateSpy));
+    await migrateLegacySuppressMultiConfig(MOCK_URI);
+    assert.strictEqual(updateSpy.callCount, 2, 'one update for new array, one to delete legacy key');
+    assert.deepStrictEqual(updateSpy.firstCall.args, [
+      'suppressedNotifications',
+      ['multiConfigNotification'],
+      vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+    assert.deepStrictEqual(updateSpy.secondCall.args, [
+      'suppressMultiConfigNotification',
+      undefined,
+      vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+  });
+
+  test('migrate at Workspace scope: writes both at ConfigurationTarget.Workspace', async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      suppressMultiConfigNotification: { workspaceValue: true },
+      suppressedNotifications: {},
+    }, updateSpy));
+    await migrateLegacySuppressMultiConfig(MOCK_URI);
+    assert.strictEqual(updateSpy.callCount, 2);
+    assert.strictEqual(updateSpy.firstCall.args[2], vscode.ConfigurationTarget.Workspace);
+    assert.strictEqual(updateSpy.secondCall.args[2], vscode.ConfigurationTarget.Workspace);
+  });
+
+  test('migrate at Global scope: writes both at ConfigurationTarget.Global', async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      suppressMultiConfigNotification: { globalValue: true },
+      suppressedNotifications: {},
+    }, updateSpy));
+    await migrateLegacySuppressMultiConfig(MOCK_URI);
+    assert.strictEqual(updateSpy.callCount, 2);
+    assert.strictEqual(updateSpy.firstCall.args[2], vscode.ConfigurationTarget.Global);
+  });
+
+  test('migrate no-op when legacy value is false', async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      suppressMultiConfigNotification: { workspaceFolderValue: false },
+      suppressedNotifications: {},
+    }, updateSpy));
+    await migrateLegacySuppressMultiConfig(MOCK_URI);
+    assert.strictEqual(updateSpy.callCount, 0);
+  });
+
+  test('migrate no-op when legacy value absent at all scopes', async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      suppressMultiConfigNotification: {},
+      suppressedNotifications: {},
+    }, updateSpy));
+    await migrateLegacySuppressMultiConfig(MOCK_URI);
+    assert.strictEqual(updateSpy.callCount, 0);
+  });
+
+  test('migrate merge: preserves existing suppressedNotifications array entries', async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      suppressMultiConfigNotification: { workspaceFolderValue: true },
+      suppressedNotifications: { workspaceFolderValue: ['someOther'] },
+    }, updateSpy));
+    await migrateLegacySuppressMultiConfig(MOCK_URI);
+    assert.deepStrictEqual(
+      updateSpy.firstCall.args[1],
+      ['someOther', 'multiConfigNotification'],
+    );
+  });
+
+  test('migrate idempotent: second run is no-op (legacy gone, key already in array)', async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      suppressMultiConfigNotification: {},
+      suppressedNotifications: { workspaceFolderValue: ['multiConfigNotification'] },
+    }, updateSpy));
+    await migrateLegacySuppressMultiConfig(MOCK_URI);
+    assert.strictEqual(updateSpy.callCount, 0);
+  });
+
+  test('migrate failure: rejection logs warn, does NOT throw', async () => {
+    let callCount = 0;
+    const rejectingUpdate = sinon.spy(() => {
+      callCount += 1;
+      if (callCount === 1) return Promise.reject(new Error('read-only workspace'));
+      return Promise.resolve();
+    });
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      suppressMultiConfigNotification: { workspaceFolderValue: true },
+      suppressedNotifications: {},
+    }, rejectingUpdate));
+    await assert.doesNotReject(() => migrateLegacySuppressMultiConfig(MOCK_URI));
+    assert.ok(logInfoSpy.called, 'D-07: must log warn on failure');
+    const logMsg = logInfoSpy.firstCall.args[0] as string;
+    assert.ok(
+      logMsg.includes('suppressMultiConfigNotification') ||
+        logMsg.includes('suppressedNotifications'),
+      'log message must mention the migration keys',
+    );
+  });
+});
