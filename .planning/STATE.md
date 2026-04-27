@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-27T18:05:00.000Z"
-last_activity: 2026-04-27 -- Phase 15 Plan 06 complete (phase verification gate — lint/typecheck/unit/webpack all GREEN; 28 new tests; 15-SUMMARY.md aggregated; Phase 15 ready for verifier)
+last_updated: "2026-04-27T19:30:00.000Z"
+last_activity: 2026-04-27 -- Phase 15 complete; verifier passed (8/8 reqs verified, 2 manual items deferred to Phase 17)
 progress:
   total_phases: 3
-  completed_phases: 0
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  completed_phases: 1
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -20,13 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.4.0 started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Phase 15 — Notification Suppression Infrastructure (verification gate complete; awaiting verifier)
+**Current focus:** Phase 15 complete; ready to discuss/plan Phase 16 (Deprecate featuresPath)
 
 ## Current Position
 
-Phase: 15 — Notification Suppression Infrastructure (verified — awaiting orchestrator)
-Plan: All 6 plans complete (15-01..15-06)
-Status: Phase 15 functionally complete and verified. Ready for `gsd-verifier` (phase-level checker) and orchestrator-owned ROADMAP.md update.
+Phase: 16 — Deprecate featuresPath (not started)
+Plan: —
+Status: Ready to discuss/plan
+Previous: Phase 15 complete 2026-04-27 — 6/6 plans, 28 new tests (683 total passing), 8/8 NOTIF requirements verified. 15-HUMAN-UAT.md persisted with 2 deferred items for Phase 17.
 Last activity: 2026-04-27 -- Phase 15 Plan 06 complete (verification gate). Ran lint (clean), typecheck test (clean), full unit suite (683 passing, 0 failing — +28 vs. 655 pre-Phase-15 baseline), webpack compile (success), targeted mocha sub-suites (Phase 15: 28 passing, schema: 2 passing, migrate: 9 passing, ordering/activation: 4 passing, settings: 36 passing), inline schema-shape `node -e` checks (passed both presence and absence), and source/test legacy-reference greps. All 8 NOTIF-* requirements verified GREEN. One minor finding documented (leftover `if (key === 'suppressMultiConfigNotification')` get() fallback in `test/unit/vscode.mock.ts` — pre-existing dead code, no behavioral impact, reported per verification-only constraint, not silently fixed). Phase-level 15-SUMMARY.md aggregating all 5 implementation plan summaries plus this verification gate written. STATE.md updated. ROADMAP.md left untouched per orchestrator boundary.
 
 ## Performance Metrics
@@ -34,8 +35,8 @@ Last activity: 2026-04-27 -- Phase 15 Plan 06 complete (verification gate). Ran 
 **Velocity (cumulative):**
 
 - Milestones shipped: 4 (1.0.0 2026-04-16, 1.1.0 2026-04-17, 1.2.0 2026-04-22, 1.3.0 2026-04-23)
-- Total phases completed: 14 (1.0.0: 1-3, 1.1.0: 4-6, 1.2.0: 7-11, 1.3.0: 12-14)
-- Total plans completed: 35 (1.0.0: 6, 1.1.0: 9, 1.2.0: 13, 1.3.0: 7)
+- Total phases completed: 15 (1.0.0: 1-3, 1.1.0: 4-6, 1.2.0: 7-11, 1.3.0: 12-14, 1.4.0: 15)
+- Total plans completed: 41 (1.0.0: 6, 1.1.0: 9, 1.2.0: 13, 1.3.0: 7, 1.4.0: 6)
 
 ## Accumulated Context
 
