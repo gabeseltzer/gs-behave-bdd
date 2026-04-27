@@ -1,5 +1,11 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
+import * as configModule from '../../src/configuration';
+import {
+  isSuppressed,
+  suppressNotification,
+  showSuppressibleNotification,
+} from '../../src/notifications';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const vscode = require('vscode');
@@ -63,6 +69,178 @@ suite('Phase 15 — notifications module', () => {
       assert.strictEqual(insp.globalValue, true);
       assert.strictEqual(insp.workspaceFolderValue, undefined);
     });
+  });
+});
+
+suite('Phase 15 — notifications: isSuppressed (NOTIF-02 check)', () => {
+  teardown(() => sinon.restore());
+
+  test('isSuppressed returns true when key in cached array', () => {
+    sinon.stub(configModule.config, 'workspaceSettings').get(() => ({
+      [MOCK_URI.path]: { suppressedNotifications: ['multiConfigNotification'] },
+    }));
+    assert.strictEqual(isSuppressed('multiConfigNotification', MOCK_URI), true);
+  });
+
+  test('isSuppressed returns false when key absent', () => {
+    sinon.stub(configModule.config, 'workspaceSettings').get(() => ({
+      [MOCK_URI.path]: { suppressedNotifications: ['someOther'] },
+    }));
+    assert.strictEqual(isSuppressed('multiConfigNotification', MOCK_URI), false);
+  });
+
+  test('isSuppressed returns false when cache entry missing', () => {
+    sinon.stub(configModule.config, 'workspaceSettings').get(() => ({}));
+    assert.strictEqual(isSuppressed('multiConfigNotification', MOCK_URI), false);
+  });
+
+  test('isSuppressed returns false when suppressedNotifications undefined on cache', () => {
+    sinon.stub(configModule.config, 'workspaceSettings').get(() => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      [MOCK_URI.path]: {} as any,
+    }));
+    assert.strictEqual(isSuppressed('multiConfigNotification', MOCK_URI), false);
+  });
+});
+
+suite('Phase 15 — notifications: suppressNotification (NOTIF-02 + NOTIF-03)', () => {
+  let updateSpy: sinon.SinonSpy;
+  let logInfoSpy: sinon.SinonSpy;
+
+  setup(() => {
+    updateSpy = sinon.spy(() => Promise.resolve());
+    logInfoSpy = sinon.spy();
+    sinon.stub(configModule.config, 'logger').value({ logInfo: logInfoSpy });
+  });
+  teardown(() => sinon.restore());
+
+  test('suppressNotification appends key and writes to WorkspaceFolder scope', async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makeScopedConfig({ workspaceFolderValue: [] }, updateSpy),
+    );
+    await suppressNotification('multiConfigNotification', MOCK_URI);
+    assert.strictEqual(updateSpy.callCount, 1);
+    const args = updateSpy.firstCall.args;
+    assert.strictEqual(args[0], 'suppressedNotifications');
+    assert.deepStrictEqual(args[1], ['multiConfigNotification']);
+    assert.strictEqual(args[2], vscode.ConfigurationTarget.WorkspaceFolder, 'WorkspaceFolder scope');
+  });
+
+  test('suppressNotification preserves existing entries (append)', async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makeScopedConfig({ workspaceFolderValue: ['someOther'] }, updateSpy),
+    );
+    await suppressNotification('multiConfigNotification', MOCK_URI);
+    assert.deepStrictEqual(updateSpy.firstCall.args[1], ['someOther', 'multiConfigNotification']);
+  });
+
+  test('suppressNotification dedup: does NOT call update if key already present', async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makeScopedConfig({ workspaceFolderValue: ['multiConfigNotification'] }, updateSpy),
+    );
+    await suppressNotification('multiConfigNotification', MOCK_URI);
+    assert.strictEqual(updateSpy.called, false, 'D-11 dedup');
+  });
+
+  test('suppressNotification (failure logs): rejection logs warn, does NOT throw', async () => {
+    const rejectingUpdate = sinon.spy(() => Promise.reject(new Error('read-only workspace')));
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makeScopedConfig({ workspaceFolderValue: [] }, rejectingUpdate),
+    );
+    await assert.doesNotReject(() => suppressNotification('multiConfigNotification', MOCK_URI));
+    assert.ok(logInfoSpy.called, 'logInfo must be called on update rejection');
+    assert.ok(
+      logInfoSpy.firstCall.args[0].includes('multiConfigNotification'),
+      'log message includes the key',
+    );
+  });
+});
+
+suite('Phase 15 — notifications: showSuppressibleNotification (NOTIF-04 + D-04)', () => {
+  let showInfoStub: sinon.SinonStub;
+  let updateSpy: sinon.SinonSpy;
+
+  setup(() => {
+    updateSpy = sinon.spy(() => Promise.resolve());
+    sinon.stub(configModule.config, 'logger').value({ logInfo: sinon.spy() });
+  });
+  teardown(() => sinon.restore());
+
+  test('multiConfigNotification key: returns the clicked button label', async () => {
+    sinon.stub(configModule.config, 'workspaceSettings').get(() => ({}));
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makeScopedConfig({ workspaceFolderValue: [] }, updateSpy),
+    );
+    showInfoStub = sinon.stub(vscode.window, 'showInformationMessage').resolves('Select Project');
+    const result = await showSuppressibleNotification(
+      'multiConfigNotification',
+      'Some message',
+      ['Select Project', 'Show Details'],
+      MOCK_URI,
+    );
+    assert.strictEqual(result, 'Select Project');
+    assert.ok(showInfoStub.called);
+  });
+
+  test('button passthrough: never returns "Don\'t Show Again"', async () => {
+    sinon.stub(configModule.config, 'workspaceSettings').get(() => ({}));
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makeScopedConfig({ workspaceFolderValue: [] }, updateSpy),
+    );
+    showInfoStub = sinon.stub(vscode.window, 'showInformationMessage').resolves("Don't Show Again");
+    const result = await showSuppressibleNotification(
+      'multiConfigNotification',
+      'm',
+      ['Select Project'],
+      MOCK_URI,
+    );
+    assert.strictEqual(result, undefined, 'D-04: DSA must NOT leak to caller');
+    // Verify suppressNotification ran internally (update called with the key):
+    assert.ok(updateSpy.called, 'DSA branch must call update internally');
+  });
+
+  test('appends DSA button to caller buttons', async () => {
+    sinon.stub(configModule.config, 'workspaceSettings').get(() => ({}));
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makeScopedConfig({ workspaceFolderValue: [] }, updateSpy),
+    );
+    showInfoStub = sinon.stub(vscode.window, 'showInformationMessage').resolves(undefined);
+    await showSuppressibleNotification(
+      'multiConfigNotification',
+      'm',
+      ['A', 'B'],
+      MOCK_URI,
+    );
+    const args = showInfoStub.firstCall.args;
+    // Args: [message, ...buttons]
+    assert.strictEqual(args[0], 'm');
+    assert.deepStrictEqual(args.slice(1), ['A', 'B', "Don't Show Again"]);
+  });
+
+  test('dismiss returns undefined and does NOT update settings', async () => {
+    sinon.stub(configModule.config, 'workspaceSettings').get(() => ({}));
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makeScopedConfig({ workspaceFolderValue: [] }, updateSpy),
+    );
+    showInfoStub = sinon.stub(vscode.window, 'showInformationMessage').resolves(undefined);
+    const result = await showSuppressibleNotification('k', 'm', [], MOCK_URI);
+    assert.strictEqual(result, undefined);
+    assert.strictEqual(updateSpy.called, false);
+  });
+
+  test('suppressed key: skips UI, returns undefined immediately', async () => {
+    sinon.stub(configModule.config, 'workspaceSettings').get(() => ({
+      [MOCK_URI.path]: { suppressedNotifications: ['multiConfigNotification'] },
+    }));
+    showInfoStub = sinon.stub(vscode.window, 'showInformationMessage').resolves('Select Project');
+    const result = await showSuppressibleNotification(
+      'multiConfigNotification',
+      'm',
+      ['Select Project'],
+      MOCK_URI,
+    );
+    assert.strictEqual(result, undefined);
+    assert.strictEqual(showInfoStub.called, false, 'must not display UI when suppressed');
   });
 });
 
