@@ -78,7 +78,6 @@ suite('verboseLogging setting', () => {
         stepDefinitionSearchTimeout: 20,
         discoveryDepth: 3,
         discoveryStopOnFirstHit: false,
-        suppressMultiConfigNotification: false,
         suppressedNotifications: [],
         workspaceRelativeProjectPath: '',
         projectRelativeFeaturesPath: 'features',

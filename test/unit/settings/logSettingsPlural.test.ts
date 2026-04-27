@@ -45,7 +45,6 @@ suite('logSettings plural output', () => {
       stepDefinitionSearchTimeout: 20,
       discoveryDepth: 3,
       discoveryStopOnFirstHit: false,
-      suppressMultiConfigNotification: false,
       suppressedNotifications: [],
       workspaceRelativeProjectPath: '',
       projectRelativeFeaturesPath: 'features',
