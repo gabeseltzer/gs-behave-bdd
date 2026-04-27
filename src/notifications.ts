@@ -70,3 +70,61 @@ export async function showSuppressibleNotification(
   }
   return action;
 }
+
+/**
+ * Phase 15 / NOTIF-06: One-shot migration of the legacy
+ * `gs-behave-bdd.suppressMultiConfigNotification: boolean` setting to the new
+ * `gs-behave-bdd.suppressedNotifications: string[]` setting.
+ *
+ * Detects the scope where the legacy key was set via `inspect()` (D-08), writes
+ * the array AND removes the legacy key at the SAME scope (D-06). Failure logs
+ * a warning and returns (D-07 — never throws — the caller in `activate()`
+ * relies on this to avoid blocking activation).
+ *
+ * Idempotent: dedups against the existing scope-local array (D-11), and the
+ * legacy key being already-removed is detected by `insp.<scope>Value` being
+ * undefined.
+ *
+ * @see .planning/phases/15-notification-suppression/15-RESEARCH.md Pattern 2 + Pitfalls 1-5
+ */
+export async function migrateLegacySuppressMultiConfig(wkspUri: vscode.Uri): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri);
+  const insp = cfg.inspect<boolean>("suppressMultiConfigNotification");
+  if (!insp) return;
+
+  // D-08: detect scope where the legacy boolean lives. Most-specific wins.
+  let target: vscode.ConfigurationTarget | undefined;
+  let legacyValue: boolean | undefined;
+  if (insp.workspaceFolderValue !== undefined) {
+    target = vscode.ConfigurationTarget.WorkspaceFolder;
+    legacyValue = insp.workspaceFolderValue;
+  } else if (insp.workspaceValue !== undefined) {
+    target = vscode.ConfigurationTarget.Workspace;
+    legacyValue = insp.workspaceValue;
+  } else if (insp.globalValue !== undefined) {
+    target = vscode.ConfigurationTarget.Global;
+    legacyValue = insp.globalValue;
+  }
+  if (target === undefined || legacyValue !== true) return;
+
+  try {
+    // D-11 dedup: read existing array at SAME scope (not merged — Pitfall 2).
+    const existingInsp = cfg.inspect<string[]>("suppressedNotifications");
+    const existingArr =
+      target === vscode.ConfigurationTarget.WorkspaceFolder ? existingInsp?.workspaceFolderValue :
+        target === vscode.ConfigurationTarget.Workspace ? existingInsp?.workspaceValue :
+          existingInsp?.globalValue;
+    const merged = Array.isArray(existingArr) ? [...existingArr] : [];
+    if (!merged.includes("multiConfigNotification")) merged.push("multiConfigNotification");
+
+    // D-06: write new array, then remove legacy key. Both at SAME target.
+    await cfg.update("suppressedNotifications", merged, target);
+    await cfg.update("suppressMultiConfigNotification", undefined, target);
+  } catch (e) {
+    // D-07: warn-and-continue, never throw.
+    config.logger.logInfo(
+      `Could not migrate suppressMultiConfigNotification to suppressedNotifications: ${e}`,
+      wkspUri,
+    );
+  }
+}
