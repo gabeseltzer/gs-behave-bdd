@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-27T16:38:47.090Z"
-last_activity: 2026-04-27 -- Phase 15 planning complete
+last_updated: "2026-04-27T17:30:00.000Z"
+last_activity: 2026-04-27 -- Phase 15 Plan 01 complete (NOTIF-01, NOTIF-08 partial + cascade)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 6
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 17
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.4.0 started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Roadmap defined; ready to plan Phase 15
+**Current focus:** Phase 15 — Notification Suppression Infrastructure (executing)
 
 ## Current Position
 
-Phase: 15 — Notification Suppression Infrastructure (not started)
-Plan: —
-Status: Ready to execute
-Last activity: 2026-04-27 -- Phase 15 planning complete
+Phase: 15 — Notification Suppression Infrastructure (in progress)
+Plan: 15-02 (Wave 2 — next)
+Status: Executing (Plan 01 complete; Wave 2 plans 02/03/04 ready to start in parallel)
+Last activity: 2026-04-27 -- Phase 15 Plan 01 complete: NOTIF-01 schema landed, WorkspaceSettings.suppressedNotifications field added with strict-undefined-throw, A1 probe in place, all four cascading settings fixtures updated. 659 unit tests passing (655 baseline + 4 Phase 15).
 
 ## Performance Metrics
 
@@ -54,3 +54,10 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - Suppression infrastructure: single `suppressedNotifications` string array setting (not per-key booleans)
 - Suppression writes to WorkspaceFolder scope by default
 - Setting is visible in settings UI (not hidden in workspaceState)
+
+### Phase 15 Decisions (Plan 01)
+
+- BLOCKER B-2 fold honored: strict-undefined throw on `WorkspaceSettings.suppressedNotifications` and the four cascading settings test fixture updates landed atomically in Plan 01 — no transient red full-unit-suite window during Wave 2.
+- Legacy `gs-behave-bdd.suppressMultiConfigNotification` schema entry and `WorkspaceSettings.suppressMultiConfigNotification` field intentionally preserved for Plan 03 migration. Schema removal lives in Plan 05, gated on Wave 0 A1 probe outcome.
+- Wave 0 A1 probe asserts the *expected* `cfg.inspect()` per-scope return contract via stub; real-VSCode confirmation deferred to Plan 05 smoke check (per 15-VALIDATION.md Manual-Only Verifications).
+- `makeScopedConfig` test helper exported from `test/unit/notifications.test.ts` so plans 02/03 can import it without duplication.
