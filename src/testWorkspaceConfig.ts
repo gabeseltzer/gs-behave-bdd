@@ -25,12 +25,13 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   private discoveryDepth: number | undefined;
   private discoveryStopOnFirstHit: boolean | undefined;
   private suppressMultiConfigNotification: boolean | undefined;
+  private suppressedNotifications: string[] | undefined;
 
   // all user-settable settings in settings.json or *.code-workspace
   constructor({
     envVarOverrides, envVarPresets, activeEnvVarPreset, projectPath, featuresPath: featuresPath, featuresPaths, justMyCode,
     multiRootRunWorkspacesInParallel,
-    runParallel, xRay, verboseLogging, importStrategy, stepDefinitionSearchTimeout, discoveryDepth, discoveryStopOnFirstHit, suppressMultiConfigNotification
+    runParallel, xRay, verboseLogging, importStrategy, stepDefinitionSearchTimeout, discoveryDepth, discoveryStopOnFirstHit, suppressMultiConfigNotification, suppressedNotifications
   }: {
     envVarOverrides: { [name: string]: string } | undefined,
     envVarPresets?: { [presetName: string]: { [name: string]: string } } | undefined,
@@ -47,7 +48,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     stepDefinitionSearchTimeout?: number | undefined,
     discoveryDepth?: number | undefined,
     discoveryStopOnFirstHit?: boolean | undefined,
-    suppressMultiConfigNotification?: boolean | undefined
+    suppressMultiConfigNotification?: boolean | undefined,
+    suppressedNotifications?: string[] | undefined
   }) {
     this.envVarOverrides = envVarOverrides;
     this.envVarPresets = envVarPresets;
@@ -65,6 +67,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     this.discoveryDepth = discoveryDepth;
     this.discoveryStopOnFirstHit = discoveryStopOnFirstHit;
     this.suppressMultiConfigNotification = suppressMultiConfigNotification;
+    this.suppressedNotifications = suppressedNotifications;
   }
 
   get<T>(section: string): T {
@@ -109,6 +112,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.discoveryStopOnFirstHit === undefined ? false : this.discoveryStopOnFirstHit);
       case "suppressMultiConfigNotification":
         return <T><unknown>(this.suppressMultiConfigNotification === undefined ? false : this.suppressMultiConfigNotification);
+      case "suppressedNotifications":
+        return <T><unknown>(this.suppressedNotifications ?? []);
       default:
         debugger; // eslint-disable-line no-debugger
         throw new Error("get() missing case for section: " + section);
@@ -174,6 +179,9 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         break;
       case "suppressMultiConfigNotification":
         response = <T><unknown>this.suppressMultiConfigNotification;
+        break;
+      case "suppressedNotifications":
+        response = <T><unknown>this.suppressedNotifications;
         break;
       default:
         debugger; // eslint-disable-line no-debugger
