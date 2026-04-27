@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-27T19:00:00.000Z"
-last_activity: 2026-04-27 -- Phase 15 Plan 03 complete (NOTIF-06 migration helper — migrateLegacySuppressMultiConfig with 8 sub-case tests)
+last_updated: "2026-04-27T17:39:47.000Z"
+last_activity: 2026-04-27 -- Phase 15 Plan 05 complete (NOTIF-04 wired + NOTIF-05 schema removal + NOTIF-06 migration loop in activate() + structural ordering tests)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 6
-  completed_plans: 4
-  percent: 67
+  completed_plans: 5
+  percent: 83
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.4.0 started)
 ## Current Position
 
 Phase: 15 — Notification Suppression Infrastructure (in progress)
-Plan: 15-05 (Wave 4 — extension wire + schema removal; next)
-Status: Executing (Plans 01, 02, 03, 04 complete; Plan 05 is next — replaces extension.ts L141-L181 with showSuppressibleNotification, calls migrateLegacySuppressMultiConfig from activate(), removes legacy schema entry + WorkspaceSettings field + TestWorkspaceConfig legacy mock entries)
-Last activity: 2026-04-27 -- Phase 15 Plan 03 complete: migrateLegacySuppressMultiConfig added to src/notifications.ts. Detects legacy boolean's scope via inspect() (D-08, most-specific-wins ladder), writes new suppressedNotifications array AND removes legacy key at the same ConfigurationTarget (D-06). On update() rejection logs via config.logger.logInfo and returns normally — never throws (D-07). Idempotent by construction. 680 unit tests passing (8 new NOTIF-06 sub-case tests: WorkspaceFolder/Workspace/Global scope, no-op×2, merge, idempotent, failure).
+Plan: 15-06 (Wave 5 — final cleanup; next, if scoped — Phase 15 functional work is complete after Plan 05)
+Status: Executing (Plans 01-05 complete; Phase 15 is functionally complete — wrapper wired, migration runs in activate(), legacy key removed from schema/field/mock/fixture; only the migration helper itself still references the legacy key string by design)
+Last activity: 2026-04-27 -- Phase 15 Plan 05 complete: extension.ts L141-L181 inline notification block replaced with showSuppressibleNotification('multiConfigNotification', ...) wrapper call (NOTIF-04 wired). Per-workspace migration loop added in activate() before updateDiscoveryUX — awaits migrateLegacySuppressMultiConfig + config.reloadSettings, wrapped in defense-in-depth try/catch (D-05, Pitfall 3, Pitfall 4). Legacy gs-behave-bdd.suppressMultiConfigNotification schema entry deleted from package.json (NOTIF-05). WorkspaceSettings legacy field, TestWorkspaceConfig legacy mock entries, and the four cascading settings test fixture entries all removed. Three new structural tests guard the activation-ordering invariant (Pitfall 3) + the wrapper call shape + the legacy-key-literal absence in extension.ts. Full unit suite GREEN: 683 tests passing (680 baseline + 3 new structural). Lint clean, typecheck clean (only pre-existing smol-toml baseline noise), webpack compile succeeds.
 
 ## Performance Metrics
 
@@ -88,3 +88,12 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - Both legacy `suppressMultiConfigNotification` and new `suppressedNotifications` mock entries coexist; legacy removal is Plan 05/06's responsibility, gated on Wave 0 A1 probe outcome.
 - No new ad-hoc tests added in this plan: the four cascading fixture files Plan 01 updated already exercise the new mock surface implicitly. The optional `TestWorkspaceConfig suppressedNotifications default (NOTIF-08)` test block in PATTERNS.md L478-L508 was not required by acceptance criteria and was skipped to keep this plan minimal-surface.
 - Single-task plan structure preserved per BLOCKER B-2 fold: the four BASE_CFG / makeFakeWkspSettings cascade updates that were originally Plan 04 tasks 2-5 already landed in Plan 01.
+
+### Phase 15 Decisions (Plan 05)
+
+- A1 probe (Wave 0) was confirmed GREEN before Plan 05 schema removal. Both `inspect()`-of-unregistered-key probes pass against the project's vscode mock environment, satisfying the contract Plan 03's migration helper relies on. Real-VSCode confirmation deferred to Phase 17 manual smoke check per 15-VALIDATION.md Manual-Only Verifications.
+- Wrapper call in `extension.ts` is FIRE-AND-FORGET (`.then(action => ...)`), NOT awaited — preserves the pre-existing inline block's UX. Awaiting would block `updateDiscoveryUX` on user input. The MIGRATION await in `activate()` is the opposite direction: it MUST be awaited because D-05 mandates "before any notifications fire."
+- Per-workspace migration loop placed in `activate()` between the project-list-population loop and the `updateDiscoveryUX(...)` call. After each `await migrateLegacySuppressMultiConfig(wkspUri)`, calls `config.reloadSettings(wkspUri)` to refresh the cached `WorkspaceSettings.suppressedNotifications` (Pitfall 4). Loop is wrapped in a defense-in-depth try/catch — D-07 says the helper never throws, but `reloadSettings` is not contracted to never throw, so the catch routes any failure to `config.logger.logInfo` and continues.
+- Comment text in `extension.ts` rephrased to drop the literal string `suppressMultiConfigNotification` so the new structural test (`!src.includes('suppressMultiConfigNotification')`) passes. The migration helper itself in `src/notifications.ts` is the only remaining source-tree reference to the legacy key — that's by design (it's the literal key the migration inspects/removes from settings.json).
+- Activation-ordering structural test uses `indexOf('updateDiscoveryUX(getUrisOfWkspFoldersWithFeatures()')` — the call site signature, not the bare function name. There's also a `function updateDiscoveryUX` declaration earlier in the file that would have produced a false-positive ordering match. Discovered as a Rule 1 fix during the first run of the new structural test; landed in Task 5 commit before any further work.
+- Phase 15 functional work is complete after Plan 05. STATE.md and ROADMAP.md show total_plans=6 — if Plan 06 has scoped cleanup work, it can land separately; otherwise Phase 15 closes here.
