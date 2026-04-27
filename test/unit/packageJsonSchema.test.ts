@@ -1,0 +1,34 @@
+import * as assert from 'assert';
+import * as fs from 'fs';
+import * as path from 'path';
+
+suite('package.json schema — Phase 15 (NOTIF-01)', () => {
+  let pkg: { contributes: { configuration: { properties: Record<string, { type?: string; items?: { type?: string }; default?: unknown }> } } };
+
+  suiteSetup(() => {
+    let pkgPath = path.resolve(__dirname, '../../../../package.json');
+    if (!fs.existsSync(pkgPath)) {
+      pkgPath = path.resolve(__dirname, '../../../package.json');
+    }
+    pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  });
+
+  test('suppressedNotifications has correct array schema shape', () => {
+    const props = pkg.contributes.configuration.properties;
+    const s = props['gs-behave-bdd.suppressedNotifications'];
+    assert.ok(s, 'suppressedNotifications must be present in schema');
+    assert.strictEqual(s.type, 'array', 'type must be "array"');
+    assert.ok(s.items, 'items must be defined');
+    assert.strictEqual(s.items!.type, 'string', 'items.type must be "string"');
+    assert.ok(Array.isArray(s.default), 'default must be an array');
+    assert.strictEqual((s.default as unknown[]).length, 0, 'default must be []');
+  });
+
+  test('legacy suppressMultiConfigNotification key STILL present in this plan (removed in Plan 05)', () => {
+    const props = pkg.contributes.configuration.properties;
+    assert.ok(
+      'gs-behave-bdd.suppressMultiConfigNotification' in props,
+      'Legacy key must remain in schema until Plan 05 (migration code depends on it)',
+    );
+  });
+});
