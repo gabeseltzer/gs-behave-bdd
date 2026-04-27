@@ -60,6 +60,7 @@ const BASE_CFG = {
   discoveryDepth: 3,
   discoveryStopOnFirstHit: false,
   suppressMultiConfigNotification: false,
+  suppressedNotifications: [],
 };
 
 suite('projectUri derivation from config-file discovery', () => {
