@@ -122,6 +122,15 @@
 					"type": "boolean",
 					"markdownDescription": "Suppress the notification shown when multiple behave config files are found in subdirectories. Scan results are always logged to the output channel regardless of this setting.",
 					"default": false
+				},
+				"gs-behave-bdd.suppressedNotifications": {
+					"scope": "resource",
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"markdownDescription": "List of notification keys that have been dismissed via 'Don't Show Again'. Edit this list to re-enable suppressed notifications. Known keys: `multiConfigNotification` (multiple behave configs found).",
+					"default": []
 				}
 			}
 		},
