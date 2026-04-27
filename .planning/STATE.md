@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-27T17:30:00.000Z"
-last_activity: 2026-04-27 -- Phase 15 Plan 01 complete (NOTIF-01, NOTIF-08 partial + cascade)
+last_updated: "2026-04-27T18:00:00.000Z"
+last_activity: 2026-04-27 -- Phase 15 Plan 02 complete (NOTIF-02, NOTIF-03, NOTIF-04 button passthrough)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
-  percent: 17
+  completed_plans: 2
+  percent: 33
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.4.0 started)
 ## Current Position
 
 Phase: 15 — Notification Suppression Infrastructure (in progress)
-Plan: 15-02 (Wave 2 — next)
-Status: Executing (Plan 01 complete; Wave 2 plans 02/03/04 ready to start in parallel)
-Last activity: 2026-04-27 -- Phase 15 Plan 01 complete: NOTIF-01 schema landed, WorkspaceSettings.suppressedNotifications field added with strict-undefined-throw, A1 probe in place, all four cascading settings fixtures updated. 659 unit tests passing (655 baseline + 4 Phase 15).
+Plan: 15-03 (Wave 2 — migration; next)
+Status: Executing (Plans 01 and 02 complete; Plan 03 migration ready to start, Plan 04 mock surgery ready in parallel)
+Last activity: 2026-04-27 -- Phase 15 Plan 02 complete: src/notifications.ts shipped with isSuppressed, suppressNotification, showSuppressibleNotification (NOTIF-02, NOTIF-03, NOTIF-04 button passthrough). 13 new unit tests; 672 unit tests passing total. ConfigurationTarget enum added to vscode.mock.ts (Rule 3 deviation; unblocks downstream plans).
 
 ## Performance Metrics
 
@@ -61,3 +61,12 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - Legacy `gs-behave-bdd.suppressMultiConfigNotification` schema entry and `WorkspaceSettings.suppressMultiConfigNotification` field intentionally preserved for Plan 03 migration. Schema removal lives in Plan 05, gated on Wave 0 A1 probe outcome.
 - Wave 0 A1 probe asserts the *expected* `cfg.inspect()` per-scope return contract via stub; real-VSCode confirmation deferred to Plan 05 smoke check (per 15-VALIDATION.md Manual-Only Verifications).
 - `makeScopedConfig` test helper exported from `test/unit/notifications.test.ts` so plans 02/03 can import it without duplication.
+
+### Phase 15 Decisions (Plan 02)
+
+- `src/notifications.ts` exports plain async functions (D-01) with one module-level `DONT_SHOW_AGAIN` constant referenced at append + intercept sites (T-15-04 mitigation; literal appears once outside JSDoc).
+- `suppressNotification` reads `inspect().workspaceFolderValue` for dedup (Pitfall 2 — never `cfg.get()` which merges scopes); writes at `vscode.ConfigurationTarget.WorkspaceFolder` (NOTIF-03); on `update()` rejection logs via `config.logger.logInfo` and returns normally (no throw).
+- Used a separate-variable guard pattern (`const wfv = insp ? insp.workspaceFolderValue : undefined`) instead of `insp!.workspaceFolderValue!` — same semantics, zero non-null assertions, ESLint clean.
+- Rule 3 deviation: added `enum ConfigurationTarget { Global=1, Workspace=2, WorkspaceFolder=3 }` to `test/unit/vscode.mock.ts`. Without it, `vscode.ConfigurationTarget.WorkspaceFolder` evaluates to `undefined.WorkspaceFolder` and throws TypeError before the spy is called. Mock-only change; values match VS Code's published API.
+- `showSuppressibleNotification` returns `undefined` (not the literal `'Don't Show Again'`) when DSA is clicked, suppressed, or dismissed (D-04). The DSA branch internally calls `suppressNotification` so callers can stay fire-and-forget.
+- Wrapper is implemented but NOT wired into `extension.ts` — Plan 05 owns the wiring. End of Plan 02 the new module is unused at runtime.
