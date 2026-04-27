@@ -46,6 +46,7 @@ suite('logSettings plural output', () => {
       discoveryDepth: 3,
       discoveryStopOnFirstHit: false,
       suppressMultiConfigNotification: false,
+      suppressedNotifications: [],
       workspaceRelativeProjectPath: '',
       projectRelativeFeaturesPath: 'features',
       uri: mockUri,
