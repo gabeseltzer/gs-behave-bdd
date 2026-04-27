@@ -19,14 +19,14 @@ Requirements for Deprecate featuresPath & Notification Suppression milestone.
 
 ### Notification Suppression
 
-- [ ] **NOTIF-01**: New `suppressedNotifications` setting in package.json — array of string notification keys, default `[]`
-- [ ] **NOTIF-02**: Reusable module that checks suppression state and handles "Don't Show Again" by appending the key to `suppressedNotifications`
-- [ ] **NOTIF-03**: "Don't Show Again" writes to `WorkspaceFolder` scope by default
-- [ ] **NOTIF-04**: Existing multi-config notification migrated to use new infrastructure with key `multiConfigNotification`
-- [ ] **NOTIF-05**: `suppressMultiConfigNotification` boolean setting removed from package.json
-- [ ] **NOTIF-06**: Existing `suppressMultiConfigNotification: true` auto-migrated to `suppressedNotifications: ["multiConfigNotification"]`
-- [ ] **NOTIF-07**: Unit tests for suppression module (check, suppress, migrate)
-- [ ] **NOTIF-08**: `testWorkspaceConfig` mock updated for new setting shape
+- [x] **NOTIF-01**: New `suppressedNotifications` setting in package.json — array of string notification keys, default `[]` (Phase 15)
+- [x] **NOTIF-02**: Reusable module that checks suppression state and handles "Don't Show Again" by appending the key to `suppressedNotifications` (Phase 15)
+- [x] **NOTIF-03**: "Don't Show Again" writes to `WorkspaceFolder` scope by default (Phase 15)
+- [x] **NOTIF-04**: Existing multi-config notification migrated to use new infrastructure with key `multiConfigNotification` (Phase 15)
+- [x] **NOTIF-05**: `suppressMultiConfigNotification` boolean setting removed from package.json (Phase 15)
+- [x] **NOTIF-06**: Existing `suppressMultiConfigNotification: true` auto-migrated to `suppressedNotifications: ["multiConfigNotification"]` (Phase 15)
+- [x] **NOTIF-07**: Unit tests for suppression module (check, suppress, migrate) (Phase 15 — 28 new tests, 683 total)
+- [x] **NOTIF-08**: `testWorkspaceConfig` mock updated for new setting shape (Phase 15)
 
 ## Future Requirements
 
@@ -52,14 +52,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| NOTIF-01 | Phase 15 | Pending |
-| NOTIF-02 | Phase 15 | Pending |
-| NOTIF-03 | Phase 15 | Pending |
-| NOTIF-04 | Phase 15 | Pending |
-| NOTIF-05 | Phase 15 | Pending |
-| NOTIF-06 | Phase 15 | Pending |
-| NOTIF-07 | Phase 15 | Pending |
-| NOTIF-08 | Phase 15 | Pending |
+| NOTIF-01 | Phase 15 | ✓ Verified |
+| NOTIF-02 | Phase 15 | ✓ Verified |
+| NOTIF-03 | Phase 15 | ✓ Verified |
+| NOTIF-04 | Phase 15 | ✓ Verified |
+| NOTIF-05 | Phase 15 | ✓ Verified |
+| NOTIF-06 | Phase 15 | ✓ Verified (real-VSCode smoke deferred to Phase 17) |
+| NOTIF-07 | Phase 15 | ✓ Verified |
+| NOTIF-08 | Phase 15 | ✓ Verified |
 | DEP-01 | Phase 16 | Pending |
 | DEP-02 | Phase 16 | Pending |
 | DEP-03 | Phase 16 | Pending |
