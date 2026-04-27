@@ -1,4 +1,6 @@
 import * as assert from 'assert';
+import * as fs from 'fs';
+import * as path from 'path';
 import * as sinon from 'sinon';
 import * as configModule from '../../src/configuration';
 import {
@@ -381,6 +383,47 @@ suite('Phase 15 — notifications: migrateLegacySuppressMultiConfig (NOTIF-06)',
       logMsg.includes('suppressMultiConfigNotification') ||
         logMsg.includes('suppressedNotifications'),
       'log message must mention the migration keys',
+    );
+  });
+});
+
+suite('Phase 15 — extension.ts activation ordering (Pitfall 3)', () => {
+  // Tests run from out/test/test/unit/, so 4 levels up to project root; fall back to 3 if needed.
+  function readExtensionSrc(): string {
+    let extPath = path.resolve(__dirname, '../../../../src/extension.ts');
+    if (!fs.existsSync(extPath)) {
+      extPath = path.resolve(__dirname, '../../../src/extension.ts');
+    }
+    return fs.readFileSync(extPath, 'utf8');
+  }
+
+  test('activate.*migration order: migrateLegacySuppressMultiConfig precedes updateDiscoveryUX', () => {
+    const src = readExtensionSrc();
+    const migrationIdx = src.indexOf('migrateLegacySuppressMultiConfig(wkspUri)');
+    // Match the call site (with paren), not the function declaration.
+    const discoveryCallIdx = src.indexOf('updateDiscoveryUX(getUrisOfWkspFoldersWithFeatures()');
+    assert.notStrictEqual(migrationIdx, -1, 'migration call must exist in extension.ts');
+    assert.notStrictEqual(discoveryCallIdx, -1, 'updateDiscoveryUX call must exist in extension.ts');
+    assert.ok(
+      migrationIdx < discoveryCallIdx,
+      'migration must precede updateDiscoveryUX call (Pitfall 3 / D-05)',
+    );
+  });
+
+  test('extension.*multiConfigNotification: showSuppressibleNotification call uses correct key + buttons', () => {
+    const src = readExtensionSrc();
+    assert.match(
+      src,
+      /showSuppressibleNotification\([\s\S]*?["']multiConfigNotification["'][\s\S]*?["']Select Project["'][\s\S]*?["']Show Details["']/,
+      'wrapper call must include key and both buttons',
+    );
+  });
+
+  test('extension.ts no longer reads legacy suppressMultiConfigNotification from cache', () => {
+    const src = readExtensionSrc();
+    assert.ok(
+      !src.includes('suppressMultiConfigNotification'),
+      'extension.ts must not reference the legacy key after Plan 05',
     );
   });
 });
