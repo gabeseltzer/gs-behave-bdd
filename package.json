@@ -117,12 +117,6 @@
 					"markdownDescription": "When enabled, the subdirectory config scanner stops at the first depth level that yields a behave config file. When disabled (default), the scanner always scans to `discoveryDepth` so it can report all found configs.",
 					"default": false
 				},
-				"gs-behave-bdd.suppressMultiConfigNotification": {
-					"scope": "resource",
-					"type": "boolean",
-					"markdownDescription": "Suppress the notification shown when multiple behave config files are found in subdirectories. Scan results are always logged to the output channel regardless of this setting.",
-					"default": false
-				},
 				"gs-behave-bdd.suppressedNotifications": {
 					"scope": "resource",
 					"type": "array",
