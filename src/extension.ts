@@ -292,7 +292,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       }
     });
 
-    // Phase 15 / NOTIF-06: migrate legacy suppressMultiConfigNotification → suppressedNotifications.
+    // Phase 15 / NOTIF-06: migrate legacy boolean suppression key → suppressedNotifications array.
     // Must complete BEFORE updateDiscoveryUX so notifications honor the migrated suppression state (Pitfall 3).
     for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
       try {

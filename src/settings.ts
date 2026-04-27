@@ -71,7 +71,6 @@ export class WorkspaceSettings {
   public readonly stepDefinitionSearchTimeout: number;
   public readonly discoveryDepth: number;
   public readonly discoveryStopOnFirstHit: boolean;
-  public readonly suppressMultiConfigNotification: boolean;
   public readonly suppressedNotifications: readonly string[];
   public readonly workspaceRelativeProjectPath: string;
   // Plural fields (Phase 7, D-03) — non-empty; length-1 in Phase 7, grows in Phase 8
@@ -153,9 +152,6 @@ export class WorkspaceSettings {
     const discoveryStopOnFirstHitCfg: boolean | undefined = get("discoveryStopOnFirstHit");
     if (discoveryStopOnFirstHitCfg === undefined)
       throw "discoveryStopOnFirstHit is undefined";
-    const suppressMultiConfigNotificationCfg: boolean | undefined = get("suppressMultiConfigNotification");
-    if (suppressMultiConfigNotificationCfg === undefined)
-      throw "suppressMultiConfigNotification is undefined";
     const suppressedNotificationsCfg: string[] | undefined = get<string[]>("suppressedNotifications");
     if (suppressedNotificationsCfg === undefined)
       throw "suppressedNotifications is undefined";
@@ -168,7 +164,6 @@ export class WorkspaceSettings {
     this.activeEnvVarPreset = activeEnvVarPresetCfg;
     this.discoveryDepth = Math.max(0, Math.min(10, discoveryDepthCfg));
     this.discoveryStopOnFirstHit = discoveryStopOnFirstHitCfg;
-    this.suppressMultiConfigNotification = suppressMultiConfigNotificationCfg;
     this.suppressedNotifications = suppressedNotificationsCfg;
 
 
