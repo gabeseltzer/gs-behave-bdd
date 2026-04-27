@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-27T18:30:00.000Z"
-last_activity: 2026-04-27 -- Phase 15 Plan 04 complete (NOTIF-08 mock surface — TestWorkspaceConfig carries suppressedNotifications)
+last_updated: "2026-04-27T19:00:00.000Z"
+last_activity: 2026-04-27 -- Phase 15 Plan 03 complete (NOTIF-06 migration helper — migrateLegacySuppressMultiConfig with 8 sub-case tests)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
-  percent: 50
+  completed_plans: 4
+  percent: 67
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.4.0 started)
 ## Current Position
 
 Phase: 15 — Notification Suppression Infrastructure (in progress)
-Plan: 15-03 (Wave 2 — migration; next)
-Status: Executing (Plans 01, 02, 04 complete; Plan 03 migration is the next required item before Wave 3 — Plan 05 extension wire + schema removal)
-Last activity: 2026-04-27 -- Phase 15 Plan 04 complete: TestWorkspaceConfig mock now carries suppressedNotifications (private field, optional constructor param, get/inspect switch cases). NOTIF-08 mock surface satisfied. Legacy suppressMultiConfigNotification mock entries preserved for Plan 05/06 cleanup. 672 unit tests passing (no test count change — verified via existing four cascading fixture files from Plan 01).
+Plan: 15-05 (Wave 4 — extension wire + schema removal; next)
+Status: Executing (Plans 01, 02, 03, 04 complete; Plan 05 is next — replaces extension.ts L141-L181 with showSuppressibleNotification, calls migrateLegacySuppressMultiConfig from activate(), removes legacy schema entry + WorkspaceSettings field + TestWorkspaceConfig legacy mock entries)
+Last activity: 2026-04-27 -- Phase 15 Plan 03 complete: migrateLegacySuppressMultiConfig added to src/notifications.ts. Detects legacy boolean's scope via inspect() (D-08, most-specific-wins ladder), writes new suppressedNotifications array AND removes legacy key at the same ConfigurationTarget (D-06). On update() rejection logs via config.logger.logInfo and returns normally — never throws (D-07). Idempotent by construction. 680 unit tests passing (8 new NOTIF-06 sub-case tests: WorkspaceFolder/Workspace/Global scope, no-op×2, merge, idempotent, failure).
 
 ## Performance Metrics
 
@@ -70,6 +70,16 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - Rule 3 deviation: added `enum ConfigurationTarget { Global=1, Workspace=2, WorkspaceFolder=3 }` to `test/unit/vscode.mock.ts`. Without it, `vscode.ConfigurationTarget.WorkspaceFolder` evaluates to `undefined.WorkspaceFolder` and throws TypeError before the spy is called. Mock-only change; values match VS Code's published API.
 - `showSuppressibleNotification` returns `undefined` (not the literal `'Don't Show Again'`) when DSA is clicked, suppressed, or dismissed (D-04). The DSA branch internally calls `suppressNotification` so callers can stay fire-and-forget.
 - Wrapper is implemented but NOT wired into `extension.ts` — Plan 05 owns the wiring. End of Plan 02 the new module is unused at runtime.
+
+### Phase 15 Decisions (Plan 03)
+
+- `migrateLegacySuppressMultiConfig(wkspUri)` exported from `src/notifications.ts` per RESEARCH.md Open Question 3 — direct unit-test access avoids brittleness of going through `activate()`. Plan 05 will import it.
+- Scope detection ladder: workspaceFolderValue → workspaceValue → globalValue (most-specific wins). Mirrors `getWithLegacyFallback` direction in `src/settings.ts` L20-L25.
+- Same-scope dedup: read existing `suppressedNotifications` via `cfg.inspect<string[]>(...).<sameScope>Value` — NEVER `cfg.get()` which merges scopes (Pitfall 2). A merged-scope read would falsely skip lower-scope migrations when a higher-scope array already contains the key.
+- Two writes per scope hit at the SAME `ConfigurationTarget` (D-06): `update("suppressedNotifications", merged, target)` then `update("suppressMultiConfigNotification", undefined, target)`. Both wrapped in single try/catch; on rejection, `config.logger.logInfo` is called and the function returns (D-07, T-15-11 mitigation).
+- Idempotency by construction: post-first-run state has legacy key undefined at all scopes → no target → returns no-op. The new array's dedup means re-migration also doesn't double-append.
+- New test helper `makePerKeyScopedConfig` introduced because migration calls `inspect()` twice on different keys (legacy boolean + new array). The Plan 01 `makeScopedConfig` returns the same shape for any key, conflating the two reads. Both helpers coexist; `makeScopedConfig` is still used by isSuppressed/suppressNotification/showSuppressibleNotification tests.
+- Plan 03 does NOT modify `extension.ts`, `package.json`, `WorkspaceSettings`, or `TestWorkspaceConfig` legacy entries — Plan 05 owns all wiring and cleanup.
 
 ### Phase 15 Decisions (Plan 04)
 
