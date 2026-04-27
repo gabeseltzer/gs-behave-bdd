@@ -61,8 +61,31 @@ Archive: [milestones/v1.3.0-ROADMAP.md](milestones/v1.3.0-ROADMAP.md)
 **Goal:** Build reusable notification suppression module and migrate existing multi-config notification to use it
 
 **Requirements:** [NOTIF-01, NOTIF-02, NOTIF-03, NOTIF-04, NOTIF-05, NOTIF-06, NOTIF-07, NOTIF-08]
-**Plans:** [To be planned]
+**Plans:** 6 plans
 **Depends on:** None
+
+Plans:
+
+**Wave 1**
+- [ ] 15-01-PLAN.md — Schema + WorkspaceSettings field + A1 probe + BASE_CFG fixture cascade (NOTIF-01, NOTIF-08 partial)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 15-02-PLAN.md — notifications.ts core (isSuppressed, suppressNotification, showSuppressibleNotification) + tests (NOTIF-02, NOTIF-03, NOTIF-04 button-passthrough)
+- [ ] 15-04-PLAN.md — TestWorkspaceConfig mock surgery (NOTIF-08)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 15-03-PLAN.md — migrateLegacySuppressMultiConfig + 8 sub-case tests (NOTIF-06)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 15-05-PLAN.md — Wire extension.ts + remove legacy schema/field/mock (NOTIF-04 wired, NOTIF-05, NOTIF-06 wired)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 15-06-PLAN.md — Phase verification gate + SUMMARY (NOTIF-07)
+
+**Cross-cutting constraints:**
+- Migration runs eagerly in `activate()` before any notification fires (D-05); cache refreshed via `config.reloadSettings(wkspUri)` after migration (Pitfall 4)
+- Migration writes at the `ConfigurationTarget` scope detected via `inspect()` (D-08)
+- Wrapper never returns "Don't Show Again" to caller; intercepted internally (D-04)
 
 **Success criteria:**
 1. `suppressedNotifications` array setting exists in package.json with default `[]`
