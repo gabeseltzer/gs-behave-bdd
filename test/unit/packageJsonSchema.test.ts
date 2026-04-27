@@ -24,11 +24,11 @@ suite('package.json schema — Phase 15 (NOTIF-01)', () => {
     assert.strictEqual((s.default as unknown[]).length, 0, 'default must be []');
   });
 
-  test('legacy suppressMultiConfigNotification key STILL present in this plan (removed in Plan 05)', () => {
+  test('legacy suppressMultiConfigNotification key REMOVED from schema (NOTIF-05)', () => {
     const props = pkg.contributes.configuration.properties;
     assert.ok(
-      'gs-behave-bdd.suppressMultiConfigNotification' in props,
-      'Legacy key must remain in schema until Plan 05 (migration code depends on it)',
+      !('gs-behave-bdd.suppressMultiConfigNotification' in props),
+      'Legacy key must be absent from schema after Plan 05',
     );
   });
 });
