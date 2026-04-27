@@ -72,6 +72,7 @@ export class WorkspaceSettings {
   public readonly discoveryDepth: number;
   public readonly discoveryStopOnFirstHit: boolean;
   public readonly suppressMultiConfigNotification: boolean;
+  public readonly suppressedNotifications: readonly string[];
   public readonly workspaceRelativeProjectPath: string;
   // Plural fields (Phase 7, D-03) — non-empty; length-1 in Phase 7, grows in Phase 8
   public readonly projectRelativeFeaturesPaths: string[];
@@ -155,6 +156,9 @@ export class WorkspaceSettings {
     const suppressMultiConfigNotificationCfg: boolean | undefined = get("suppressMultiConfigNotification");
     if (suppressMultiConfigNotificationCfg === undefined)
       throw "suppressMultiConfigNotification is undefined";
+    const suppressedNotificationsCfg: string[] | undefined = get<string[]>("suppressedNotifications");
+    if (suppressedNotificationsCfg === undefined)
+      throw "suppressedNotifications is undefined";
 
 
     this.justMyCode = justMyCodeCfg;
@@ -165,6 +169,7 @@ export class WorkspaceSettings {
     this.discoveryDepth = Math.max(0, Math.min(10, discoveryDepthCfg));
     this.discoveryStopOnFirstHit = discoveryStopOnFirstHitCfg;
     this.suppressMultiConfigNotification = suppressMultiConfigNotificationCfg;
+    this.suppressedNotifications = suppressedNotificationsCfg;
 
 
     // Process projectPath - this is the root of the behave project
