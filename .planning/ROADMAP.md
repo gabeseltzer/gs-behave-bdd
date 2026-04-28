@@ -103,8 +103,34 @@ Plans:
 **Goal:** Remove `featuresPath` from schema, auto-migrate to `featuresPaths[]` with user notification
 
 **Requirements:** [DEP-01, DEP-02, DEP-03, DEP-04, DEP-05, DEP-06, DEP-07]
-**Plans:** [To be planned]
+**Plans:** 6 plans
 **Depends on:** Phase 15 (migration notification should use suppression infrastructure)
+
+Plans:
+
+**Wave 1**
+- [ ] 16-01-PLAN.md — Pre-flight verifications (publisher, A1 probe, baseline pass count) + export makePerKeyScopedConfig (DEP-07 prep)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 16-02-PLAN.md — Extract D-MOD primitive `migrateScopedSetting<TSrc, TDest>` + refactor Phase 15 helper to call it + 7 direct primitive tests (DEP-07; D-MOD regression bar: 8 Phase 15 sub-cases pass)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 16-03-PLAN.md — Implement `migrateLegacyFeaturesPath` wrapper (D-01..D-09) + 10 unit tests covering cases (a)-(j) (DEP-02, DEP-03, DEP-07)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 16-04-PLAN.md — Wire activation loop + post-loop notification (D-18, D-12, D-13) + 4 structural tests (DEP-02, DEP-04)
+- [ ] 16-05-PLAN.md — Source-tree singular cleanup: package.json schema removal + settings.ts ladder collapse + common.ts discovery simplification + testWorkspaceConfig.ts mock surgery (DEP-01, DEP-05, DEP-06; D-15..D-17)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 16-06-PLAN.md — Test fixture cascade (6 test files) + final phase-level goal-backward verification (DEP-05, DEP-06, DEP-07)
+
+**Cross-cutting constraints:**
+- Migration runs eagerly in `activate()` BEFORE the multi-config notification migration (D-18: data shape first, UX cleanup second), and BEFORE the post-loop featuresPath notification fires
+- `config.reloadSettings(wkspUri)` is sync void — NEVER await it (Pitfall 8)
+- D-07 normalize regex byte-identical between `src/notifications.ts` and `src/settings.ts:204` (Pitfall 9)
+- "Open Settings" button uses `@ext:gabeseltzer.gs-behave-bdd` (publisher confirmed in 16-01-SUMMARY)
+- Helper never throws (D-05) — primitive's catch block logs via `config.logger.logInfo`
+- D-MOD regression bar: all 8 existing `migrateLegacySuppressMultiConfig` sub-cases still pass after the primitive extraction refactor
 
 **Success criteria:**
 1. `featuresPath` setting absent from package.json schema
