@@ -32,7 +32,7 @@ async function setupWorkspace(): Promise<{ wkspUri: vscode.Uri; instances: TestS
 
 	const testConfig = new TestWorkspaceConfig({
 		runParallel: false, multiRootRunWorkspacesInParallel: false,
-		envVarOverrides: undefined, projectPath: undefined, featuresPath: undefined,
+		envVarOverrides: undefined, projectPath: undefined,
 		justMyCode: true, xRay: false,
 	});
 

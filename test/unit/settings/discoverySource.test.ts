@@ -61,45 +61,45 @@ suite('hasExplicitSetting (INTG-02)', () => {
   suite('returns false when no scope has a value', () => {
     test('empty config -- returns false', () => {
       const cfg = makeConfig({});
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), false);
+      assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), false);
     });
 
     test('only defaultValue set -- returns false', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cfg: any = {
-        get: () => 'features',
+        get: () => '',
         has: () => false,
         inspect: () => ({
-          key: 'featuresPath',
-          defaultValue: 'features',
+          key: 'projectPath',
+          defaultValue: '',
           globalValue: undefined,
           workspaceValue: undefined,
           workspaceFolderValue: undefined,
         }),
         update: () => Promise.resolve(),
       };
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), false);
+      assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), false);
     });
   });
 
   suite('returns true when globalValue is set', () => {
     test('globalValue present -- returns true', () => {
-      const cfg = makeGlobalConfig({ featuresPath: 'my_tests' });
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), true);
+      const cfg = makeGlobalConfig({ projectPath: 'global_proj' });
+      assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), true);
     });
   });
 
   suite('returns true when workspaceValue is set', () => {
     test('workspaceValue present -- returns true', () => {
-      const cfg = makeConfig({ featuresPath: 'my_tests' }, ['featuresPath']);
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), true);
+      const cfg = makeConfig({ projectPath: 'my_proj' }, ['projectPath']);
+      assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), true);
     });
   });
 
   suite('returns true when workspaceFolderValue is set', () => {
     test('workspaceFolderValue present -- returns true', () => {
-      const cfg = makeWkspFolderConfig({ featuresPath: 'my_tests' });
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), true);
+      const cfg = makeWkspFolderConfig({ projectPath: 'folder_proj' });
+      assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), true);
     });
   });
 
@@ -138,13 +138,13 @@ suite('hasExplicitSetting (INTG-02)', () => {
         inspect: () => undefined,
         update: () => Promise.resolve(),
       };
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), false);
+      assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), false);
     });
 
     test('empty string value at workspaceValue -- still returns true (value is set)', () => {
-      const cfg = makeConfig({ featuresPath: '' }, ['featuresPath']);
+      const cfg = makeConfig({ projectPath: '' }, ['projectPath']);
       // Empty string is still an explicit value -- the user intentionally set it
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), true);
+      assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), true);
     });
   });
 

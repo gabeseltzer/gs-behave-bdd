@@ -67,19 +67,14 @@ suite('discovery priority (TEST-02)', () => {
       assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), true);
     });
 
-    test('featuresPath set at workspaceValue -- returns true (settings branch)', () => {
-      const cfg = makeConfig({ featuresPath: 'my_tests' }, ['featuresPath']);
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), true);
-    });
-
     test('projectPath set at globalValue -- returns true (settings branch)', () => {
       const cfg = makeGlobalConfig({ projectPath: 'global/path' });
       assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), true);
     });
 
-    test('featuresPath set at workspaceFolderValue -- returns true (settings branch)', () => {
-      const cfg = makeWkspFolderConfig({ featuresPath: 'folder_tests' });
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), true);
+    test('projectPath set at workspaceFolderValue -- returns true (settings branch)', () => {
+      const cfg = makeWkspFolderConfig({ projectPath: 'folder_proj' });
+      assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), true);
     });
   });
 
@@ -87,28 +82,25 @@ suite('discovery priority (TEST-02)', () => {
     test('no settings at any scope -- returns false (falls to config/convention)', () => {
       const cfg = makeConfig({});
       assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), false);
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), false);
     });
 
     test('empty string at workspaceValue -- returns true (empty string is an explicit value)', () => {
       // Implementation treats empty string as an explicit setting ('' !== undefined).
       // The user intentionally set it, so config-file discovery is bypassed.
-      const cfg = makeConfig({ featuresPath: '' }, ['featuresPath']);
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), true);
+      const cfg = makeConfig({ projectPath: '' }, ['projectPath']);
+      assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), true);
     });
   });
 
   suite('priority order verification', () => {
-    test('both projectPath and featuresPath unset -- both return false', () => {
+    test('projectPath unset -- returns false', () => {
       const cfg = makeConfig({});
       assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), false);
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), false);
     });
 
-    test('projectPath set but featuresPath unset -- projectPath returns true', () => {
+    test('projectPath set -- returns true', () => {
       const cfg = makeConfig({ projectPath: 'proj' }, ['projectPath']);
       assert.strictEqual(hasExplicitSetting(cfg, 'projectPath'), true);
-      assert.strictEqual(hasExplicitSetting(cfg, 'featuresPath'), false);
     });
   });
 
