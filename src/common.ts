@@ -204,12 +204,13 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     // === BRANCH A: Explicit settings detected (D-02, INTG-07) ===
     // When explicit settings exist at any scope, skip config-file discovery entirely.
     // Run existing settings-based logic unchanged for backward compatibility.
+    // Phase 16 / D-16: Branch A gate is plural-only. Singular featuresPath is
+    // auto-migrated to featuresPaths at activation (Plan 03/04), so by the time
+    // hasFeaturesFolder runs the singular setting is no longer present.
     if (hasExplicitSetting(wkspConfig, "projectPath", legacyWkspConfig) ||
-        hasExplicitSetting(wkspConfig, "featuresPath", legacyWkspConfig) ||
         hasExplicitNonEmptyArraySetting(wkspConfig, "featuresPaths")) {
 
       const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath", legacyWkspConfig);
-      const featuresPath = getActualWorkspaceSetting<string>(wkspConfig, "featuresPath", legacyWkspConfig);
 
       // Determine the project root (either custom projectPath or workspace root)
       let projectUri = folder.uri;
@@ -248,39 +249,18 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
       }
 
       // default features path, no settings.json required
-      let featuresUri = vscode.Uri.joinPath(projectUri, "features");
-
-      // try/catch with await vwfs.stat(uri) is much too slow atm
+      // Phase 16 / D-16: With singular featuresPath gone, the only paths Branch A handles are:
+      //   (a) plural featuresPaths array (handled above), or
+      //   (b) projectPath set, no plural, default `features/` folder exists.
+      // For (b), use the convention default. The plural ladder produces equivalent
+      // diagnostics for missing-path errors via per-path resolution at src/settings.ts.
+      const featuresUri = vscode.Uri.joinPath(projectUri, "features");
       const hasDefaultFeaturesFolder = fs.existsSync(featuresUri.fsPath);
-
-      if (!featuresPath && !hasDefaultFeaturesFolder) {
+      if (!hasDefaultFeaturesFolder) {
         return false; // probably a workspace with no behave requirements
       }
-
-      // default features folder and nothing specified in settings.json (or default specified)
-      if (hasDefaultFeaturesFolder && !featuresPath) {
-        discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUris: [featuresUri] });
-        return true;
-      }
-
-      featuresUri = vscode.Uri.joinPath(projectUri, featuresPath as string);
-      if (fs.existsSync(featuresUri.fsPath) && vscode.workspace.getWorkspaceFolder(featuresUri) === folder) {
-        discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUris: [featuresUri] });
-        return true;
-      }
-
-      // we don't use config.logger.showWarn here, because we may not have a logger yet
-      const projectPathInfo = projectPath ? ` (relative to projectPath "${projectPath}")` : "";
-      vscode.window.showWarningMessage(
-        `Behave BDD: Features path not found.\n\n` +
-        `Workspace: "${folder.name}"\n` +
-        `Configured featuresPath: "${featuresPath}"${projectPathInfo}\n` +
-        `Full path checked: "${featuresUri.fsPath}"\n\n` +
-        `Behave BDD will ignore this workspace until the path is corrected.`,
-        "OK"
-      );
-
-      return false;
+      discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUris: [featuresUri] });
+      return true;
     }
 
     // === BRANCH B: No explicit settings -- config-file discovery (INTG-01) ===
