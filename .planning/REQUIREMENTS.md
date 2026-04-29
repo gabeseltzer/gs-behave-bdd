@@ -15,7 +15,7 @@ Requirements for Deprecate featuresPath & Notification Suppression milestone.
 - [ ] **DEP-04**: User sees a notification after migration: "Migrated featuresPath → featuresPaths"
 - [ ] **DEP-05**: Internal code that reads `featuresPath` is updated to only read `featuresPaths[]`
 - [ ] **DEP-06**: `testWorkspaceConfig` mock updated to remove `featuresPath` support
-- [ ] **DEP-07**: Unit tests cover migration logic (value present, value absent, already has featuresPaths)
+- [x] **DEP-07**: Unit tests cover migration logic (value present, value absent, already has featuresPaths)
 
 ### Notification Suppression
 
@@ -66,7 +66,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEP-04 | Phase 16 | Pending |
 | DEP-05 | Phase 16 | Pending |
 | DEP-06 | Phase 16 | Pending |
-| DEP-07 | Phase 16 | Pending |
+| DEP-07 | Phase 16 | Complete |
 
 **Coverage:**
 - v1.4.0 requirements: 15 total

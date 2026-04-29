@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-04-29T16:03:23.682Z"
+last_updated: "2026-04-29T16:19:50.411Z"
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 12
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.4.0 started)
 ## Current Position
 
 Phase: 16 (deprecate-featurespath) — EXECUTING
-Plan: 1 of 6
+Plan: 3 of 6
 
 ## Performance Metrics
 
@@ -43,6 +43,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - 1.1.0: `.planning/milestones/1.1.0-ROADMAP.md`
 - 1.2.0: `.planning/milestones/1.2.0-ROADMAP.md`
 - 1.3.0: `.planning/milestones/v1.3.0-ROADMAP.md`
+- [Phase 16]: Plan 02: Extracted migrateScopedSetting<TSrc, TDest> primitive with TransformResult<T> discriminated union; refactored migrateLegacySuppressMultiConfig to delegate (Promise<void> preserved); regression bar GREEN (8/8 Phase 15 sub-cases pass); 7 new direct primitive tests; 683 -> 690 unit pass count
 
 ### v1.4.0 Decisions
 
