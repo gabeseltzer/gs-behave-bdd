@@ -52,7 +52,6 @@ const BASE_CFG = {
   envVarPresets: {},
   activeEnvVarPreset: '',
   projectPath: '',
-  featuresPath: 'features',
   justMyCode: true,
   runParallel: false,
   importStrategy: 'useBundled',

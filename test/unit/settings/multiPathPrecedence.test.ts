@@ -1,5 +1,5 @@
-// Unit tests for D-11 precedence ladder in WorkspaceSettings constructor (TEST-12):
-// featuresPaths (plural) > featuresPath (singular) > convention ["features"]
+// Unit tests for the post-Phase-16 precedence ladder in WorkspaceSettings constructor (TEST-12):
+// featuresPaths (plural, non-empty after whitespace filter) > convention ["features"]
 //
 // Constructs real WorkspaceSettings instances with stubbed external dependencies
 // to verify the precedence chain produces correct plural/singular field values.
@@ -66,7 +66,7 @@ const BASE_CFG = {
 };
 
 function buildSettings(overrides: Record<string, unknown>): WorkspaceSettings {
-  const cfg = makeConfig({ ...BASE_CFG, featuresPath: 'features', ...overrides });
+  const cfg = makeConfig({ ...BASE_CFG, ...overrides });
   return new WorkspaceSettings(MOCK_URI, cfg, makeWinSettings(), mockLogger());
 }
 
@@ -99,13 +99,6 @@ suite('multiPathPrecedence (TEST-12, D-11)', () => {
       assert.ok(s.featuresUris[1].fsPath.includes('features-alt'));
     });
 
-    test('plural wins even when singular is also set', () => {
-      const s = buildSettings({ featuresPaths: ['a', 'b'], featuresPath: 'c' });
-      assert.strictEqual(s.projectRelativeFeaturesPaths.length, 2);
-      assert.strictEqual(s.projectRelativeFeaturesPaths[0], 'a');
-      assert.strictEqual(s.projectRelativeFeaturesPaths[1], 'b');
-    });
-
     test('singular getter returns [0] of plural', () => {
       const s = buildSettings({ featuresPaths: ['first', 'second'] });
       assert.strictEqual(s.projectRelativeFeaturesPath, 'first');
@@ -114,20 +107,10 @@ suite('multiPathPrecedence (TEST-12, D-11)', () => {
   });
 
 
-  suite('Rung 2: singular set (featuresPaths absent)', () => {
+  suite('Convention fallback (was R3 — still last rung)', () => {
 
-    test('singular featuresPath used when featuresPaths is undefined', () => {
-      const s = buildSettings({ featuresPaths: undefined, featuresPath: 'my-tests' });
-      assert.strictEqual(s.projectRelativeFeaturesPaths.length, 1);
-      assert.strictEqual(s.projectRelativeFeaturesPath, 'my-tests');
-    });
-  });
-
-
-  suite('Rung 3: neither set (convention fallback)', () => {
-
-    test('empty featuresPath falls to convention "features"', () => {
-      const s = buildSettings({ featuresPaths: undefined, featuresPath: '' });
+    test('plural undefined falls to convention "features"', () => {
+      const s = buildSettings({ featuresPaths: undefined });
       assert.strictEqual(s.projectRelativeFeaturesPaths.length, 1);
       assert.strictEqual(s.projectRelativeFeaturesPath, 'features');
     });
@@ -136,20 +119,20 @@ suite('multiPathPrecedence (TEST-12, D-11)', () => {
 
   suite('empty-array treated as unset (Pitfall 4)', () => {
 
-    test('featuresPaths=[] falls to singular', () => {
-      const s = buildSettings({ featuresPaths: [], featuresPath: 'custom' });
+    test('featuresPaths=[] falls to convention "features"', () => {
+      const s = buildSettings({ featuresPaths: [] });
       assert.strictEqual(s.projectRelativeFeaturesPaths.length, 1);
-      assert.strictEqual(s.projectRelativeFeaturesPath, 'custom');
+      assert.strictEqual(s.projectRelativeFeaturesPath, 'features');
     });
   });
 
 
-  suite('all-empty plural falls to singular', () => {
+  suite('all-empty plural falls to convention', () => {
 
-    test('featuresPaths with only whitespace entries falls to singular', () => {
-      const s = buildSettings({ featuresPaths: ['', '  '], featuresPath: 'fallback' });
+    test('featuresPaths with only whitespace entries falls to convention "features"', () => {
+      const s = buildSettings({ featuresPaths: ['', '  '] });
       assert.strictEqual(s.projectRelativeFeaturesPaths.length, 1);
-      assert.strictEqual(s.projectRelativeFeaturesPath, 'fallback');
+      assert.strictEqual(s.projectRelativeFeaturesPath, 'features');
     });
   });
 
@@ -198,63 +181,10 @@ suite('multiPathPrecedence (TEST-12, D-11)', () => {
 
 
 
-  suite('both-set info log (D-06..D-09)', () => {
-
-    test('logs info when both featuresPath and featuresPaths are explicitly set', () => {
-      const logger = mockLogger();
-      const cfg = makeConfig({ ...BASE_CFG, featuresPath: 'custom', featuresPaths: ['a', 'b'] });
-      new WorkspaceSettings(MOCK_URI, cfg, makeWinSettings(), logger);
-      const logInfoStub = logger.logInfo as sinon.SinonStub;
-      assert.ok(
-        logInfoStub.calledWithMatch(
-          sinon.match((msg: string) => msg.includes('Both featuresPath and featuresPaths are set')),
-          MOCK_URI
-        ),
-        'expected logInfo to be called with both-set message'
-      );
-    });
-
-    test('does NOT log when only featuresPaths is set (singular not explicit)', () => {
-      const logger = mockLogger();
-      const values: Record<string, unknown> = { ...BASE_CFG, featuresPaths: ['a', 'b'], featuresPath: 'features' };
-      const cfg = {
-        get: (key: string) => values[key],
-        has: () => false,
-        inspect: (key: string) => ({
-          key,
-          defaultValue: key === 'featuresPath' ? 'features' : undefined,
-          globalValue: undefined,
-          workspaceValue: key === 'featuresPath' ? undefined : values[key],
-          workspaceFolderValue: undefined,
-        }),
-        update: () => Promise.resolve(),
-      };
-      new WorkspaceSettings(MOCK_URI, cfg as any, makeWinSettings(), logger); // eslint-disable-line @typescript-eslint/no-explicit-any
-      const logInfoStub = logger.logInfo as sinon.SinonStub;
-      const bothSetCalls = logInfoStub.getCalls().filter(
-        (c: sinon.SinonSpyCall) => typeof c.args[0] === 'string' && c.args[0].includes('Both featuresPath and featuresPaths are set')
-      );
-      assert.strictEqual(bothSetCalls.length, 0, 'should not log both-set message when singular is not explicit');
-    });
-
-    test('does NOT log when only featuresPath is set (no plural)', () => {
-      const logger = mockLogger();
-      const cfg = makeConfig({ ...BASE_CFG, featuresPath: 'custom', featuresPaths: undefined });
-      new WorkspaceSettings(MOCK_URI, cfg, makeWinSettings(), logger);
-      const logInfoStub = logger.logInfo as sinon.SinonStub;
-      const bothSetCalls = logInfoStub.getCalls().filter(
-        (c: sinon.SinonSpyCall) => typeof c.args[0] === 'string' && c.args[0].includes('Both featuresPath and featuresPaths are set')
-      );
-      assert.strictEqual(bothSetCalls.length, 0, 'should not log both-set message when plural is absent');
-    });
-  });
-
-
   suite('TestWorkspaceConfig featuresPaths default (Pitfall 5)', () => {
     test('get("featuresPaths") returns [] when no featuresPaths passed', () => {
       const tc = new TestWorkspaceConfig({
         envVarOverrides: {},
-        featuresPath: 'features',
         justMyCode: true,
         multiRootRunWorkspacesInParallel: true,
         runParallel: false,
