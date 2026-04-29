@@ -103,13 +103,13 @@ Plans:
 **Goal:** Remove `featuresPath` from schema, auto-migrate to `featuresPaths[]` with user notification
 
 **Requirements:** [DEP-01, DEP-02, DEP-03, DEP-04, DEP-05, DEP-06, DEP-07]
-**Plans:** 6 plans
+**Plans:** 1/6 plans executed
 **Depends on:** Phase 15 (migration notification should use suppression infrastructure)
 
 Plans:
 
 **Wave 1**
-- [ ] 16-01-PLAN.md — Pre-flight verifications (publisher, A1 probe, baseline pass count) + export makePerKeyScopedConfig (DEP-07 prep)
+- [x] 16-01-PLAN.md — Pre-flight verifications (publisher, A1 probe, baseline pass count) + export makePerKeyScopedConfig (DEP-07 prep)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 16-02-PLAN.md — Extract D-MOD primitive `migrateScopedSetting<TSrc, TDest>` + refactor Phase 15 helper to call it + 7 direct primitive tests (DEP-07; D-MOD regression bar: 8 Phase 15 sub-cases pass)
