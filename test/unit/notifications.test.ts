@@ -8,6 +8,7 @@ import {
   suppressNotification,
   showSuppressibleNotification,
   migrateLegacySuppressMultiConfig,
+  migrateScopedSetting,
 } from '../../src/notifications';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -384,6 +385,169 @@ suite('Phase 15 — notifications: migrateLegacySuppressMultiConfig (NOTIF-06)',
         logMsg.includes('suppressedNotifications'),
       'log message must mention the migration keys',
     );
+  });
+});
+
+suite('Phase 16 — notifications: migrateScopedSetting (D-MOD primitive)', () => {
+  let updateSpy: sinon.SinonSpy;
+  let logInfoSpy: sinon.SinonSpy;
+
+  setup(() => {
+    updateSpy = sinon.spy(() => Promise.resolve());
+    logInfoSpy = sinon.spy();
+    sinon.stub(configModule.config, 'logger').value({ logInfo: logInfoSpy });
+  });
+  teardown(() => sinon.restore());
+
+  test("kind:'write' — writes dest then removes source, returns true", async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      legacyKey:    { workspaceFolderValue: 'someValue' },
+      newArrayKey:  {},
+    }, updateSpy));
+
+    const result = await migrateScopedSetting<string, string[]>({
+      namespace: 'gs-behave-bdd',
+      sourceKey: 'legacyKey',
+      destKey:   'newArrayKey',
+      wkspUri: MOCK_URI,
+      transform: (src, _existing) => ({ kind: 'write', value: [src] }),
+    });
+
+    assert.strictEqual(result, true, 'Promise<boolean> must be true on successful write');
+    assert.strictEqual(updateSpy.callCount, 2, 'one dest write + one source removal');
+    assert.deepStrictEqual(updateSpy.firstCall.args, [
+      'newArrayKey', ['someValue'], vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+    assert.deepStrictEqual(updateSpy.secondCall.args, [
+      'legacyKey', undefined, vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+  });
+
+  test("kind:'skipDest' removeSource:true — removes source only, returns true (Phase 16 blank-string)", async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      legacyKey:   { workspaceFolderValue: '' },
+      newArrayKey: {},
+    }, updateSpy));
+
+    const result = await migrateScopedSetting<string, string[]>({
+      namespace: 'gs-behave-bdd',
+      sourceKey: 'legacyKey',
+      destKey:   'newArrayKey',
+      wkspUri: MOCK_URI,
+      transform: () => ({ kind: 'skipDest', removeSource: true }),
+    });
+
+    assert.strictEqual(result, true);
+    assert.strictEqual(updateSpy.callCount, 1, 'only the source removal call');
+    assert.deepStrictEqual(updateSpy.firstCall.args, [
+      'legacyKey', undefined, vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+  });
+
+  test("kind:'skipDest' removeSource:false — no updates, returns false (Phase 15 legacyValue!==true contract)", async () => {
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      legacyKey:   { workspaceFolderValue: false },
+      newArrayKey: {},
+    }, updateSpy));
+
+    const result = await migrateScopedSetting<boolean, string[]>({
+      namespace: 'gs-behave-bdd',
+      sourceKey: 'legacyKey',
+      destKey:   'newArrayKey',
+      wkspUri: MOCK_URI,
+      transform: () => ({ kind: 'skipDest', removeSource: false }),
+    });
+
+    assert.strictEqual(result, false);
+    assert.strictEqual(updateSpy.callCount, 0, 'NEITHER dest write NOR source removal');
+  });
+
+  test('cross-namespace write — source from behave-vsc, dest to gs-behave-bdd, both at same scope', async () => {
+    const stub = sinon.stub(vscode.workspace, 'getConfiguration');
+    stub.withArgs('behave-vsc', sinon.match.any).returns(makePerKeyScopedConfig({
+      legacyKey: { workspaceValue: 'forked' },
+    }, updateSpy));
+    stub.withArgs('gs-behave-bdd', sinon.match.any).returns(makePerKeyScopedConfig({
+      newArrayKey: {},
+    }, updateSpy));
+
+    const result = await migrateScopedSetting<string, string[]>({
+      namespace: 'behave-vsc',
+      sourceKey: 'legacyKey',
+      destNamespace: 'gs-behave-bdd',
+      destKey: 'newArrayKey',
+      wkspUri: MOCK_URI,
+      transform: (src) => ({ kind: 'write', value: [src] }),
+    });
+
+    assert.strictEqual(result, true);
+    // Two updates total: dest at gs-behave-bdd + source removal at behave-vsc.
+    assert.strictEqual(updateSpy.callCount, 2);
+    // Both at the SAME ConfigurationTarget (Workspace).
+    assert.strictEqual(updateSpy.firstCall.args[2], vscode.ConfigurationTarget.Workspace);
+    assert.strictEqual(updateSpy.secondCall.args[2], vscode.ConfigurationTarget.Workspace);
+  });
+
+  test('transform receives same-scope dest value (Pitfall 2 — never merged)', async () => {
+    let received: string[] | undefined = ['SHOULD_BE_OVERWRITTEN'];
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      legacyKey:   { workspaceFolderValue: 'x' },
+      newArrayKey: { globalValue: ['g'], workspaceFolderValue: ['wf'] },
+    }, updateSpy));
+
+    await migrateScopedSetting<string, string[]>({
+      namespace: 'gs-behave-bdd',
+      sourceKey: 'legacyKey',
+      destKey:   'newArrayKey',
+      wkspUri: MOCK_URI,
+      transform: (_src, existing) => {
+        received = existing;
+        return { kind: 'write', value: existing ?? [] };
+      },
+    });
+
+    assert.deepStrictEqual(received, ['wf'], 'must read same-scope dest value, NOT global, NOT merged');
+  });
+
+  test('no source value at any scope — no-op, returns false, transform never called', async () => {
+    const transformSpy = sinon.spy(() => ({ kind: 'write' as const, value: [] as string[] }));
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      legacyKey:   {},        // no scope set
+      newArrayKey: {},
+    }, updateSpy));
+
+    const result = await migrateScopedSetting<string, string[]>({
+      namespace: 'gs-behave-bdd',
+      sourceKey: 'legacyKey',
+      destKey:   'newArrayKey',
+      wkspUri: MOCK_URI,
+      transform: transformSpy,
+    });
+
+    assert.strictEqual(result, false);
+    assert.strictEqual(updateSpy.callCount, 0);
+    assert.strictEqual(transformSpy.callCount, 0, 'transform must not be invoked when no scope set');
+  });
+
+  test('update rejection — logs via logInfo, returns false, does NOT throw (D-05 carryforward)', async () => {
+    const rejectingUpdate = sinon.spy(() => Promise.reject(new Error('read-only')));
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(makePerKeyScopedConfig({
+      legacyKey:   { workspaceFolderValue: 'x' },
+      newArrayKey: {},
+    }, rejectingUpdate));
+
+    let result = true;   // sentinel; should be overwritten
+    await assert.doesNotReject(async () => {
+      result = await migrateScopedSetting<string, string[]>({
+        namespace: 'gs-behave-bdd',
+        sourceKey: 'legacyKey',
+        destKey:   'newArrayKey',
+        wkspUri: MOCK_URI,
+        transform: (src) => ({ kind: 'write', value: [src] }),
+      });
+    });
+    assert.strictEqual(result, false);
+    assert.ok(logInfoSpy.called, 'must log via config.logger.logInfo on update rejection');
   });
 });
 
