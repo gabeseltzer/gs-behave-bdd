@@ -10,8 +10,8 @@ Requirements for Deprecate featuresPath & Notification Suppression milestone.
 ### Deprecate featuresPath
 
 - [ ] **DEP-01**: `featuresPath` setting removed from package.json schema
-- [ ] **DEP-02**: On activation, if `featuresPath` has an explicit value at any scope, auto-migrate it to `featuresPaths[]` and remove the old key
-- [ ] **DEP-03**: Migration writes to the same scope level where `featuresPath` was found (workspaceFolder / workspace / global)
+- [x] **DEP-02**: On activation, if `featuresPath` has an explicit value at any scope, auto-migrate it to `featuresPaths[]` and remove the old key
+- [x] **DEP-03**: Migration writes to the same scope level where `featuresPath` was found (workspaceFolder / workspace / global)
 - [ ] **DEP-04**: User sees a notification after migration: "Migrated featuresPath → featuresPaths"
 - [ ] **DEP-05**: Internal code that reads `featuresPath` is updated to only read `featuresPaths[]`
 - [ ] **DEP-06**: `testWorkspaceConfig` mock updated to remove `featuresPath` support
@@ -61,8 +61,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NOTIF-07 | Phase 15 | ✓ Verified |
 | NOTIF-08 | Phase 15 | ✓ Verified |
 | DEP-01 | Phase 16 | Pending |
-| DEP-02 | Phase 16 | Pending |
-| DEP-03 | Phase 16 | Pending |
+| DEP-02 | Phase 16 | ✓ Helper shipped (Plan 03); activation wiring lands in Plan 04 |
+| DEP-03 | Phase 16 | ✓ Helper shipped (Plan 03); activation wiring lands in Plan 04 |
 | DEP-04 | Phase 16 | Pending |
 | DEP-05 | Phase 16 | Pending |
 | DEP-06 | Phase 16 | Pending |
