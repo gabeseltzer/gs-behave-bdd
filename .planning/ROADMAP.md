@@ -103,7 +103,7 @@ Plans:
 **Goal:** Remove `featuresPath` from schema, auto-migrate to `featuresPaths[]` with user notification
 
 **Requirements:** [DEP-01, DEP-02, DEP-03, DEP-04, DEP-05, DEP-06, DEP-07]
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 **Depends on:** Phase 15 (migration notification should use suppression infrastructure)
 
 Plans:
@@ -122,7 +122,7 @@ Plans:
 - [x] 16-05-PLAN.md — Source-tree singular cleanup: package.json schema removal + settings.ts ladder collapse + common.ts discovery simplification + testWorkspaceConfig.ts mock surgery (DEP-01, DEP-05, DEP-06; D-15..D-17)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 16-06-PLAN.md — Test fixture cascade (6 test files) + final phase-level goal-backward verification (DEP-05, DEP-06, DEP-07)
+- [x] 16-06-PLAN.md — Test fixture cascade (6 test files) + final phase-level goal-backward verification (DEP-05, DEP-06, DEP-07)
 
 **Cross-cutting constraints:**
 - Migration runs eagerly in `activate()` BEFORE the multi-config notification migration (D-18: data shape first, UX cleanup second), and BEFORE the post-loop featuresPath notification fires
