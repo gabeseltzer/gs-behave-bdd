@@ -35,19 +35,13 @@
 					"markdownDescription": "*workspace-relative* path to the root of your behave project (working directory for behave). **Override only:** Leave blank to use auto-discovery from `behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, or `pyproject.toml`. Set this only if auto-discovery does not detect the correct project root. Example: `myproject/backend`.",
 					"default": ""
 				},
-				"gs-behave-bdd.featuresPath": {
-					"scope": "resource",
-					"type": "string",
-					"markdownDescription": "*project-relative* path to the features subfolder. **Override only:** Leave blank to use the path from your behave config file, or `features/` if no config file is found. Set this only if auto-discovery resolves the wrong features directory. This path is relative to `projectPath` (or workspace root if `projectPath` is not set). Example: `my_behave_tests`. For multiple feature paths, use `featuresPaths` (plural) instead.",
-					"default": "features"
-				},
 				"gs-behave-bdd.featuresPaths": {
 					"scope": "resource",
 					"type": "array",
 					"items": {
 						"type": "string"
 					},
-					"markdownDescription": "*project-relative* paths to multiple features subfolders. **Override only:** Leave blank to use the paths from your behave config file, or `features/` if no config file is found. Example: `[\"features\", \"features-alt\"]`. When both `featuresPath` and `featuresPaths` are set, this plural value takes precedence.",
+					"markdownDescription": "*project-relative* paths to features subfolders. **Override only:** Leave blank to use the paths from your behave config file, or `features/` if no config file is found. Example: `[\"features\", \"features-alt\"]`.",
 					"default": []
 				},
 				"gs-behave-bdd.justMyCode": {
