@@ -39,7 +39,7 @@ import {
 } from './discovery/projectList';
 import { buildQuickPickItems, computeStatusBarState, ProjectQuickPickItem } from './discovery/selectProjectHelpers';
 import { JunitWatcher } from './watchers/junitWatcher';
-import { migrateLegacySuppressMultiConfig, showSuppressibleNotification } from './notifications';
+import { migrateLegacySuppressMultiConfig, migrateLegacyFeaturesPath, showSuppressibleNotification } from './notifications';
 
 
 const testData = new WeakMap<vscode.TestItem, BehaveTestData>();
@@ -292,17 +292,46 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       }
     });
 
-    // Phase 15 / NOTIF-06: migrate legacy boolean suppression key → suppressedNotifications array.
-    // Must complete BEFORE updateDiscoveryUX so notifications honor the migrated suppression state (Pitfall 3).
+    // Phase 15 / NOTIF-06 + Phase 16 / DEP-02..DEP-04: per-workspace settings migrations.
+    // D-18 ordering:
+    //   (1) featuresPath migration FIRST (data shape — populates featuresPaths array)
+    //   (2) suppressMultiConfig migration SECOND (UX cleanup — populates suppressedNotifications)
+    //   (3) reloadSettings ONCE (sync void — Pitfall 8: do NOT await)
+    //   (4) Post-loop notification fires for each workspace where featuresPath migration returned true.
+    //       Notification fires AFTER reloadSettings so isSuppressed() reads current cache (Pitfall 4).
+    // Must complete BEFORE updateDiscoveryUX so the multi-config notification (Phase 15) and
+    // the featuresPath migration notification (Phase 16) honor the migrated suppression state.
+    const pendingFeaturesPathNotifs: vscode.Uri[] = [];
     for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
+      let migrated = false;
       try {
-        await migrateLegacySuppressMultiConfig(wkspUri); // D-05; D-07 ensures it never throws
-        config.reloadSettings(wkspUri); // Pitfall 4: refresh WorkspaceSettings cache
+        migrated = await migrateLegacyFeaturesPath(wkspUri);     // D-18 step 1: data shape; D-05 ensures no throw
+        await migrateLegacySuppressMultiConfig(wkspUri);          // D-18 step 2: UX cleanup; D-07 ensures no throw
+        config.reloadSettings(wkspUri);                           // D-18 step 3: refresh cache (Pitfall 8 — sync, no await)
       } catch (e) {
-        // Defense-in-depth — D-07 prevents throws from the migration helper, but wrap to ensure
-        // activation continues if reloadSettings ever throws.
-        config.logger.logInfo(`Phase 15 migration error: ${e}`, wkspUri);
+        // Defense-in-depth — D-05/D-07 prevent throws from the helpers, but wrap so activation
+        // continues if reloadSettings ever throws.
+        config.logger.logInfo(`Phase 15/16 migration error: ${e}`, wkspUri);
       }
+      if (migrated) pendingFeaturesPathNotifs.push(wkspUri);
+    }
+
+    // Phase 16 / DEP-04: fire migration notification per migrated workspace folder (D-10, D-11).
+    // Fire-and-forget per the existing multi-config notification pattern (extension.ts:165-177);
+    // showSuppressibleNotification handles "Don't Show Again" internally (D-12).
+    for (const wkspUri of pendingFeaturesPathNotifs) {
+      showSuppressibleNotification(
+        "featuresPathMigration",                                  // D-13: suppression key
+        "Migrated `featuresPath` → `featuresPaths`. The deprecated `featuresPath` setting has been moved to the new `featuresPaths` array.",
+        ["Open Settings"],                                        // D-12: single user-visible button
+        wkspUri,
+      ).then(action => {
+        if (action === "Open Settings") {
+          // Publisher confirmed in 16-01-SUMMARY: package.json:280 → "publisher": "gabeseltzer".
+          vscode.commands.executeCommand("workbench.action.openSettings", "@ext:gabeseltzer.gs-behave-bdd");
+        }
+        // "Don't Show Again" intercepted internally by showSuppressibleNotification — never returned.
+      });
     }
 
     // Phase 3: Surface discovery results (UX-01 through UX-05)
@@ -933,7 +962,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         if (!testCfg)
           config.logger.clearAllWksps();
 
-        // changing featuresPath in settings.json/*.vscode-workspace to a valid path, or adding/removing/renaming workspaces
+        // changing featuresPaths in settings.json/*.vscode-workspace to a valid path, or adding/removing/renaming workspaces
         // will not only change the set of workspaces we are watching, but also the output channels
         config.logger.syncChannelsToWorkspaceFolders();
 
@@ -999,7 +1028,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           configWatchers.forEach(w => context.subscriptions.push(w));
         }
 
-        // configuration has now changed, e.g. featuresPath, so we need to reparse files
+        // configuration has now changed, e.g. featuresPaths, so we need to reparse files
 
         // (in the case of a testConfig insertion we just reparse the supplied workspace to avoid issues with parallel workspace integration test runs)
         if (testCfg) {
