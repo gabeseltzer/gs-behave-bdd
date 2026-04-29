@@ -9,6 +9,7 @@ import {
   showSuppressibleNotification,
   migrateLegacySuppressMultiConfig,
   migrateScopedSetting,
+  migrateLegacyFeaturesPath,
 } from '../../src/notifications';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -589,5 +590,265 @@ suite('Phase 15 — extension.ts activation ordering (Pitfall 3)', () => {
       !src.includes('suppressMultiConfigNotification'),
       'extension.ts must not reference the legacy key after Plan 05',
     );
+  });
+});
+
+suite('Phase 16 — notifications: migrateLegacyFeaturesPath (DEP-02, DEP-03)', () => {
+  let updateSpy: sinon.SinonSpy;
+  let logInfoSpy: sinon.SinonSpy;
+
+  setup(() => {
+    updateSpy = sinon.spy(() => Promise.resolve());
+    logInfoSpy = sinon.spy();
+    sinon.stub(configModule.config, 'logger').value({ logInfo: logInfoSpy });
+  });
+  teardown(() => sinon.restore());
+
+  // Helper: stub getConfiguration with separate per-namespace per-key configs.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function stubBothNamespaces(gsbb: any, bvsc: any) {
+    const stub = sinon.stub(vscode.workspace, 'getConfiguration');
+    stub.withArgs('gs-behave-bdd', sinon.match.any).returns(gsbb);
+    stub.withArgs('behave-vsc', sinon.match.any).returns(bvsc);
+    return stub;
+  }
+
+  test('(case a) gs-behave-bdd singular at WorkspaceFolder writes plural + removes legacy (D-01, D-03)', async () => {
+    stubBothNamespaces(
+      makePerKeyScopedConfig({
+        featuresPath:  { workspaceFolderValue: 'my-tests' },
+        featuresPaths: {},
+      }, updateSpy),
+      makePerKeyScopedConfig({ featuresPath: {}, featuresPaths: {} }, updateSpy),
+    );
+
+    const result = await migrateLegacyFeaturesPath(MOCK_URI);
+
+    assert.strictEqual(result, true, 'D-01: returns true when at least one scope migrated');
+    assert.strictEqual(updateSpy.callCount, 2, 'one dest write + one source removal');
+    assert.deepStrictEqual(updateSpy.firstCall.args, [
+      'featuresPaths', ['my-tests'], vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+    assert.deepStrictEqual(updateSpy.secondCall.args, [
+      'featuresPath', undefined, vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+  });
+
+  test('(case b) gs-behave-bdd singular at Workspace scope (D-01, D-03)', async () => {
+    stubBothNamespaces(
+      makePerKeyScopedConfig({
+        featuresPath:  { workspaceValue: 'ws-tests' },
+        featuresPaths: {},
+      }, updateSpy),
+      makePerKeyScopedConfig({ featuresPath: {}, featuresPaths: {} }, updateSpy),
+    );
+
+    const result = await migrateLegacyFeaturesPath(MOCK_URI);
+
+    assert.strictEqual(result, true);
+    assert.strictEqual(updateSpy.callCount, 2);
+    assert.strictEqual(updateSpy.firstCall.args[2], vscode.ConfigurationTarget.Workspace);
+    assert.strictEqual(updateSpy.secondCall.args[2], vscode.ConfigurationTarget.Workspace);
+    assert.deepStrictEqual(updateSpy.firstCall.args[1], ['ws-tests']);
+  });
+
+  test('(case c) gs-behave-bdd singular at Global scope (D-01, D-03)', async () => {
+    stubBothNamespaces(
+      makePerKeyScopedConfig({
+        featuresPath:  { globalValue: 'global-tests' },
+        featuresPaths: {},
+      }, updateSpy),
+      makePerKeyScopedConfig({ featuresPath: {}, featuresPaths: {} }, updateSpy),
+    );
+
+    const result = await migrateLegacyFeaturesPath(MOCK_URI);
+
+    assert.strictEqual(result, true);
+    assert.strictEqual(updateSpy.callCount, 2);
+    assert.strictEqual(updateSpy.firstCall.args[2], vscode.ConfigurationTarget.Global);
+    assert.strictEqual(updateSpy.secondCall.args[2], vscode.ConfigurationTarget.Global);
+  });
+
+  test('(case d) behave-vsc singular migrates to gs-behave-bdd.featuresPaths (D-02)', async () => {
+    stubBothNamespaces(
+      makePerKeyScopedConfig({ featuresPath: {}, featuresPaths: {} }, updateSpy),
+      makePerKeyScopedConfig({
+        featuresPath:  { globalValue: 'forked' },
+        featuresPaths: {},
+      }, updateSpy),
+    );
+
+    const result = await migrateLegacyFeaturesPath(MOCK_URI);
+
+    assert.strictEqual(result, true);
+    assert.strictEqual(updateSpy.callCount, 2);
+    // Dest write goes to featuresPaths (NOT featuresPath); source removal removes featuresPath.
+    assert.deepStrictEqual(updateSpy.firstCall.args, [
+      'featuresPaths', ['forked'], vscode.ConfigurationTarget.Global,
+    ]);
+    assert.deepStrictEqual(updateSpy.secondCall.args, [
+      'featuresPath', undefined, vscode.ConfigurationTarget.Global,
+    ]);
+    // D-02 invariant: dest write key is 'featuresPaths'; source removal key is 'featuresPath'.
+    // Since both namespace stubs share updateSpy, the (key, scope) tuple confirms the dest
+    // landed in gs-behave-bdd's config (only that one was passed 'featuresPaths' to write).
+    const allKeys = updateSpy.getCalls().map(c => c.args[0]);
+    assert.deepStrictEqual(allKeys, ['featuresPaths', 'featuresPath']);
+  });
+
+  test('(case e1) singular AND plural at same scope: merge (D-06)', async () => {
+    stubBothNamespaces(
+      makePerKeyScopedConfig({
+        featuresPath:  { workspaceValue: 'alt' },
+        featuresPaths: { workspaceValue: ['main'] },
+      }, updateSpy),
+      makePerKeyScopedConfig({ featuresPath: {}, featuresPaths: {} }, updateSpy),
+    );
+
+    const result = await migrateLegacyFeaturesPath(MOCK_URI);
+
+    assert.strictEqual(result, true);
+    assert.strictEqual(updateSpy.callCount, 2);
+    assert.deepStrictEqual(updateSpy.firstCall.args, [
+      'featuresPaths', ['main', 'alt'], vscode.ConfigurationTarget.Workspace,
+    ]);
+    assert.deepStrictEqual(updateSpy.secondCall.args, [
+      'featuresPath', undefined, vscode.ConfigurationTarget.Workspace,
+    ]);
+  });
+
+  test('(case e2) singular "/main/" dedupes against existing ["main"] post-normalization (D-07)', async () => {
+    stubBothNamespaces(
+      makePerKeyScopedConfig({
+        featuresPath:  { workspaceFolderValue: '/main/' },
+        featuresPaths: { workspaceFolderValue: ['main'] },
+      }, updateSpy),
+      makePerKeyScopedConfig({ featuresPath: {}, featuresPaths: {} }, updateSpy),
+    );
+
+    const result = await migrateLegacyFeaturesPath(MOCK_URI);
+
+    assert.strictEqual(result, true);
+    assert.strictEqual(updateSpy.callCount, 2, 'still writes (unchanged) + removes legacy');
+    // Pitfall 9: byte-identical normalize regex from src/settings.ts:204 must not double-append.
+    assert.deepStrictEqual(updateSpy.firstCall.args[1], ['main'], 'dedup: array unchanged');
+    assert.deepStrictEqual(updateSpy.secondCall.args, [
+      'featuresPath', undefined, vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+  });
+
+  test('(case f) cross-scope independence: gs-behave-bdd at WF + behave-vsc at WS migrate independently (D-04)', async () => {
+    stubBothNamespaces(
+      makePerKeyScopedConfig({
+        featuresPath:  { workspaceFolderValue: 'main-pkg' },
+        featuresPaths: {},
+      }, updateSpy),
+      makePerKeyScopedConfig({
+        featuresPath:  { workspaceValue: 'fork-pkg' },
+        featuresPaths: {},
+      }, updateSpy),
+    );
+
+    const result = await migrateLegacyFeaturesPath(MOCK_URI);
+
+    assert.strictEqual(result, true);
+    assert.strictEqual(updateSpy.callCount, 4, '2 dest writes + 2 source removals across two scopes');
+    // Count target scopes — exactly 2 at WorkspaceFolder, exactly 2 at Workspace.
+    const wfCount = updateSpy.getCalls().filter(c =>
+      c.args[2] === vscode.ConfigurationTarget.WorkspaceFolder
+    ).length;
+    const wsCount = updateSpy.getCalls().filter(c =>
+      c.args[2] === vscode.ConfigurationTarget.Workspace
+    ).length;
+    assert.strictEqual(wfCount, 2, 'gs-behave-bdd at WorkspaceFolder: dest + source');
+    assert.strictEqual(wsCount, 2, 'behave-vsc at Workspace: dest + source');
+  });
+
+  test('(case g1) empty-string singular: skip dest write, remove legacy (D-08)', async () => {
+    stubBothNamespaces(
+      makePerKeyScopedConfig({
+        featuresPath:  { workspaceFolderValue: '' },
+        featuresPaths: {},
+      }, updateSpy),
+      makePerKeyScopedConfig({ featuresPath: {}, featuresPaths: {} }, updateSpy),
+    );
+
+    const result = await migrateLegacyFeaturesPath(MOCK_URI);
+
+    assert.strictEqual(result, true);
+    assert.strictEqual(updateSpy.callCount, 1, 'ONLY the source removal');
+    assert.deepStrictEqual(updateSpy.firstCall.args, [
+      'featuresPath', undefined, vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+  });
+
+  test('(case g2) whitespace-only singular: skip dest write, remove legacy (D-08)', async () => {
+    stubBothNamespaces(
+      makePerKeyScopedConfig({
+        featuresPath:  { workspaceFolderValue: '   ' },
+        featuresPaths: {},
+      }, updateSpy),
+      makePerKeyScopedConfig({ featuresPath: {}, featuresPaths: {} }, updateSpy),
+    );
+
+    const result = await migrateLegacyFeaturesPath(MOCK_URI);
+
+    assert.strictEqual(result, true);
+    assert.strictEqual(updateSpy.callCount, 1);
+    assert.deepStrictEqual(updateSpy.firstCall.args, [
+      'featuresPath', undefined, vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+  });
+
+  test('(case h) "." migrates literally — downstream guard handles fatal error (D-09)', async () => {
+    // D-09: "." migrates literally — src/settings.ts:232-234 handles the fatal error downstream.
+    stubBothNamespaces(
+      makePerKeyScopedConfig({
+        featuresPath:  { workspaceFolderValue: '.' },
+        featuresPaths: {},
+      }, updateSpy),
+      makePerKeyScopedConfig({ featuresPath: {}, featuresPaths: {} }, updateSpy),
+    );
+
+    const result = await migrateLegacyFeaturesPath(MOCK_URI);
+
+    assert.strictEqual(result, true);
+    assert.strictEqual(updateSpy.callCount, 2);
+    assert.deepStrictEqual(updateSpy.firstCall.args, [
+      'featuresPaths', ['.'], vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+    assert.deepStrictEqual(updateSpy.secondCall.args, [
+      'featuresPath', undefined, vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+  });
+
+  test('(case i) no legacy value at any scope in either namespace — no-op returns false (D-01)', async () => {
+    stubBothNamespaces(
+      makePerKeyScopedConfig({ featuresPath: {}, featuresPaths: {} }, updateSpy),
+      makePerKeyScopedConfig({ featuresPath: {}, featuresPaths: {} }, updateSpy),
+    );
+
+    const result = await migrateLegacyFeaturesPath(MOCK_URI);
+
+    assert.strictEqual(result, false, 'D-01: no migration → false');
+    assert.strictEqual(updateSpy.callCount, 0, 'no update calls at all');
+  });
+
+  test('(case j) update rejection: logs via logInfo, does NOT throw, returns false (D-05)', async () => {
+    const rejectingUpdate = sinon.spy(() => Promise.reject(new Error('read-only')));
+    stubBothNamespaces(
+      makePerKeyScopedConfig({
+        featuresPath:  { workspaceFolderValue: 'x' },
+        featuresPaths: {},
+      }, rejectingUpdate),
+      makePerKeyScopedConfig({ featuresPath: {}, featuresPaths: {} }, rejectingUpdate),
+    );
+
+    let result = true;   // sentinel
+    await assert.doesNotReject(async () => {
+      result = await migrateLegacyFeaturesPath(MOCK_URI);
+    });
+    assert.strictEqual(result, false, 'no scope succeeded → false');
+    assert.ok(logInfoSpy.called, 'D-05: must log via config.logger.logInfo on rejection');
   });
 });
