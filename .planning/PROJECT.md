@@ -79,6 +79,12 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 - ✓ Auto-select first discovered config when no prior selection — 1.3.0 (DISC-03)
 - ✓ `projectPath` manual override = single project mode, no switching UI — 1.3.0 (DISC-04)
 - ✓ Config watcher updates project list on disk changes — 1.3.0 (DISC-05)
+- ✓ `featuresPath` removed from package.json settings schema (DEP-01) — 1.4.0
+- ✓ Auto-migration of `featuresPath` → `featuresPaths` on per-workspace activation (DEP-02, DEP-04) — 1.4.0
+- ✓ `migrateLegacyFeaturesPath(wkspUri)` migration helper with same-scope inspect/write/clear semantics (DEP-03) — 1.4.0
+- ✓ Reusable `migrateScopedSetting<TSrc, TDest>` primitive with `TransformResult<T>` discriminated union (DEP-07) — 1.4.0
+- ✓ Phase 15 `migrateLegacySuppressMultiConfig` refactored to delegate to the primitive (DEP-07) — 1.4.0
+- ✓ Singular `featuresPath` reads removed from `src/settings.ts`, `src/common.ts`, and `TestWorkspaceConfig` mock (DEP-05, DEP-06) — 1.4.0
 - ✓ `Behave BDD: Select Project` quick-pick command — 1.3.0 (UX-01)
 - ✓ Status bar showing active project label — 1.3.0 (UX-02)
 - ✓ Clicking status bar opens quick-pick — 1.3.0 (UX-03)
