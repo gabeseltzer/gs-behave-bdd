@@ -103,7 +103,7 @@ Plans:
 **Goal:** Remove `featuresPath` from schema, auto-migrate to `featuresPaths[]` with user notification
 
 **Requirements:** [DEP-01, DEP-02, DEP-03, DEP-04, DEP-05, DEP-06, DEP-07]
-**Plans:** 2/6 plans executed
+**Plans:** 3/6 plans executed
 **Depends on:** Phase 15 (migration notification should use suppression infrastructure)
 
 Plans:
@@ -115,7 +115,7 @@ Plans:
 - [x] 16-02-PLAN.md — Extract D-MOD primitive `migrateScopedSetting<TSrc, TDest>` + refactor Phase 15 helper to call it + 7 direct primitive tests (DEP-07; D-MOD regression bar: 8 Phase 15 sub-cases pass)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 16-03-PLAN.md — Implement `migrateLegacyFeaturesPath` wrapper (D-01..D-09) + 10 unit tests covering cases (a)-(j) (DEP-02, DEP-03, DEP-07)
+- [x] 16-03-PLAN.md — Implement `migrateLegacyFeaturesPath` wrapper (D-01..D-09) + 12 unit tests covering cases (a)-(j) (DEP-02, DEP-03, DEP-07)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 16-04-PLAN.md — Wire activation loop + post-loop notification (D-18, D-12, D-13) + 4 structural tests (DEP-02, DEP-04)
