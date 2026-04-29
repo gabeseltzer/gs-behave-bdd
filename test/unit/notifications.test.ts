@@ -852,3 +852,53 @@ suite('Phase 16 — notifications: migrateLegacyFeaturesPath (DEP-02, DEP-03)', 
     assert.ok(logInfoSpy.called, 'D-05: must log via config.logger.logInfo on rejection');
   });
 });
+
+suite('Phase 16 — activation order and notification structural tests (D-18, D-13, D-12, Pitfall 8)', () => {
+  // Mirrors Phase 15 structural-tests pattern at L555-L595 (readExtensionSrc with fallback).
+  function readExtensionSrc(): string {
+    let extPath = path.resolve(__dirname, '../../../../src/extension.ts');
+    if (!fs.existsSync(extPath)) {
+      extPath = path.resolve(__dirname, '../../../src/extension.ts');
+    }
+    return fs.readFileSync(extPath, 'utf8');
+  }
+
+  test('(D-18) activate(): migrateLegacyFeaturesPath precedes migrateLegacySuppressMultiConfig', () => {
+    const src = readExtensionSrc();
+    const featuresPathIdx = src.indexOf('migrateLegacyFeaturesPath(wkspUri)');
+    const suppressIdx = src.indexOf('migrateLegacySuppressMultiConfig(wkspUri)');
+    assert.notStrictEqual(featuresPathIdx, -1, 'migrateLegacyFeaturesPath call must exist in extension.ts');
+    assert.notStrictEqual(suppressIdx, -1, 'migrateLegacySuppressMultiConfig call must exist in extension.ts');
+    assert.ok(
+      featuresPathIdx < suppressIdx,
+      'D-18: featuresPath migration must run BEFORE suppressMultiConfig (data shape before UX cleanup)',
+    );
+  });
+
+  test('(D-13) post-loop notification uses suppression key "featuresPathMigration"', () => {
+    const src = readExtensionSrc();
+    const hasKey = src.includes('"featuresPathMigration"') || src.includes("'featuresPathMigration'");
+    assert.ok(hasKey, 'D-13: suppression key literal "featuresPathMigration" must appear in extension.ts');
+  });
+
+  test('(D-12) Open Settings command uses @ext:gabeseltzer.gs-behave-bdd publisher', () => {
+    const src = readExtensionSrc();
+    assert.ok(
+      src.includes('@ext:gabeseltzer.gs-behave-bdd'),
+      'D-12: Open Settings command must scope to @ext:gabeseltzer.gs-behave-bdd (publisher confirmed in 16-01-SUMMARY)',
+    );
+  });
+
+  test('(Pitfall 8) config.reloadSettings is NOT awaited — sync void', () => {
+    const src = readExtensionSrc();
+    assert.ok(
+      !src.includes('await config.reloadSettings'),
+      'Pitfall 8: config.reloadSettings(wkspUri) is sync void; awaiting it changes the contract for 4 other call sites',
+    );
+    // Affirmatively check the function IS called (not the entire call site removed).
+    assert.ok(
+      src.includes('config.reloadSettings(wkspUri)'),
+      'config.reloadSettings(wkspUri) must still be called in the activation loop (Pitfall 4 — refresh cache after migration)',
+    );
+  });
+});
