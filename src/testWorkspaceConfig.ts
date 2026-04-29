@@ -13,7 +13,6 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   private envVarPresets: { [presetName: string]: { [name: string]: string } } | undefined;
   private activeEnvVarPreset: string | undefined;
   private projectPath: string | undefined;
-  private featuresPath: string | undefined;
   private featuresPaths: string[] | undefined;
   private justMyCode: boolean | undefined;
   private multiRootRunWorkspacesInParallel: boolean | undefined;
@@ -28,7 +27,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
 
   // all user-settable settings in settings.json or *.code-workspace
   constructor({
-    envVarOverrides, envVarPresets, activeEnvVarPreset, projectPath, featuresPath: featuresPath, featuresPaths, justMyCode,
+    envVarOverrides, envVarPresets, activeEnvVarPreset, projectPath, featuresPaths, justMyCode,
     multiRootRunWorkspacesInParallel,
     runParallel, xRay, verboseLogging, importStrategy, stepDefinitionSearchTimeout, discoveryDepth, discoveryStopOnFirstHit, suppressedNotifications
   }: {
@@ -36,7 +35,6 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     envVarPresets?: { [presetName: string]: { [name: string]: string } } | undefined,
     activeEnvVarPreset?: string | undefined,
     projectPath?: string | undefined,
-    featuresPath: string | undefined,
     featuresPaths?: string[] | undefined,
     justMyCode: boolean | undefined,
     multiRootRunWorkspacesInParallel: boolean | undefined,
@@ -53,7 +51,6 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     this.envVarPresets = envVarPresets;
     this.activeEnvVarPreset = activeEnvVarPreset;
     this.projectPath = projectPath;
-    this.featuresPath = featuresPath;
     this.featuresPaths = featuresPaths;
     this.justMyCode = justMyCode;
     this.runParallel = runParallel;
@@ -85,8 +82,6 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.activeEnvVarPreset === undefined ? "" : this.activeEnvVarPreset);
       case "projectPath":
         return <T><unknown>(this.projectPath === undefined ? "" : this.projectPath);
-      case "featuresPath":
-        return <T><unknown>(this.featuresPath === undefined ? "features" : this.featuresPath);
       case "featuresPaths":
         return <T><unknown>(this.featuresPaths ?? []);
       case "multiRootRunWorkspacesInParallel":
@@ -141,9 +136,6 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         break;
       case "justMyCode":
         response = <T><unknown>this.justMyCode;
-        break;
-      case "featuresPath":
-        response = <T><unknown>this.featuresPath;
         break;
       case "featuresPaths":
         response = <T><unknown>this.featuresPaths;
@@ -201,21 +193,16 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
       }
     }
 
-    const getExpectedFeaturesPath = (): string => {
-      switch (this.featuresPath) {
-        case "":
-        case undefined:
-          return "features";
-        default:
-          return this.featuresPath.trim().replace(/^\\|^\//, "").replace(/\\$|\/$/, "");
-      }
+    const getExpectedFeaturesFolder = (): string => {
+      const features = (this.featuresPaths && this.featuresPaths[0]) || "features";
+      return features.trim().replace(/^\\|^\//, "").replace(/\\$|\/$/, "");
     }
 
     // Combined workspace-relative path to features folder
     const getExpectedWorkspaceRelativeFeaturesPath = (): string => {
       const projectPath = getExpectedProjectPath();
-      const featuresPath = getExpectedFeaturesPath();
-      return projectPath ? `${projectPath}/${featuresPath}` : featuresPath;
+      const folder = getExpectedFeaturesFolder();
+      return projectPath ? `${projectPath}/${folder}` : folder;
     }
 
     const getExpectedProjectUri = (): vscode.Uri => {
@@ -228,7 +215,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     const getExpectedFeaturesUri = (): vscode.Uri => {
       if (!wkspUri)
         throw "you must supply wkspUri to call getExpectedFeaturesUri";
-      return vscode.Uri.joinPath(getExpectedProjectUri(), getExpectedFeaturesPath());
+      return vscode.Uri.joinPath(getExpectedProjectUri(), getExpectedFeaturesFolder());
     }
 
 
@@ -249,8 +236,6 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>this.get("envVarOverrides");
       case "projectPath":
         return <T><unknown>getExpectedProjectPath();
-      case "featuresPath":
-        return <T><unknown>getExpectedFeaturesPath();
       case "workspaceRelativeFeaturesPath":
         return <T><unknown>getExpectedWorkspaceRelativeFeaturesPath();
       case "projectUri":
