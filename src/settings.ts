@@ -129,9 +129,6 @@ export class WorkspaceSettings {
     const projectPathCfg: string | undefined = get("projectPath");
     if (projectPathCfg === undefined)
       throw "projectPath is undefined";
-    const featuresPathCfg: string | undefined = get("featuresPath");
-    if (featuresPathCfg === undefined)
-      throw "featuresPath is undefined";
     const justMyCodeCfg: boolean | undefined = get("justMyCode");
     if (justMyCodeCfg === undefined)
       throw "justMyCode is undefined";
@@ -185,40 +182,29 @@ export class WorkspaceSettings {
       this.projectUri = wkspUri;
     }
 
-    // Process featuresPath(s) - D-11 precedence ladder
+    // Process featuresPaths — Phase 16 / D-15: 3-rung precedence ladder.
+    // Singular `featuresPath` is no longer read here; Plan 03's migrateLegacyFeaturesPath
+    // ran at activation and moved any legacy value into `featuresPaths` at the appropriate scope.
     // Read optional plural config (D-12: no throw on undefined — VS Code returns undefined for undeclared keys)
     const featuresPathsCfg: string[] | undefined = get<string[] | undefined>("featuresPaths");
 
     let projectRelativeFeaturesPaths: string[];
     if (featuresPathsCfg && Array.isArray(featuresPathsCfg) && featuresPathsCfg.length > 0) {
       // Rung 1: plural non-empty
-      // D-06..D-09: emit info log if singular also explicitly set at any scope
-      if (hasExplicitSetting(wkspConfig, "featuresPath", legacyConfig)) {
-        logger.logInfo(
-          "Both featuresPath and featuresPaths are set — using featuresPaths (plural). " +
-          "The singular featuresPath value is ignored.",
-          wkspUri
-        );
-      }
       projectRelativeFeaturesPaths = featuresPathsCfg
         .map(p => p.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim())
         .filter(p => p.length > 0);
       if (projectRelativeFeaturesPaths.length === 0) {
-        // Plural was all-empty → fall to singular
-        projectRelativeFeaturesPaths = [
-          featuresPathCfg.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim() || "features"
-        ];
+        // Plural was all-empty → fall to convention.
+        projectRelativeFeaturesPaths = ["features"];
       }
-    } else if (hasExplicitSetting(wkspConfig, "featuresPath", legacyConfig) && featuresPathCfg && featuresPathCfg.trim() !== "") {
-      // Rung 2: singular explicitly set (not just the package.json default)
-      projectRelativeFeaturesPaths = [featuresPathCfg.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim()];
     } else if (entry?.source === 'config-file' && entry.featuresUris.length > 0) {
-      // Rung 3: config-file discovery paths (from behave.ini/setup.cfg/pyproject.toml)
+      // Rung 2 (was Rung 3): config-file discovery paths (from behave.ini/setup.cfg/pyproject.toml)
       projectRelativeFeaturesPaths = entry.featuresUris.map(u =>
         path.relative(this.projectUri.fsPath, u.fsPath).replace(/\\/g, '/')
       );
     } else {
-      // Rung 4: neither set, no config file → convention
+      // Rung 3 (was Rung 4): neither plural set nor config file → convention
       projectRelativeFeaturesPaths = ["features"];
     }
 
@@ -231,7 +217,7 @@ export class WorkspaceSettings {
     // D-07 per-entry "." rejection
     for (const p of projectRelativeFeaturesPaths) {
       if (p === ".") {
-        this._fatalErrors.push(`"." is not a valid "gs-behave-bdd.featuresPath" value. The features folder must be a subfolder.`);
+        this._fatalErrors.push(`"." is not a valid "gs-behave-bdd.featuresPaths" entry. The features folder must be a subfolder.`);
       }
     }
 
