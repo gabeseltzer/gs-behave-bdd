@@ -247,7 +247,7 @@ suite('Phase 15 — notifications: showSuppressibleNotification (NOTIF-04 + D-04
   });
 });
 
-export { makeScopedConfig };
+export { makeScopedConfig, makePerKeyScopedConfig };
 
 /**
  * Builds a fake WorkspaceConfiguration whose inspect() returns DIFFERENT
