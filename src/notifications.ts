@@ -72,59 +72,127 @@ export async function showSuppressibleNotification(
 }
 
 /**
- * Phase 15 / NOTIF-06: One-shot migration of the legacy
- * `gs-behave-bdd.suppressMultiConfigNotification: boolean` setting to the new
- * `gs-behave-bdd.suppressedNotifications: string[]` setting.
- *
- * Detects the scope where the legacy key was set via `inspect()` (D-08), writes
- * the array AND removes the legacy key at the SAME scope (D-06). Failure logs
- * a warning and returns (D-07 — never throws — the caller in `activate()`
- * relies on this to avoid blocking activation).
- *
- * Idempotent: dedups against the existing scope-local array (D-11), and the
- * legacy key being already-removed is detected by `insp.<scope>Value` being
- * undefined.
- *
- * @see .planning/phases/15-notification-suppression/15-RESEARCH.md Pattern 2 + Pitfalls 1-5
+ * Result of a migration transform callback.
+ * - `write`: write `value` as the new dest value AND remove the source key (both at same scope).
+ * - `skipDest`: do NOT write the dest. `removeSource` controls whether the source key is removed:
+ *     - `removeSource: true`  — remove source (Phase 16 D-08: blank legacy value, drop it).
+ *     - `removeSource: false` — preserve source (Phase 15: legacyValue !== true is a no-op).
  */
-export async function migrateLegacySuppressMultiConfig(wkspUri: vscode.Uri): Promise<void> {
-  const cfg = vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri);
-  const insp = cfg.inspect<boolean>("suppressMultiConfigNotification");
-  if (!insp) return;
+type TransformResult<T> =
+  | { kind: 'write'; value: T }
+  | { kind: 'skipDest'; removeSource: boolean };
 
-  // D-08: detect scope where the legacy boolean lives. Most-specific wins.
+/**
+ * Phase 16 D-MOD: generic scope-preserving migration primitive.
+ *
+ * Detects the most-specific scope where `sourceKey` has a user-set value
+ * (workspaceFolder → workspace → global, most-specific wins via inspect()).
+ * Reads `destKey` at the SAME scope (Pitfall 2 — never cfg.get() which merges scopes).
+ * Calls `transform(sourceVal, destValAtSameScope)` to compute the next action.
+ * Writes the new dest value (if any) and removes the source key (if requested),
+ * BOTH at the same scope target.
+ *
+ * Returns true iff at least the source removal OR a dest write completed for that scope.
+ * Never throws — on update() rejection, logs via config.logger.logInfo and returns false.
+ */
+async function migrateScopedSetting<TSrc, TDest>(opts: {
+  namespace: string;
+  sourceKey: string;
+  destNamespace?: string;
+  destKey: string;
+  wkspUri: vscode.Uri;
+  transform: (sourceVal: TSrc, destValAtSameScope: TDest | undefined) => TransformResult<TDest>;
+}): Promise<boolean> {
+  const sourceCfg = vscode.workspace.getConfiguration(opts.namespace, opts.wkspUri);
+  const insp = sourceCfg.inspect<TSrc>(opts.sourceKey);
+  if (!insp) return false;
+
+  // Most-specific-wins scope detection (Pitfall 2 — same shape as Phase 15 L96-L107).
   let target: vscode.ConfigurationTarget | undefined;
-  let legacyValue: boolean | undefined;
+  let sourceVal: TSrc | undefined;
   if (insp.workspaceFolderValue !== undefined) {
     target = vscode.ConfigurationTarget.WorkspaceFolder;
-    legacyValue = insp.workspaceFolderValue;
+    sourceVal = insp.workspaceFolderValue;
   } else if (insp.workspaceValue !== undefined) {
     target = vscode.ConfigurationTarget.Workspace;
-    legacyValue = insp.workspaceValue;
+    sourceVal = insp.workspaceValue;
   } else if (insp.globalValue !== undefined) {
     target = vscode.ConfigurationTarget.Global;
-    legacyValue = insp.globalValue;
+    sourceVal = insp.globalValue;
   }
-  if (target === undefined || legacyValue !== true) return;
+  if (target === undefined) return false;
+
+  // Same-scope dest read (Pitfall 2 — never cfg.get() which merges scopes).
+  const destNs = opts.destNamespace ?? opts.namespace;
+  const destCfg = destNs === opts.namespace
+    ? sourceCfg
+    : vscode.workspace.getConfiguration(destNs, opts.wkspUri);
+  const destInsp = destCfg.inspect<TDest>(opts.destKey);
+  const destAtScope: TDest | undefined =
+    target === vscode.ConfigurationTarget.WorkspaceFolder ? destInsp?.workspaceFolderValue :
+      target === vscode.ConfigurationTarget.Workspace ? destInsp?.workspaceValue :
+        destInsp?.globalValue;
+
+  // sourceVal is non-undefined here (we found a user-set scope above) — assert by structure.
+  const result = opts.transform(sourceVal as TSrc, destAtScope);
 
   try {
-    // D-11 dedup: read existing array at SAME scope (not merged — Pitfall 2).
-    const existingInsp = cfg.inspect<string[]>("suppressedNotifications");
-    const existingArr =
-      target === vscode.ConfigurationTarget.WorkspaceFolder ? existingInsp?.workspaceFolderValue :
-        target === vscode.ConfigurationTarget.Workspace ? existingInsp?.workspaceValue :
-          existingInsp?.globalValue;
-    const merged = Array.isArray(existingArr) ? [...existingArr] : [];
-    if (!merged.includes("multiConfigNotification")) merged.push("multiConfigNotification");
-
-    // D-06: write new array, then remove legacy key. Both at SAME target.
-    await cfg.update("suppressedNotifications", merged, target);
-    await cfg.update("suppressMultiConfigNotification", undefined, target);
+    if (result.kind === 'write') {
+      // Phase 15 contract: write dest, then remove source. Order matters for the test
+      // assertion that updateSpy.firstCall == dest, secondCall == source removal.
+      await destCfg.update(opts.destKey, result.value, target);
+      await sourceCfg.update(opts.sourceKey, undefined, target);
+      return true;
+    }
+    // kind === 'skipDest'
+    if (result.removeSource) {
+      await sourceCfg.update(opts.sourceKey, undefined, target);
+      return true;
+    }
+    // Neither wrote nor removed (Phase 15 legacyValue !== true case — callCount must stay 0).
+    return false;
   } catch (e) {
-    // D-07: warn-and-continue, never throw.
+    // D-05 / D-07 carryforward: warn-and-continue, never throw.
     config.logger.logInfo(
-      `Could not migrate suppressMultiConfigNotification to suppressedNotifications: ${e}`,
-      wkspUri,
+      `Could not migrate ${opts.sourceKey} to ${opts.destKey}: ${e}`,
+      opts.wkspUri,
     );
+    return false;
   }
 }
+
+/**
+ * Phase 15 / NOTIF-06 — refactored in Phase 16 to call the migrateScopedSetting
+ * primitive (D-MOD). Public signature unchanged: Promise<void>.
+ *
+ * Behavior preserved:
+ *   - When legacyValue !== true (including false): NO update() calls (callCount === 0).
+ *   - When legacyValue === true: write [...existingArr, "multiConfigNotification"]
+ *     (deduped) at the detected scope, then remove the legacy boolean.
+ *   - On update() rejection: log via config.logger.logInfo, return.
+ */
+export async function migrateLegacySuppressMultiConfig(wkspUri: vscode.Uri): Promise<void> {
+  await migrateScopedSetting<boolean, string[]>({
+    namespace: "gs-behave-bdd",
+    sourceKey: "suppressMultiConfigNotification",
+    destKey: "suppressedNotifications",
+    wkspUri,
+    transform: (legacyValue, existingArr) => {
+      if (legacyValue !== true) {
+        // Pre-refactor parity: no dest write AND no source removal (callCount === 0
+        // contract at notifications.test.ts L335).
+        return { kind: 'skipDest', removeSource: false };
+      }
+      const current = Array.isArray(existingArr) ? [...existingArr] : [];
+      if (current.includes("multiConfigNotification")) {
+        // Already present — write the unchanged array (still triggers source removal).
+        return { kind: 'write', value: current };
+      }
+      return { kind: 'write', value: [...current, "multiConfigNotification"] };
+    },
+  });
+  // Public signature is Promise<void> — discard the boolean return.
+}
+
+export { migrateScopedSetting };
+export type { TransformResult };
