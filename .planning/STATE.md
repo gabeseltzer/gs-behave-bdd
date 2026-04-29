@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-04-29T16:36:00.404Z"
+last_updated: "2026-04-29T17:01:40.980Z"
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 12
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # Project State
@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.4.0 started)
 ## Current Position
 
 Phase: 16 (deprecate-featurespath) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - [Phase 16]: Plan 03: Shipped migrateLegacyFeaturesPath(wkspUri): Promise<boolean> wrapper around the D-MOD primitive — loops [gs-behave-bdd, behave-vsc] (D-02), transform handles merge-with-dedup (D-06/D-07 byte-identical regex), empty/whitespace skip-with-removal (D-08), literal '.' migration (D-09); 12 new unit tests covering cases (a)-(j); regression bars GREEN; 690 -> 702 unit pass count
 - [Phase 16]: D-18 ordering: featuresPath migration runs before suppressMultiConfig at activation
 - [Phase 16]: Pitfall 8: config.reloadSettings called WITHOUT await (sync void)
+- [Phase 16]: Plan 05: Schema entry gs-behave-bdd.featuresPath removed (DEP-01); settings.ts ladder collapsed to 3 rungs (D-15); common.ts hasFeaturesFolder Branch A is plural-only (D-16). Executed Task 2 before Task 1 to keep every commit's compile graph green. 4 obsolete tests in multiPathPrecedence.test.ts deferred to Plan 06 alongside testWorkspaceConfig.ts mock surgery and fixture cascade.
 
 ### v1.4.0 Decisions
 
