@@ -1,17 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4.0
+milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-last_updated: "2026-04-28T13:34:44.581Z"
-last_activity: "2026-04-28 -- Phase 16 context gathered. 4 selected gray areas discussed (Collision policy, Value filtering, Notification UX, Legacy namespace scope) plus a user-raised Modularity area. 18 implementation decisions captured (D-01..D-18) plus D-MOD for the shared-primitive refactor. Key calls: same-scope merge-with-dedup, skip empty/whitespace only, Promise<boolean> return, per-folder notification with Open Settings + DSA buttons, suppression key featuresPathMigration, migrate BOTH gs-behave-bdd and behave-vsc namespaces into canonical gs-behave-bdd.featuresPaths, extract shared primitive (Option B) and refactor Phase 15 helper to call it. CONTEXT.md and DISCUSSION-LOG.md committed (ca85c4f)."
-resume_file: ".planning/phases/16-deprecate-featurespath/16-CONTEXT.md"
+status: unknown
+last_updated: "2026-04-29T16:03:23.682Z"
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 6
-  completed_plans: 7
-  percent: 100
+  total_plans: 12
+  completed_plans: 8
 ---
 
 # Project State
@@ -21,16 +18,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.4.0 started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Phase 16 context gathered; ready to plan Phase 16 (Deprecate featuresPath)
+**Current focus:** Phase 16 — deprecate-featurespath
 
 ## Current Position
 
-Phase: 16 — Deprecate featuresPath (context gathered)
-Plan: —
-Status: Ready to plan (CONTEXT.md committed ca85c4f)
-Previous: Phase 15 complete 2026-04-27 — 6/6 plans, 28 new tests (683 total passing), 8/8 NOTIF requirements verified. 15-HUMAN-UAT.md persisted with 2 deferred items for Phase 17.
-Last activity: 2026-04-28 -- Phase 16 discuss-phase complete. 4 selected areas + user-raised Modularity area. 18 numbered decisions (D-01..D-18) plus D-MOD captured in 16-CONTEXT.md. Key load-bearing calls: same-scope merge-with-dedup; skip empty/whitespace only (other values including `features` and `.` migrated literally); helper returns Promise<boolean>; per-workspace-folder notification firing only on true; Open Settings + Don't Show Again buttons; suppression key featuresPathMigration; migrate BOTH `gs-behave-bdd.featuresPath` AND `behave-vsc.featuresPath` into canonical `gs-behave-bdd.featuresPaths`; extract shared primitive (Option B) and refactor Phase 15's migrateLegacySuppressMultiConfig to call it (regression bar: 8 existing sub-cases pass). 16-CONTEXT.md and 16-DISCUSSION-LOG.md committed (ca85c4f).
-Previous activity: 2026-04-27 -- Phase 15 Plan 06 complete (verification gate). Ran lint (clean), typecheck test (clean), full unit suite (683 passing, 0 failing — +28 vs. 655 pre-Phase-15 baseline), webpack compile (success), targeted mocha sub-suites (Phase 15: 28 passing, schema: 2 passing, migrate: 9 passing, ordering/activation: 4 passing, settings: 36 passing), inline schema-shape `node -e` checks (passed both presence and absence), and source/test legacy-reference greps. All 8 NOTIF-* requirements verified GREEN. One minor finding documented (leftover `if (key === 'suppressMultiConfigNotification')` get() fallback in `test/unit/vscode.mock.ts` — pre-existing dead code, no behavioral impact, reported per verification-only constraint, not silently fixed). Phase-level 15-SUMMARY.md aggregating all 5 implementation plan summaries plus this verification gate written. STATE.md updated. ROADMAP.md left untouched per orchestrator boundary.
+Phase: 16 (deprecate-featurespath) — EXECUTING
+Plan: 1 of 6
 
 ## Performance Metrics
 
