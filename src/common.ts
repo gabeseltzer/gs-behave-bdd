@@ -339,9 +339,13 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     }
 
     // === Phase 12: Check active project from project list ===
+    // Phase 17 fix: also gate on currentDiscoveryDepth so a stale activeProject
+    // (cached at activation depth) does not resurrect a subdir config when the user
+    // later lowers discoveryDepth below where the active project lives.
     if (!isManualProjectPathMode(folder.uri)) {
       const activeProject = getActiveProject(folder.uri);
-      if (activeProject) {
+      const currentDiscoveryDepth = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri).get<number>("discoveryDepth") ?? 3;
+      if (activeProject && activeProject.depth <= currentDiscoveryDepth) {
         const subdirConfigResult = findBehaveConfig(activeProject.dirUri);
         if (subdirConfigResult && subdirConfigResult.ok) {
           clearPathDiagnostics(subdirConfigResult.configFileUri);
