@@ -1,4 +1,6 @@
 {
     "gs-behave-bdd.xRay": true,
-    "gs-behave-bdd.featuresPath": "Featurez"
+    "gs-behave-bdd.featuresPaths": [
+        "Featurez"
+    ]
 }

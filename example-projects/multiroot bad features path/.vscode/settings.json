@@ -1,4 +1,5 @@
 {
-    // to test bad features path
-    "gs-behave-bdd.featuresPath": "intentional-bad-features-path",
+    "gs-behave-bdd.featuresPaths": [
+        "intentional-bad-features-path"
+    ],
 }

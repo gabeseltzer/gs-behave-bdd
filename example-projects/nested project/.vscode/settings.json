@@ -1,5 +1,7 @@
 {
     "gs-behave-bdd.projectPath": "backend",
-    "gs-behave-bdd.featuresPath": "features",
-    "gs-behave-bdd.xRay": true
+    "gs-behave-bdd.xRay": true,
+    "gs-behave-bdd.featuresPaths": [
+        "features"
+    ]
 }

@@ -145,10 +145,10 @@ Plans:
 **Goal:** End-to-end regression pass across both migrations
 
 **Requirements:** Verification of DEP-* and NOTIF-*
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 - [x] 17-01-PLAN.md — Create the migration-stale fixture (seeded settings.json + restore template + minimal behave config)
 - [x] 17-02-PLAN.md — Create the migrations integration suite (suite-load-time stub + 7 tests covering migration outcomes, A1 probe, DSA + Open Settings flows)
-- [ ] 17-03-PLAN.md — Register suite in runTestSuites.ts, run full regression pass, close Phase 15 HUMAN-UAT debt
+- [x] 17-03-PLAN.md — Register suite in runTestSuites.ts, run full regression pass, close Phase 15 HUMAN-UAT debt
 **Depends on:** Phase 15, Phase 16
 
 **Success criteria:**
