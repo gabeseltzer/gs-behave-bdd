@@ -199,7 +199,9 @@ async function runTestQueue(ctrl: vscode.TestController, run: vscode.TestRun, re
   const wkspRunPromises: Promise<void>[] = [];
   const winSettings = config.globalSettings;
   const allWkspsQueueMap: QueueItemMapEntry[] = [];
-  const wskpsWithFeaturesSettings = getUrisOfWkspFoldersWithFeatures().map(wkspUri => config.workspaceSettings[wkspUri.path]);
+  const wskpsWithFeaturesSettings = getUrisOfWkspFoldersWithFeatures()
+    .map(wkspUri => config.workspaceSettings[wkspUri.path])
+    .filter((s): s is WorkspaceSettings => s !== undefined);
 
   for (const wkspSettings of wskpsWithFeaturesSettings) {
     const idMatches = wkspSettings.featuresUris.map(u => uriId(u));

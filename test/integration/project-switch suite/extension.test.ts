@@ -3,7 +3,13 @@ import * as assert from 'assert';
 import { TestSupport } from '../../../src/extension';
 import { getAllTestItems, uriId } from '../../../src/common';
 import { waitForTestTree } from '../suite-shared/waitForTestTree';
-import { getProjectList, getActiveProject, setActiveProject } from '../../../src/discovery/projectList';
+// NOTE: do NOT import getProjectList/getActiveProject/setActiveProject from
+// '../../../src/discovery/projectList' here — that would resolve to a fresh
+// module instance compiled into out/, separate from the webpack-bundled
+// dist/extension.js the test host actually runs. The two instances would have
+// independent module-level caches (projectListCache, activeProjectCache),
+// so reads here would never see writes the running extension made. Instead,
+// access these via `instances.*` which are the bundled extension's bindings.
 
 let instances: TestSupport;
 
@@ -71,13 +77,13 @@ suite('project-switch suite', () => {
 
 	test('switch to beta and verify tree rebuilds', async function () {
 		this.timeout(300000);
-		const projects = getProjectList(wkspUri);
+		const projects = instances.getProjectList(wkspUri);
 		assert.ok(projects.length >= 2, `should discover at least 2 projects, got ${projects.length}`);
 
 		const betaEntry = projects.find(p => p.label.includes('beta'));
 		assert.ok(betaEntry, `beta project should exist in project list, got: ${projects.map(p => p.label).join(', ')}`);
 
-		setActiveProject(wkspUri, betaEntry);
+		instances.setActiveProject(wkspUri, betaEntry);
 		await instances.configurationChangedHandler(undefined, undefined, true);
 
 		const result = await waitForTestTree(
@@ -95,6 +101,10 @@ suite('project-switch suite', () => {
 
 	test('step navigation works after switching to beta', async function () {
 		this.timeout(300000);
+		// Wait until step files have been parsed for the active project before
+		// querying step mappings (the prior test only waited for the feature
+		// tree to repopulate; step parsing finishes slightly later).
+		await instances.parser.stepsParseComplete(15000, 'project-switch step navigation');
 		const betaFeatureUri = findFeatureUri(wkspUri, 'Beta Project');
 		assert.ok(betaFeatureUri, 'beta feature URI should exist in test tree');
 
@@ -109,11 +119,11 @@ suite('project-switch suite', () => {
 
 	test('switch back to alpha and verify tree rebuilds', async function () {
 		this.timeout(300000);
-		const projects = getProjectList(wkspUri);
+		const projects = instances.getProjectList(wkspUri);
 		const alphaEntry = projects.find(p => p.label.includes('alpha'));
 		assert.ok(alphaEntry, `alpha project should exist in project list, got: ${projects.map(p => p.label).join(', ')}`);
 
-		setActiveProject(wkspUri, alphaEntry);
+		instances.setActiveProject(wkspUri, alphaEntry);
 		await instances.configurationChangedHandler(undefined, undefined, true);
 
 		const result = await waitForTestTree(
