@@ -157,3 +157,14 @@ Plans:
 3. Fresh activation with no deprecated settings works correctly
 4. Activation with old `featuresPath` + `suppressMultiConfigNotification` migrates both cleanly
 5. Migration notification shown and suppressible
+
+### Phase 18: Address v1.4.0 tech debt: artifact rollups, mock cleanup
+
+**Goal:** Closure phase — clean up Phase 15 dead-mock fallback, document Phase 17 ad-hoc cache pattern, and write the missing phase-level SUMMARY/VERIFICATION rollups for Phases 16 and 17 so milestone v1.4.0 closes with zero artifact debt.
+**Requirements**: none (closure phase — addresses v1.4.0-MILESTONE-AUDIT.md tech debt)
+**Depends on:** Phase 17
+**Plans:** 2 plans
+
+Plans:
+- [x] 18-01-PLAN.md — Code cleanup: remove dead vscode.mock.ts legacy fallback (Phase 15 Finding 1) + document ad-hoc activeProjectCache pattern in src/common.ts (Phase 17 lesson)
+- [x] 18-02-PLAN.md — Artifact rollups: write 16-SUMMARY, 17-SUMMARY, 17-VERIFICATION; document multiroot mutex flake in AI_INSTRUCTIONS.md; record cache-invalidation follow-up in STATE.md
