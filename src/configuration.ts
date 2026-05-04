@@ -78,9 +78,19 @@ class ExtensionConfiguration implements Configuration {
     const winSettings = this.globalSettings;
     getUrisOfWkspFoldersWithFeatures().forEach(wkspUri => {
       if (!this._resourceSettings[wkspUri.path]) {
-        this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
-          vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri), winSettings, this.logger,
-          vscode.workspace.getConfiguration("behave-vsc", wkspUri));
+        try {
+          this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
+            vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri), winSettings, this.logger,
+            vscode.workspace.getConfiguration("behave-vsc", wkspUri));
+        } catch (e) {
+          // WorkspaceSettings throws WkspError on fatal config errors (e.g. bad featuresPaths).
+          // The error is already logged via the workspace's output channel inside logSettings()
+          // before the throw. Swallow here so a single misconfigured workspace doesn't poison
+          // iteration / settings access for unrelated workspaces (e.g. an integration test for
+          // workspace A asserting its own settings should not throw because workspace B has a
+          // bad path). Direct callers of reloadSettings() still observe the throw.
+          diagLog(`workspaceSettings getter: skipping ${wkspUri.path} due to: ${e}`, wkspUri);
+        }
       }
     });
     return this._resourceSettings;

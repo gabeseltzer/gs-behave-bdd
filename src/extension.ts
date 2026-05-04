@@ -64,6 +64,13 @@ export type TestSupport = {
   getDiscoveryEntry: typeof getDiscoveryEntry,
   getUrisOfWkspFoldersWithFeatures: typeof getUrisOfWkspFoldersWithFeatures,
   checkRunGuard: typeof checkRunGuard,
+  // Exposed for integration tests so they read/write the same module-scoped
+  // caches the bundled extension uses (the test process also imports
+  // src/discovery/projectList directly, which would otherwise be a separate
+  // module instance with its own caches).
+  getProjectList: typeof getProjectList,
+  getActiveProject: typeof getActiveProject,
+  setActiveProject: typeof setActiveProject,
 };
 
 
@@ -226,15 +233,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     cleanExtensionTempDirectory(cleanExtensionTempDirectoryCancelSource.token);
 
     for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
-      const watchers = startWatchingWorkspace(wkspUri, ctrl, testData, parser);
-      wkspWatchers.set(wkspUri, watchers);
-      watchers.forEach(w => context.subscriptions.push(w));
+      // Per-workspace try/catch: a single workspace with invalid settings (e.g. bad
+      // featuresPaths) throws WkspError from WorkspaceSettings construction. Log + skip
+      // so other workspaces still activate (see example-projects/multiroot bad features path).
+      try {
+        const watchers = startWatchingWorkspace(wkspUri, ctrl, testData, parser);
+        wkspWatchers.set(wkspUri, watchers);
+        watchers.forEach(w => context.subscriptions.push(w));
+      } catch (e: unknown) {
+        config.logger.showError(e, wkspUri);
+      }
     }
 
     for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
-      const configWatchers = startWatchingConfigFiles(wkspUri, ctrl, testData, parser, updateDiscoveryUX);
-      wkspConfigWatchers.set(wkspUri, configWatchers);
-      configWatchers.forEach(w => context.subscriptions.push(w));
+      try {
+        const configWatchers = startWatchingConfigFiles(wkspUri, ctrl, testData, parser, updateDiscoveryUX);
+        wkspConfigWatchers.set(wkspUri, configWatchers);
+        configWatchers.forEach(w => context.subscriptions.push(w));
+      } catch (e: unknown) {
+        config.logger.showError(e, wkspUri);
+      }
     }
 
     // Phase 12: Populate project list for sync-discovered workspaces
@@ -1070,6 +1088,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       getDiscoveryEntry: getDiscoveryEntry,
       getUrisOfWkspFoldersWithFeatures: getUrisOfWkspFoldersWithFeatures,
       checkRunGuard: checkRunGuard,
+      getProjectList: getProjectList,
+      getActiveProject: getActiveProject,
+      setActiveProject: setActiveProject,
     };
 
   }
