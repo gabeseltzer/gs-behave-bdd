@@ -1,5 +1,25 @@
 # Milestones
 
+## v1.4.0 Deprecate featuresPath & Notification Suppression (Shipped: 2026-05-04)
+
+**Phases completed:** 4 phases (15-18), 17 plans
+**Git range:** ef3bc8c..9146b35 (77 commits, 95 files, +14899/-418 lines)
+**Requirements:** 15/15 satisfied (NOTIF-01..08, DEP-01..07)
+**Timeline:** 2026-04-27 → 2026-05-04 (8 days)
+**Tests at close:** 697 unit + 19 integration suites passing
+
+**Key accomplishments:**
+
+- `suppressedNotifications: string[]` array setting + reusable suppression module (`src/notifications.ts`) with check/suppress/migrate paths; legacy `suppressMultiConfigNotification` boolean removed and auto-migrated to the array on activation (Phase 15 — 28 new unit tests, 683 baseline)
+- `featuresPath` setting hard-removed from package.json schema; `migrateLegacyFeaturesPath` wired into activation with same-scope inspect/write/clear semantics; internal reads collapsed to `featuresPaths[]`-only across `settings.ts`, `common.ts`, and the `TestWorkspaceConfig` mock (Phase 16 — 7/7 DEP requirements verified)
+- `migrateScopedSetting<TSrc, TDest>` reusable migration primitive extracted from Phase 15 + refactored Phase 15 helper to delegate to it (D-MOD regression bar: all 8 sub-cases pass) — Phase 16 ships its own migration as a thin wrapper
+- 19th integration suite: 7 real-VSCode migrations integration tests (`migrations integration suite/extension.test.ts`) covering both migrations end-to-end via a dedicated `migration-stale/` fixture; uncovered + fixed Phase 12 `activeProjectCache` staleness regression at commit `c08ced5` (Phase 17)
+- Phase 18 closure: removed unreachable `suppressMultiConfigNotification` mock fallback, documented the read-time `discoveryDepth` re-read as deliberate ad-hoc workaround pending proper invalidation, wrote phase-level rollups for Phases 16+17, captured `activeProjectCache` invalidation pairing as v1.4.0 carry-forward tech debt
+
+**Carry-forward tech debt (not blocking close):** Pair `clearScanResultCache()` with project-list invalidation when discovery-influencing settings change. See commit `c08ced5` and `.planning/STATE.md` § "v1.4.0 Carry-Forward Tech Debt".
+
+---
+
 ## v1.3.0 Project Switching (Shipped: 2026-04-23)
 
 **Phases completed:** 3 phases (12-14), 7 plans

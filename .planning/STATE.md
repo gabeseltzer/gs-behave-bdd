@@ -1,37 +1,36 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: unknown
-last_updated: "2026-04-30T16:23:19.595Z"
+milestone: v1.4.0
+milestone_name: Deprecate featuresPath & Notification Suppression
+status: shipped
+last_updated: "2026-05-04T00:00:00Z"
 progress:
-  total_phases: 3
-  completed_phases: 2
-  total_plans: 15
-  completed_plans: 13
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 17
+  completed_plans: 17
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-23 — milestone v1.4.0 started)
+See: .planning/PROJECT.md (updated 2026-05-04 — v1.4.0 shipped)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Phase 17 — cross-cutting-verification
+**Current focus:** Planning next milestone — run `/gsd-new-milestone` to define scope.
 
 ## Current Position
 
-Phase: 17 (cross-cutting-verification) — EXECUTING
-Plan: 1 of 3
+Milestone v1.4.0 shipped 2026-05-04. No active phase.
 
 ## Performance Metrics
 
 **Velocity (cumulative):**
 
-- Milestones shipped: 4 (1.0.0 2026-04-16, 1.1.0 2026-04-17, 1.2.0 2026-04-22, 1.3.0 2026-04-23)
-- Total phases completed: 15 (1.0.0: 1-3, 1.1.0: 4-6, 1.2.0: 7-11, 1.3.0: 12-14, 1.4.0: 15)
-- Total plans completed: 41 (1.0.0: 6, 1.1.0: 9, 1.2.0: 13, 1.3.0: 7, 1.4.0: 6)
+- Milestones shipped: 5 (1.0.0 2026-04-16, 1.1.0 2026-04-17, 1.2.0 2026-04-22, 1.3.0 2026-04-23, v1.4.0 2026-05-04)
+- Total phases completed: 18 (1.0.0: 1-3, 1.1.0: 4-6, 1.2.0: 7-11, 1.3.0: 12-14, v1.4.0: 15-18)
+- Total plans completed: 52 (1.0.0: 6, 1.1.0: 9, 1.2.0: 13, 1.3.0: 7, v1.4.0: 17)
 
 ## Accumulated Context
 

@@ -154,6 +154,52 @@
 
 ---
 
+## Milestone: v1.4.0 — Deprecate featuresPath & Notification Suppression
+
+**Shipped:** 2026-05-04
+**Phases:** 4 (Phases 15-18) | **Plans:** 17 | **Requirements:** 15/15
+
+### What Was Built
+
+- Reusable notification suppression module (`src/notifications.ts`) — `suppressedNotifications: string[]` array setting + `isSuppressed`/`suppressNotification`/`showSuppressibleNotification` API; legacy `suppressMultiConfigNotification` boolean removed and auto-migrated to the array on activation (Phase 15)
+- `featuresPath` deprecation — schema removal + `migrateLegacyFeaturesPath` activation wiring with same-scope inspect/write/clear semantics; internal reads collapsed to `featuresPaths[]`-only across `settings.ts`, `common.ts`, and the `TestWorkspaceConfig` mock (Phase 16)
+- `migrateScopedSetting<TSrc, TDest>` reusable migration primitive — extracted from the Phase 15 helper, with Phase 15 then refactored to delegate to it; both Phase 15 and Phase 16 ship migrations as thin wrappers (D-MOD regression bar: all 8 Phase 15 sub-cases held)
+- 19th integration suite — `test/integration/migrations integration suite/` covering both migrations end-to-end via a real-VSCode launch and a dedicated `migration-stale/` fixture (7 tests, suite-load-time stub for `runTestSuites.ts` registration)
+- Phase 18 closure — removed unreachable `suppressMultiConfigNotification` mock fallback, documented the read-time `discoveryDepth` re-read as a deliberate ad-hoc workaround, wrote phase-level rollups for Phases 16+17, and captured `activeProjectCache` invalidation pairing as carry-forward tech debt
+
+### What Worked
+
+- **Primitive extraction by the second usage.** Phase 15 shipped `migrateLegacySuppressMultiConfig` as a one-off. Phase 16 needed almost the same scope-aware logic for `featuresPath`. Rather than copy-paste, Plan 16-02 extracted `migrateScopedSetting<TSrc, TDest>` and refactored Phase 15 to call it — using the existing 8 Phase 15 sub-cases as a regression bar. The primitive shipped, both migrations got cleaner, and the regression coverage was free. The "wait for the second use case to extract" rule paid off cleanly.
+- **A dedicated cross-cutting verification phase.** Migrations span Phases 15 and 16, which means neither phase's verification covers the integration. Spinning up Phase 17 specifically to write the migrations integration suite caught a Phase 12 `activeProjectCache` regression that no per-phase test would have surfaced. The 7-test suite is now a permanent regression bar for any future migration work.
+- **Closure phase as a tech-debt graduation step.** The v1.4.0 audit found 5 low-severity items. Rather than carry them across the milestone boundary, Phase 18 ran two parallel plans (one code-cleanup, one doc-rollup) in a single wave with non-overlapping `files_modified`. Both completed in a single executor pass; milestone closed with zero outstanding artifact debt.
+- **Form-feed-resistant artifacts.** PROJECT.md had latent form-feed bytes (`\x0c`) replacing the `f` in "featuresPath" that no human ever noticed because the renderer hides them. The bytes only mattered when the milestone-close workflow tried Edit-tool surgery. Lesson: at major milestone boundaries, scrub planning docs for control bytes.
+
+### What Was Inefficient
+
+- **Phase 18 was structurally avoidable.** Phase 15 and Phase 17 had everything they needed to write the missing rollups (16/17 SUMMARYs, 17 VERIFICATION) and remove the dead `suppressMultiConfigNotification` mock branch when the legacy schema was removed. Both got deferred and resurfaced as audit findings. Cost: a closure phase that didn't need to exist if per-phase verification had been stricter about cleanup.
+- **`activeProjectCache` regression hit during integration testing.** The Phase 12 cache wasn't invalidated when `discoveryDepth` changed; a Phase 17 integration test surfaced the staleness. Fixed tactically with a read-time re-read (commit `c08ced5`) — the proper fix (pair `clearScanResultCache()` with project-list invalidation) is now carry-forward debt. A pre-Phase-17 cache-coherence audit would have caught this earlier.
+
+### Patterns Established
+
+- **Migration primitive + thin wrappers.** Generic `migrateScopedSetting<TSrc, TDest>` with `TransformResult<T>` discriminated union as the contract; per-setting wrappers handle only the transform function and key names. Future legacy-setting deprecations ship as ~10-line wrappers with primitive-level test coverage as the regression bar.
+- **`migration-stale/` fixture pattern for integration testing migrations.** Seeded `settings.json` + restore-template + minimal behave config; suite-load-time stub registers in `runTestSuites.ts`. Reusable for future migrations.
+- **Audit-driven closure phases — but only when the audit is non-trivial.** v1.4.0's audit found 5 items (mix of artifact + code cleanup + doc); Phase 18 closed all five in 2 plans / 1 wave / parallel execution. For audits with 0-2 trivial items, the closure phase is overhead — handle inline before `/gsd-complete-milestone`.
+
+### Key Lessons
+
+- **Extract a primitive at N=2, not N=1, not N=3.** Phase 15 was the right place to ship the one-off; Phase 16 was the right place to extract. Don't pre-extract on speculation, don't carry duplicated code past the second user.
+- **Cross-cutting verification needs its own phase when 2+ phases touch the same activation path.** Phase 17 caught the cache regression. A "Phase 16 verification" alone wouldn't have, because the regression was in Phase 12 code that Phase 16 didn't touch.
+- **Cache-invalidation strategy is load-bearing — make it explicit, not ad-hoc.** Two phases (12, 17) ended up reasoning about `activeProjectCache` semantics. The lack of an explicit invalidation contract is now carry-forward debt. For future caches: define the invalidation rule in the same module that defines the cache.
+- **Latent encoding garbage compounds across edits.** Form-feed bytes in PROJECT.md were invisible until automated edits failed. Worth a one-time scrub at milestone boundaries.
+
+### Cost Observations
+
+- 4 phases, 17 plans, 77 commits, 8 days — biggest plan-count milestone since 1.2.0
+- Phase 17 was the slowest single phase (3 plans but heavy integration-suite construction + bisect debugging for the cache regression)
+- Phase 18 ran Wave 1 in true parallel (2 plans, non-overlapping `files_modified`) — both executors landed in one orchestrator pass
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -164,6 +210,7 @@
 | 1.1.0 | 3 | 9 | Introduced milestone audit + dedicated tech-debt phase at close; added predicate-polling test primitive |
 | 1.2.0 | 5 | 13 | Primary-plus-list type migration pattern; BFS scanner with circuit breaker; two-tier watcher strategy; semver alignment |
 | 1.3.0 | 3 | 7 | One-active-at-a-time project switching; pure helper extraction for testability; single-day milestone on established infrastructure |
+| v1.4.0 | 4 | 17 | Migration primitive + thin wrappers (extract-at-N=2); dedicated cross-cutting verification phase; parallel-wave closure phase for audit findings |
 
 ### Cumulative Quality
 
