@@ -31,4 +31,16 @@ suite('package.json schema — Phase 15 (NOTIF-01)', () => {
       'Legacy key must be absent from schema after Plan 05',
     );
   });
+
+  test('legacy singular featuresPath key REMOVED from schema (DEP-01)', () => {
+    const props = pkg.contributes.configuration.properties;
+    assert.ok(
+      !('gs-behave-bdd.featuresPath' in props),
+      'Legacy singular featuresPath must be absent from schema after Phase 16 / Plan 05',
+    );
+    assert.ok(
+      'gs-behave-bdd.featuresPaths' in props,
+      'Plural featuresPaths must remain present in schema',
+    );
+  });
 });
