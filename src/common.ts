@@ -342,6 +342,10 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     // Phase 17 fix: also gate on currentDiscoveryDepth so a stale activeProject
     // (cached at activation depth) does not resurrect a subdir config when the user
     // later lowers discoveryDepth below where the active project lives.
+    // Note: this is a deliberate read-time check, not a cache-invalidation hook —
+    // activeProjectCache outlives the settings that influence its keys, and a proper
+    // clearScanResultCache()-paired invalidation is tracked as v1.4.0 follow-up tech debt
+    // (see .planning/v1.4.0-MILESTONE-AUDIT.md tech_debt list).
     if (!isManualProjectPathMode(folder.uri)) {
       const activeProject = getActiveProject(folder.uri);
       const currentDiscoveryDepth = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri).get<number>("discoveryDepth") ?? 3;
