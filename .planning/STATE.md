@@ -35,6 +35,10 @@ Plan: 1 of 3
 
 ## Accumulated Context
 
+### Roadmap Evolution
+
+- Phase 18 added: Address v1.4.0 tech debt: artifact rollups, mock cleanup
+
 ### Decisions
 
 Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
@@ -108,3 +112,15 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - Integration test (`npm run test:integration`) deferred — requires VSCode Insiders/Stable launch via `@vscode/test-electron`, not feasible in headless verification environment. Matches the Phase 17 manual smoke check already documented in `15-VALIDATION.md` Manual-Only Verifications.
 - `--grep` does not propagate through `npm run test:unit` on this Windows shell because the runner script (`out/test/test/unit/run.js`) does not parse `argv`. Used `npx mocha --require ./out/test/test/unit/setup.js --ui tdd 'out/test/test/unit/**/*.test.js' --grep <pattern>` directly — same approach Plan 03 fell back to.
 - Phase-level `15-SUMMARY.md` aggregates all 5 implementation plan summaries plus this verification gate. ROADMAP.md left untouched (orchestrator-owned per `<critical_constraints>`).
+
+## v1.4.0 Carry-Forward Tech Debt
+
+> Closed by Phase 18 Plan 02 audit-rollup; pattern remains for future redesign. Preserved here so the v1.4.0 milestone-audit recommendations survive `/gsd-complete-milestone v1.4.0`.
+
+**`activeProjectCache` invalidation pattern (`src/common.ts` `hasFeaturesFolder()`):**
+
+The Phase 12 active-project block re-reads `discoveryDepth` at lookup time rather than invalidating `activeProjectCache` when discovery-influencing settings change. Working but ad-hoc — see commit `c08ced5` (re-applied from `27f14e0` after a diagnostic revert/re-revert during the Phase 17 regression bisect) and the WHY comment near `src/common.ts:347`. Recommended follow-up: pair `clearScanResultCache()` with project-list invalidation when discovery-influencing settings change. Tracked here so the v1.4.0 milestone-audit recommendation isn’t lost.
+
+**Multiroot integration mutex flake:** environmental — documented in `AI_INSTRUCTIONS.md` § "Integration Test Structure" (Local-dev gotcha). Surfaces as `Another instance of app 'Code' is already active` / `AssertionError: assert(instances)` when the developer’s own VS Code is running during `npm run test:integration`. No code action needed.
+
+**`test/unit/vscode.mock.ts` legacy fallback (Phase 15 Finding 1):** dead `if (key === 'suppressMultiConfigNotification') return false` branch at L171-173. Unreachable (migration uses `inspect()`); cosmetic one-line cleanup deferred — slated for Phase 18 Plan 01.
