@@ -168,9 +168,6 @@ export const workspace = {
       if (key === 'discoveryStopOnFirstHit') {
         return false;
       }
-      if (key === 'suppressMultiConfigNotification') {
-        return false;
-      }
       return defaultValue;
     },
     has: () => false,
