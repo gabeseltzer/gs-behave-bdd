@@ -9,25 +9,20 @@ An enhancement to the gs-behave-bdd VS Code extension that automatically discove
 Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
 
 
-## Current Milestone: v1.4.0 Deprecate featuresPath & Notification Suppression
-
-**Goal:** Remove the singular eaturesPath setting with automatic migration to eaturesPaths, and build reusable notification suppression infrastructure.
-
-**Target features:**
-- Hard-remove eaturesPath from package.json settings schema
-- Auto-migrate existing eaturesPath values to eaturesPaths[] on activation
-- Reusable notification suppression module (replacing ad-hoc suppressMultiConfigNotification pattern)
-- Migrate existing ad-hoc suppression to the new infrastructure
-
 ## Current State
 
-**Shipped:** 1.3.0 Project Switching (2026-04-23)
+**Shipped:** v1.4.0 Deprecate featuresPath & Notification Suppression (2026-05-04)
 
 - 1.0.0: Config parsing, discovery cache, UX (3 phases, 6 plans)
 - 1.1.0: Real-time config watching, malformed-config run guard, E2E integration coverage (3 phases, 9 plans)
 - 1.2.0: Multi-path types end-to-end, BFS monorepo scanner, `featuresPaths[]` setting, 3 integration fixtures (5 phases, 13 plans)
 - 1.3.0: Project switching with quick-pick command, status bar indicator, `workspaceState` persistence, rebuild on switch (3 phases, 7 plans)
-- 655 unit tests passing; 18 integration suites passing
+- v1.4.0: Reusable notification suppression module, `featuresPath` deprecation with auto-migration, `migrateScopedSetting` primitive, migrations integration suite (4 phases, 17 plans)
+- 697 unit tests passing; 19 integration suites passing
+
+## Next Milestone Goals
+
+(To be defined via `/gsd-new-milestone`.)
 
 ## Requirements
 
@@ -101,7 +96,7 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 
 ### Active
 
-(Requirements for v1.4.0 — to be defined.)
+(Requirements for next milestone — to be defined via `/gsd-new-milestone`.)
 
 ### Out of Scope
 
@@ -116,10 +111,10 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 ## Context
 
 **Tech stack:** TypeScript, VS Code Extension API, Mocha/Sinon, smol-toml.
-**Test coverage:** 655 unit tests; 18 integration suites.
-**Shipped:** 4 milestones, 14 phases, 35 plans across 1.0.0 + 1.1.0 + 1.2.0 + 1.3.0.
+**Test coverage:** 697 unit tests; 19 integration suites.
+**Shipped:** 5 milestones, 18 phases, 52 plans across 1.0.0 + 1.1.0 + 1.2.0 + 1.3.0 + v1.4.0.
 
-**Key files added during 1.0.0-1.3.0:**
+**Key files added during 1.0.0-v1.4.0:**
 
 - `src/parsers/configParser.ts` — stateless parser for all 5 behave config formats (1.0.0); dedup + per-path diagnostics (1.2.0)
 - `src/handlers/configDiagnostics.ts` — Problems panel diagnostics for config parse errors (1.0.0)
@@ -131,6 +126,10 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 - `src/runners/testRunHandler.ts` — `checkRunGuard()` (1.1.0); `projectSwitchInProgress` guard (1.3.0)
 - `test/integration/suite-shared/waitForTestTree.ts` — deterministic test-tree state polling (1.1.0)
 - `example-projects/project-switch/` — alpha/beta sub-project fixture (1.3.0)
+- `src/notifications.ts` — reusable notification suppression module: `isSuppressed`, `suppressNotification`, `showSuppressibleNotification` (v1.4.0)
+- `src/migrations.ts` — `migrateScopedSetting<TSrc, TDest>` primitive + `migrateLegacyFeaturesPath`/`migrateLegacySuppressMultiConfig` wrappers (v1.4.0)
+- `test/integration/migrations integration suite/` — 7 real-VSCode tests covering both migrations end-to-end (v1.4.0)
+- `example-projects/migration-stale/` — seeded settings.json fixture for migration integration tests (v1.4.0)
 
 ## Constraints
 
@@ -165,10 +164,16 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 | Pure helper extraction for testability (1.3.0) | `buildQuickPickItems`/`computeStatusBarState` as standalone functions | ✓ Good — 21 unit tests |
 | Rebuild via `configurationChangedHandler` on switch (1.3.0) | Reuses existing choke point; no parallel rebuild path | ✓ Good |
 | `projectSwitchInProgress` run guard (1.3.0) | Blocks test runs during rebuild with warning message | ✓ Good |
+| `suppressedNotifications: string[]` array (v1.4.0) | Extensible to future notification keys without schema growth | ✓ Good |
+| Migration writes at detected scope via `inspect()` (v1.4.0) | Preserves user intent across global/workspace/folder | ✓ Good |
+| `migrateScopedSetting` primitive extraction (v1.4.0) | Phase 16 reuses Phase 15 logic; D-MOD regression bar held | ✓ Good |
+| Read-time `discoveryDepth` re-read in `hasFeaturesFolder()` (v1.4.0) | Tactical fix for cache-staleness regression; redesign deferred | ⚠ Revisit — proper invalidation pairing tracked as v1.4.0 carry-forward |
+| Phase 17 as dedicated cross-cutting verification phase (v1.4.0) | Migrations span Phases 15+16; integration evidence belongs in its own phase | ✓ Good — caught the `activeProjectCache` regression |
+| Phase 18 closure phase (v1.4.0) | Audit found low-severity artifact + cleanup gaps; address before close | ✓ Good — zero outstanding artifact debt |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
 ---
-*Last updated: 2026-04-23 after v1.4.0 milestone started*
+*Last updated: 2026-05-04 after v1.4.0 milestone shipped*
