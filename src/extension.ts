@@ -347,7 +347,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         try {
           migrated = await migrateLegacyFeaturesPath(wkspUri);     // D-18 step 1: data shape; D-05 ensures no throw
           await migrateLegacySuppressMultiConfig(wkspUri);          // D-18 step 2: UX cleanup; D-07 ensures no throw
-          config.reloadSettings(wkspUri);                           // D-18 step 3: refresh cache (Pitfall 8 — sync, no await)
+          config.reloadSettings(wkspUri);                           // D-18 step 3: reloadSettings is synchronous — no await needed
         } catch (e) {
           // Defense-in-depth — D-05/D-07 prevent throws from the helpers, but wrap so activation
           // continues if reloadSettings ever throws.
