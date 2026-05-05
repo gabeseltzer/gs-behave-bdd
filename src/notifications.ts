@@ -74,6 +74,18 @@ export async function suppressNotification(key: string, wkspUri: vscode.Uri): Pr
  *
  * @returns The user's clicked button label (one of `buttons`), or `undefined`
  *          if dismissed, suppressed, or DSA was clicked.
+ *
+ * LIMITATION (W-04): the three "no action returned" cases — (1) the wrapper
+ * short-circuited because the key was already suppressed, (2) the user
+ * dismissed the notification (e.g. clicked the X), and (3) the user clicked
+ * "Don't Show Again" — are deliberately conflated as `undefined`. Callers
+ * cannot distinguish them from the return value alone. If a future caller
+ * needs to distinguish "user opted out of this notification forever" from
+ * "user ignored this one" (e.g. for telemetry or UX work that wants to count
+ * dismissals), this signature will need to change to a discriminated result
+ * (e.g. `{ action: string } | { dismissed: true } | { suppressed: true }`).
+ * For now, the conflation is correct because every existing caller treats
+ * all three cases identically.
  */
 export async function showSuppressibleNotification(
   key: string,
