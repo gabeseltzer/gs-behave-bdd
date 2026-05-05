@@ -881,11 +881,18 @@ suite('Phase 16 — activation order and notification structural tests (D-18, D-
     assert.ok(hasKey, 'D-13: suppression key literal "featuresPathMigration" must appear in extension.ts');
   });
 
-  test('(D-12) Open Settings command uses @ext:gabeseltzer.gs-behave-bdd publisher', () => {
+  test('(D-12) Open Settings command uses publisher-independent search query', () => {
     const src = readExtensionSrc();
+    // Per review B-02: command arg uses a publisher-independent search query
+    // (mirrors the multi-config notification pattern at extension.ts:139), so
+    // the deep-link survives a publisher rename.
     assert.ok(
-      src.includes('@ext:gabeseltzer.gs-behave-bdd'),
-      'D-12: Open Settings command must scope to @ext:gabeseltzer.gs-behave-bdd (publisher confirmed in 16-01-SUMMARY)',
+      src.includes('"gs-behave-bdd.featuresPaths"') || src.includes("'gs-behave-bdd.featuresPaths'"),
+      'B-02: Open Settings command must use the publisher-independent search query "gs-behave-bdd.featuresPaths"',
+    );
+    assert.ok(
+      !src.includes('@ext:gabeseltzer.gs-behave-bdd'),
+      'B-02: hard-coded publisher ID @ext:gabeseltzer.gs-behave-bdd must not appear in extension.ts',
     );
   });
 
