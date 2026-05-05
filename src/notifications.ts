@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { config } from './configuration';
 import { diagLog } from './logger';
+import { normalizeFeaturesPathEntry } from './common';
 
 /**
  * Phase 15: Notification suppression infrastructure.
@@ -284,14 +285,10 @@ export async function migrateLegacySuppressMultiConfig(wkspUri: vscode.Uri): Pro
 // land in canonical gs-behave-bdd.featuresPaths. behave-vsc.featuresPaths is NEVER written.
 const FEATURES_PATH_NAMESPACES = ["gs-behave-bdd", "behave-vsc"] as const;
 
-/**
- * Phase 16 — D-07 single source of truth. The regex MUST be byte-identical to
- * src/settings.ts:204 / L214. If they ever drift, dedup silently double-appends
- * (Pitfall 9 from 16-PATTERNS.md).
- */
-function normalizePathEntry(s: string): string {
-  return s.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim();
-}
+// Phase 16 — D-07 single source of truth. The actual implementation lives in
+// common.ts (W-07) so settings.ts and notifications.ts cannot drift. Aliased
+// here under the original name to keep call sites stable and review-friendly.
+const normalizePathEntry = normalizeFeaturesPathEntry;
 
 /**
  * Phase 16 / DEP-02, DEP-03: One-shot migration of the legacy
