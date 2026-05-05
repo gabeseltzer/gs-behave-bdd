@@ -111,11 +111,16 @@ suite('Phase 15 — notifications: isSuppressed (NOTIF-02 check)', () => {
 suite('Phase 15 — notifications: suppressNotification (NOTIF-02 + NOTIF-03)', () => {
   let updateSpy: sinon.SinonSpy;
   let logInfoSpy: sinon.SinonSpy;
+  let logSettingsWarningSpy: sinon.SinonSpy;
 
   setup(() => {
     updateSpy = sinon.spy(() => Promise.resolve());
     logInfoSpy = sinon.spy();
-    sinon.stub(configModule.config, 'logger').value({ logInfo: logInfoSpy });
+    logSettingsWarningSpy = sinon.spy();
+    sinon.stub(configModule.config, 'logger').value({
+      logInfo: logInfoSpy,
+      logSettingsWarning: logSettingsWarningSpy,
+    });
   });
   teardown(() => sinon.restore());
 
@@ -147,15 +152,17 @@ suite('Phase 15 — notifications: suppressNotification (NOTIF-02 + NOTIF-03)', 
     assert.strictEqual(updateSpy.called, false, 'D-11 dedup');
   });
 
-  test('suppressNotification (failure logs): rejection logs warn, does NOT throw', async () => {
+  test('suppressNotification (failure logs): rejection logs settings warning, does NOT throw', async () => {
     const rejectingUpdate = sinon.spy(() => Promise.reject(new Error('read-only workspace')));
     sinon.stub(vscode.workspace, 'getConfiguration').returns(
       makeScopedConfig({ workspaceFolderValue: [] }, rejectingUpdate),
     );
     await assert.doesNotReject(() => suppressNotification('multiConfigNotification', MOCK_URI));
-    assert.ok(logInfoSpy.called, 'logInfo must be called on update rejection');
+    // W-03: surface as a settings warning so the user sees their "Don't Show
+    // Again" click did NOT persist (e.g. read-only workspace).
+    assert.ok(logSettingsWarningSpy.called, 'logSettingsWarning must be called on update rejection');
     assert.ok(
-      logInfoSpy.firstCall.args[0].includes('multiConfigNotification'),
+      logSettingsWarningSpy.firstCall.args[0].includes('multiConfigNotification'),
       'log message includes the key',
     );
   });
@@ -367,7 +374,7 @@ suite('Phase 15 — notifications: migrateLegacySuppressMultiConfig (NOTIF-06)',
     assert.strictEqual(updateSpy.callCount, 0);
   });
 
-  test('migrate failure: rejection logs warn, does NOT throw', async () => {
+  test('migrate failure: rejection does NOT throw (W-03: errors routed via diagLog)', async () => {
     let callCount = 0;
     const rejectingUpdate = sinon.spy(() => {
       callCount += 1;
@@ -378,14 +385,11 @@ suite('Phase 15 — notifications: migrateLegacySuppressMultiConfig (NOTIF-06)',
       suppressMultiConfigNotification: { workspaceFolderValue: true },
       suppressedNotifications: {},
     }, rejectingUpdate));
+    // W-03: migration errors are now routed to diagLog (xRay-gated) rather
+    // than logger.logInfo. The contract is "warn-and-continue, never throw" —
+    // we assert the no-throw contract here. diagLog itself early-returns
+    // unless xRay is enabled, so we don't assert on a logger spy.
     await assert.doesNotReject(() => migrateLegacySuppressMultiConfig(MOCK_URI));
-    assert.ok(logInfoSpy.called, 'D-07: must log warn on failure');
-    const logMsg = logInfoSpy.firstCall.args[0] as string;
-    assert.ok(
-      logMsg.includes('suppressMultiConfigNotification') ||
-        logMsg.includes('suppressedNotifications'),
-      'log message must mention the migration keys',
-    );
   });
 });
 
@@ -548,7 +552,8 @@ suite('Phase 16 — notifications: migrateScopedSetting (D-MOD primitive)', () =
       });
     });
     assert.strictEqual(result, false);
-    assert.ok(logInfoSpy.called, 'must log via config.logger.logInfo on update rejection');
+    // W-03: migration errors now route via diagLog (xRay-gated) rather than
+    // config.logger.logInfo. The contract being asserted is "no throw + return false".
   });
 });
 
@@ -853,7 +858,8 @@ suite('Phase 16 — notifications: migrateLegacyFeaturesPath (DEP-02, DEP-03)', 
       result = await migrateLegacyFeaturesPath(MOCK_URI);
     });
     assert.strictEqual(result, false, 'no scope succeeded → false');
-    assert.ok(logInfoSpy.called, 'D-05: must log via config.logger.logInfo on rejection');
+    // W-03: migration errors now route via diagLog (xRay-gated) rather than
+    // config.logger.logInfo. The contract being asserted is "no throw + return false".
   });
 });
 
