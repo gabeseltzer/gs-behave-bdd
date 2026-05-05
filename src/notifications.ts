@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { config } from './configuration';
+import { diagLog } from './logger';
 
 /**
  * Phase 15: Notification suppression infrastructure.
@@ -56,7 +57,13 @@ export async function suppressNotification(key: string, wkspUri: vscode.Uri): Pr
   try {
     await cfg.update("suppressedNotifications", [...current, key], vscode.ConfigurationTarget.WorkspaceFolder);
   } catch (e) {
-    config.logger.logInfo(`Could not suppress notification "${key}": ${e}`, wkspUri);
+    // W-03: surface as a settings warning so the user sees their "Don't Show
+    // Again" click did NOT persist (e.g. read-only workspace) — otherwise
+    // they'll click it again next session with no idea why.
+    config.logger.logSettingsWarning(
+      `Could not persist "Don't Show Again" for notification "${key}": ${e}`,
+      wkspUri,
+    );
   }
 }
 
@@ -210,10 +217,20 @@ async function migrateScopedSetting<TSrc, TDest>(opts: {
     return false;
   } catch (e) {
     // D-05 / D-07 carryforward: warn-and-continue, never throw.
-    config.logger.logInfo(
-      `Could not migrate ${opts.sourceKey} to ${opts.destKey}: ${e}`,
-      opts.wkspUri,
-    );
+    // W-03: use diagLog for internal migration paths — surfacing this to the
+    // user adds no value (the migration is best-effort and behavior degrades
+    // gracefully if it fails: legacy keys keep working until next attempt).
+    // Wrapped in try/catch because this is already an error-handling path:
+    // we MUST honor the no-throw contract even if diagLog itself fails (e.g.
+    // when config.globalSettings is unavailable in a test stub).
+    try {
+      diagLog(
+        `Could not migrate ${opts.sourceKey} to ${opts.destKey}: ${e}`,
+        opts.wkspUri,
+      );
+    } catch {
+      // intentional: never throw from a "log on error" fallback.
+    }
     return false;
   }
 }
