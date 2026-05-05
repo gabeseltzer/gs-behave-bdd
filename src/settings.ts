@@ -340,7 +340,12 @@ export class WorkspaceSettings {
     wkspEntries.push(["fullProjectPath", this.projectUri.fsPath]);
     wkspEntries.push(["fullFeaturesPaths", this.featuresUris.map(u => u.fsPath).join(", ")]);
     wkspEntries.push(["junitTempPath", config.extensionTempFilesUri.fsPath]);
-    wkspEntries = wkspEntries.filter(([key]) => !key.startsWith("_") && !nonUserSettableWkspSettings.includes(key) && key !== "workspaceRelativeProjectPath" && key !== "projectRelativeFeaturesPath");
+    // N-03: `projectRelativeFeaturesPath` (singular) is a getter (L83) and
+    // never appears in Object.entries(this), so excluding it was dead code.
+    // `workspaceRelativeProjectPath` IS a public readonly own property (L76)
+    // and the filter exclusion below IS load-bearing — it prevents the raw
+    // path from clobbering the user-friendly `projectPath` entry pushed at L348.
+    wkspEntries = wkspEntries.filter(([key]) => !key.startsWith("_") && !nonUserSettableWkspSettings.includes(key) && key !== "workspaceRelativeProjectPath");
     wkspEntries.push(["projectPath", this.workspaceRelativeProjectPath || "(workspace root)"]);
     wkspEntries.push(["featuresPaths", this.projectRelativeFeaturesPaths.join(", ")]);
     wkspEntries.push(["discoverySource", this.discoverySource]);
