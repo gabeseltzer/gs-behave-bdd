@@ -5,6 +5,7 @@ import {
   findHighestTargetParentDirectorySync, findSubdirectorySync, getUrisOfWkspFoldersWithFeatures,
   getWorkspaceFolder, uriId, urisMatch, WkspError,
   DiscoverySource, DiscoveryEntry, getDiscoveryEntry, hasExplicitSetting,
+  normalizeFeaturesPathEntry,
 } from './common';
 import { config } from './configuration';
 import { Logger } from './logger';
@@ -191,8 +192,10 @@ export class WorkspaceSettings {
     let projectRelativeFeaturesPaths: string[];
     if (featuresPathsCfg && Array.isArray(featuresPathsCfg) && featuresPathsCfg.length > 0) {
       // Rung 1: plural non-empty
+      // W-07: shared helper from common.ts so the regex cannot drift from
+      // notifications.ts's migration dedup (Pitfall 9 from 16-PATTERNS.md).
       projectRelativeFeaturesPaths = featuresPathsCfg
-        .map(p => p.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim())
+        .map(p => normalizeFeaturesPathEntry(p))
         .filter(p => p.length > 0);
       if (projectRelativeFeaturesPaths.length === 0) {
         // Plural was all-empty → fall to convention.

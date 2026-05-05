@@ -26,6 +26,18 @@ export const BEHAVE_EXECUTION_ERROR_MESSAGE = "--- BEHAVE EXECUTION ERROR DETECT
 /** Escape regex special characters in a string so it can be used as a literal in a RegExp. */
 export const escapeRegex = (str: string) => str.replace(/[".*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * W-07 single source of truth (Phase 16 D-07): strips a single leading and
+ * single trailing path separator (forward or back), then trims whitespace.
+ *
+ * MUST be used by both the settings.ts featuresPaths normalization rung and
+ * the notifications.ts featuresPath migration dedup. If these two callers
+ * use byte-different regexes, the migration silently double-appends entries
+ * (Pitfall 9 from 16-PATTERNS.md). Centralizing here makes drift impossible.
+ */
+export const normalizeFeaturesPathEntry = (s: string): string =>
+  s.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim();
+
 export const sepr = ":////:"; // separator that cannot exist in file paths, i.e. safe for splitting in a path context
 export const beforeFirstSepr = (str: string) => str.substring(0, str.indexOf(sepr));
 export const afterFirstSepr = (str: string) => str.substring(str.indexOf(sepr) + sepr.length, str.length);
