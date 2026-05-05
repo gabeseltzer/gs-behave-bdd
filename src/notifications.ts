@@ -283,7 +283,8 @@ export async function migrateLegacySuppressMultiConfig(wkspUri: vscode.Uri): Pro
 
 // Phase 16 — namespaces inspected for legacy featuresPath. D-02: both source values
 // land in canonical gs-behave-bdd.featuresPaths. behave-vsc.featuresPaths is NEVER written.
-const FEATURES_PATH_NAMESPACES = ["gs-behave-bdd", "behave-vsc"] as const;
+const FEATURES_PATH_NAMESPACES: readonly ("gs-behave-bdd" | "behave-vsc")[] =
+  ["gs-behave-bdd", "behave-vsc"] as const;
 
 // Phase 16 — D-07 single source of truth. The actual implementation lives in
 // common.ts (W-07) so settings.ts and notifications.ts cannot drift. Aliased
