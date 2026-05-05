@@ -360,6 +360,10 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     // (see .planning/v1.4.0-MILESTONE-AUDIT.md tech_debt list).
     if (!isManualProjectPathMode(folder.uri)) {
       const activeProject = getActiveProject(folder.uri);
+      // N-04: this getConfiguration call is on the <1ms hot path; cost is one
+      // scope-chain walk per workspace folder per cache miss. For 10+ root
+      // workspaces with frequent invalidation this could matter. Documented
+      // as v1.4.0 tech debt — out of scope here, but flagged for awareness.
       const currentDiscoveryDepth = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri).get<number>("discoveryDepth") ?? 3;
       if (activeProject && activeProject.depth <= currentDiscoveryDepth) {
         const subdirConfigResult = findBehaveConfig(activeProject.dirUri);
