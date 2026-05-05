@@ -345,8 +345,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         wkspUri,
       ).then(action => {
         if (action === "Open Settings") {
-          // Publisher confirmed in 16-01-SUMMARY: package.json:280 → "publisher": "gabeseltzer".
-          vscode.commands.executeCommand("workbench.action.openSettings", "@ext:gabeseltzer.gs-behave-bdd");
+          // Use publisher-independent search query (matches the multi-config notification pattern at L139).
+          // Deep-links to the specific setting and survives publisher renames.
+          vscode.commands.executeCommand("workbench.action.openSettings", "gs-behave-bdd.featuresPaths");
         }
         // "Don't Show Again" intercepted internally by showSuppressibleNotification — never returned.
       });
