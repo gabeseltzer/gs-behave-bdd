@@ -702,6 +702,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
               { location: vscode.ProgressLocation.Notification, title: `Switching to project: ${displayLabel}...` },
               async () => {
                 try {
+                  // N-05: configurationChangedHandler is forward-referenced — defined
+                  // below at L989. This works because the const-binding is in scope
+                  // by the time this callback fires (the user must click an item to
+                  // trigger it, by which point activate() has finished registering
+                  // the handler). If activate() is restructured, beware of TDZ.
                   await configurationChangedHandler(undefined, undefined, true);
                 } finally {
                   setProjectSwitchInProgress(false);
