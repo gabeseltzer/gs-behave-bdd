@@ -14,6 +14,21 @@ import { config } from './configuration';
 const DONT_SHOW_AGAIN = "Don't Show Again";
 
 /**
+ * W-01 helper: structural equality for the simple JSON-shaped values written
+ * by migrateScopedSetting (string[] for featuresPaths / suppressedNotifications,
+ * boolean for legacy keys). Avoids pulling in a deep-equal dependency for what
+ * is in practice always a plain JSON tree from VS Code settings.
+ */
+function deepEqualForSettings(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Returns true if the given notification key is in the workspace's suppressed
  * notifications list. Reads from the cached `WorkspaceSettings` (consistent
  * with all other settings reads in this codebase).
@@ -138,6 +153,14 @@ async function migrateScopedSetting<TSrc, TDest>(opts: {
 
   try {
     if (result.kind === 'write') {
+      // W-01: if the dest at this scope is already deep-equal to the proposed
+      // value, skip the dest write — it's a no-op that nevertheless triggers a
+      // configuration-change event and a full reparse cycle on idempotent
+      // re-activation. Still remove the source to complete the migration.
+      if (destAtScope !== undefined && deepEqualForSettings(destAtScope, result.value)) {
+        await sourceCfg.update(opts.sourceKey, undefined, target);
+        return true;
+      }
       // Phase 15 contract: write dest, then remove source. Order matters for the test
       // assertion that updateSpy.firstCall == dest, secondCall == source removal.
       await destCfg.update(opts.destKey, result.value, target);

@@ -729,10 +729,14 @@ suite('Phase 16 — notifications: migrateLegacyFeaturesPath (DEP-02, DEP-03)', 
     const result = await migrateLegacyFeaturesPath(MOCK_URI);
 
     assert.strictEqual(result, true);
-    assert.strictEqual(updateSpy.callCount, 2, 'still writes (unchanged) + removes legacy');
+    // W-01: when the dest at this scope is already deep-equal to the proposed
+    // value, the no-op dest write is skipped — only the source removal fires.
+    // (Previously this was 2: write-unchanged + remove. The unchanged write
+    // triggered a configuration-change event and a wasted reparse cycle.)
+    assert.strictEqual(updateSpy.callCount, 1, 'dest unchanged: skip dest write, only remove legacy');
     // Pitfall 9: byte-identical normalize regex from src/settings.ts:204 must not double-append.
-    assert.deepStrictEqual(updateSpy.firstCall.args[1], ['main'], 'dedup: array unchanged');
-    assert.deepStrictEqual(updateSpy.secondCall.args, [
+    // The single update call is the source removal.
+    assert.deepStrictEqual(updateSpy.firstCall.args, [
       'featuresPath', undefined, vscode.ConfigurationTarget.WorkspaceFolder,
     ]);
   });
