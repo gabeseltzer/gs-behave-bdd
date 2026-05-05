@@ -153,12 +153,12 @@ suite('migrations suite', () => {
 		stub.callsFake((async () => undefined) as unknown as typeof vscode.window.showInformationMessage);
 		await showSuppressibleNotification(
 			'featuresPathMigrationShapeProbe',
-			'Migrated `featuresPath` → `featuresPaths`. The deprecated `featuresPath` setting has been moved to the new `featuresPaths` array.',
+			"Behave BDD: migrated your 'featuresPath' setting to the new 'featuresPaths' array. 'featuresPath' is deprecated and will be removed in a future release.",
 			['Open Settings'],
 			wkspUri,
 		);
 		const calls = stub.getCalls();
-		const migrationCall = calls.find(c => typeof c.args[0] === 'string' && c.args[0].includes('Migrated `featuresPath`'));
+		const migrationCall = calls.find(c => typeof c.args[0] === 'string' && c.args[0].includes("migrated your 'featuresPath'"));
 		assert.ok(migrationCall,
 			`expected a migration notification call; got ${calls.length} total calls: ${JSON.stringify(calls.map(c => c.args[0]))}`);
 		assert.ok(migrationCall.args.includes('Open Settings'), 'expected "Open Settings" button in notification');
@@ -171,7 +171,7 @@ suite('migrations suite', () => {
 		this.timeout(30000);
 		const stub = vscode.window.showInformationMessage as unknown as sinon.SinonStub;
 		stub.callsFake((async (msg: string, ...items: string[]) => {
-			if (typeof msg === 'string' && msg.includes('Migrated `featuresPath`') && items.includes("Don't Show Again")) {
+			if (typeof msg === 'string' && msg.includes("migrated your 'featuresPath'") && items.includes("Don't Show Again")) {
 				return "Don't Show Again";
 			}
 			return undefined;
@@ -189,7 +189,7 @@ suite('migrations suite', () => {
 			// Drive a fresh notification with the DSA-returning stub.
 			const result = await showSuppressibleNotification(
 				'featuresPathMigration',
-				'Migrated `featuresPath` → `featuresPaths`. Test invocation.',
+				"Behave BDD: migrated your 'featuresPath' setting. Test invocation.",
 				['Open Settings'],
 				wkspUri,
 			);
@@ -223,17 +223,17 @@ suite('migrations suite', () => {
 		try {
 			const action = await showSuppressibleNotification(
 				'featuresPathMigration',
-				'Migrated `featuresPath` → `featuresPaths`. Open Settings test.',
+				"Behave BDD: migrated your 'featuresPath' setting. Open Settings test.",
 				['Open Settings'],
 				wkspUri,
 			);
 			// Mirror the activation-time handler at extension.ts L329-L335:
 			if (action === 'Open Settings') {
-				vscode.commands.executeCommand('workbench.action.openSettings', '@ext:gabeseltzer.gs-behave-bdd');
+				vscode.commands.executeCommand('workbench.action.openSettings', 'gs-behave-bdd.featuresPaths');
 			}
 			assert.ok(
-				execStub.calledWith('workbench.action.openSettings', '@ext:gabeseltzer.gs-behave-bdd'),
-				'expected executeCommand("workbench.action.openSettings", "@ext:gabeseltzer.gs-behave-bdd") to be called'
+				execStub.calledWith('workbench.action.openSettings', 'gs-behave-bdd.featuresPaths'),
+				'expected executeCommand("workbench.action.openSettings", "gs-behave-bdd.featuresPaths") to be called'
 			);
 		} finally {
 			execStub.restore();
