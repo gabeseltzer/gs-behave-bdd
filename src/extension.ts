@@ -49,6 +49,13 @@ export const parser = new FileParser();
 export interface QueueItem { test: vscode.TestItem; scenario: Scenario; }
 let initialParsingComplete = false;
 const notifiedConfigErrors = new Set<string>();
+// W-05: per-session dedup for the multi-config notification, analogous to
+// notifiedConfigErrors. Keys are wkspUri.toString(). Without this, the
+// notification re-fires every time configurationChangedHandler runs (e.g.
+// the user edits any unrelated gs-behave-bdd setting), regardless of whether
+// suppressedNotifications contains the key. The suppression mechanism
+// remains the per-user opt-out; this gate is the per-session ratchet.
+const notifiedMultiConfigWorkspaces = new Set<string>();
 let updateProjectStatusBarFn: ((wkspUri: vscode.Uri) => void) | undefined;
 
 
@@ -81,6 +88,7 @@ function updateDiscoveryUX(
 ): void {
   if (clearNotifiedErrors) {
     notifiedConfigErrors.clear();
+    notifiedMultiConfigWorkspaces.clear();
   }
 
   for (const wkspUri of wkspUris) {
@@ -167,21 +175,29 @@ function updateDiscoveryUX(
       // Phase 13: D-12 — Updated to reference Select Project command
       const message = `Behave BDD: Found ${totalConfigs} behave configs:\n${configLines.join('\n')}\nUse "Behave BDD: Select Project" to switch.`;
 
-      // Wrapper checks suppression, appends "Don't Show Again", and intercepts DSA internally.
-      // Fire-and-forget — preserves the prior unawaited shape.
-      showSuppressibleNotification(
-        "multiConfigNotification",
-        message,
-        ['Select Project', 'Show Details'],
-        wkspUri,
-      ).then(action => {
-        if (action === 'Select Project') {
-          vscode.commands.executeCommand('gs-behave-bdd.selectProject');
-        } else if (action === 'Show Details') {
-          vscode.commands.executeCommand('gs-behave-bdd.openOutput');
-        }
-        // "Don't Show Again" is intercepted internally by the wrapper — never returned here.
-      });
+      // W-05: per-session dedup so this notification doesn't re-fire on every
+      // configurationChangedHandler invocation when the user has not opted out.
+      // The suppression mechanism (showSuppressibleNotification) is still the
+      // per-user opt-out; this gate is the per-session ratchet keyed on workspace.
+      const sessionKey = wkspUri.toString();
+      if (!notifiedMultiConfigWorkspaces.has(sessionKey)) {
+        notifiedMultiConfigWorkspaces.add(sessionKey);
+        // Wrapper checks suppression, appends "Don't Show Again", and intercepts DSA internally.
+        // Fire-and-forget — preserves the prior unawaited shape.
+        showSuppressibleNotification(
+          "multiConfigNotification",
+          message,
+          ['Select Project', 'Show Details'],
+          wkspUri,
+        ).then(action => {
+          if (action === 'Select Project') {
+            vscode.commands.executeCommand('gs-behave-bdd.selectProject');
+          } else if (action === 'Show Details') {
+            vscode.commands.executeCommand('gs-behave-bdd.openOutput');
+          }
+          // "Don't Show Again" is intercepted internally by the wrapper — never returned here.
+        });
+      }
     }
 
 
