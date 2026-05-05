@@ -319,20 +319,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     //       Notification fires AFTER reloadSettings so isSuppressed() reads current cache (Pitfall 4).
     // Must complete BEFORE updateDiscoveryUX so the multi-config notification (Phase 15) and
     // the featuresPath migration notification (Phase 16) honor the migrated suppression state.
-    const pendingFeaturesPathNotifs: vscode.Uri[] = [];
-    for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
-      let migrated = false;
-      try {
-        migrated = await migrateLegacyFeaturesPath(wkspUri);     // D-18 step 1: data shape; D-05 ensures no throw
-        await migrateLegacySuppressMultiConfig(wkspUri);          // D-18 step 2: UX cleanup; D-07 ensures no throw
-        config.reloadSettings(wkspUri);                           // D-18 step 3: refresh cache (Pitfall 8 — sync, no await)
-      } catch (e) {
-        // Defense-in-depth — D-05/D-07 prevent throws from the helpers, but wrap so activation
-        // continues if reloadSettings ever throws.
-        config.logger.logInfo(`Phase 15/16 migration error: ${e}`, wkspUri);
-      }
-      if (migrated) pendingFeaturesPathNotifs.push(wkspUri);
-    }
+    // B-03: Run per-workspace migrations concurrently. The D-18 ordering
+    // (featuresPath → suppressMultiConfig → reloadSettings) is preserved
+    // WITHIN each workspace's async function; parallelism is across workspaces,
+    // which are independent (each (namespace × scope) update is bound to its
+    // own wkspUri). This avoids the activate()-fast contract violation where
+    // a single slow cfg.update stalls every other workspace's discovery UX.
+    const migrationResults = await Promise.all(
+      getUrisOfWkspFoldersWithFeatures().map(async (wkspUri) => {
+        let migrated = false;
+        try {
+          migrated = await migrateLegacyFeaturesPath(wkspUri);     // D-18 step 1: data shape; D-05 ensures no throw
+          await migrateLegacySuppressMultiConfig(wkspUri);          // D-18 step 2: UX cleanup; D-07 ensures no throw
+          config.reloadSettings(wkspUri);                           // D-18 step 3: refresh cache (Pitfall 8 — sync, no await)
+        } catch (e) {
+          // Defense-in-depth — D-05/D-07 prevent throws from the helpers, but wrap so activation
+          // continues if reloadSettings ever throws.
+          config.logger.logInfo(`Phase 15/16 migration error: ${e}`, wkspUri);
+        }
+        return { wkspUri, migrated };
+      }),
+    );
+    const pendingFeaturesPathNotifs: vscode.Uri[] = migrationResults
+      .filter(r => r.migrated)
+      .map(r => r.wkspUri);
 
     // Phase 16 / DEP-04: fire migration notification per migrated workspace folder (D-10, D-11).
     // Fire-and-forget per the existing multi-config notification pattern (extension.ts:165-177);
