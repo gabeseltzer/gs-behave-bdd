@@ -340,7 +340,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     for (const wkspUri of pendingFeaturesPathNotifs) {
       showSuppressibleNotification(
         "featuresPathMigration",                                  // D-13: suppression key
-        "Migrated `featuresPath` → `featuresPaths`. The deprecated `featuresPath` setting has been moved to the new `featuresPaths` array.",
+        "Behave BDD: migrated your 'featuresPath' setting to the new 'featuresPaths' array. 'featuresPath' is deprecated and will be removed in a future release.",
         ["Open Settings"],                                        // D-12: single user-visible button
         wkspUri,
       ).then(action => {
