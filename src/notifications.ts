@@ -107,6 +107,16 @@ type TransformResult<T> =
  * Writes the new dest value (if any) and removes the source key (if requested),
  * BOTH at the same scope target.
  *
+ * W-02 LIMITATION: This is a SINGLE-scope migration per invocation. If the user
+ * has the legacy `sourceKey` set at MULTIPLE scopes (e.g. global default + a
+ * per-folder override), only the most-specific scope is migrated; values at
+ * other scopes linger as deprecated keys. Cross-scope migration of the same
+ * (namespace × key) pair is intentionally out of scope — wrappers (e.g.
+ * `migrateLegacyFeaturesPath`) achieve cross-NAMESPACE independence by
+ * invoking this primitive once per namespace, but cross-SCOPE within one
+ * namespace is not handled. We surface a one-shot diagLog warning when stale
+ * values exist at non-migrated scopes so the situation is at least diagnosable.
+ *
  * Returns true iff at least the source removal OR a dest write completed for that scope.
  * Never throws — on update() rejection, logs via config.logger.logInfo and returns false.
  */
@@ -136,6 +146,30 @@ async function migrateScopedSetting<TSrc, TDest>(opts: {
     sourceVal = insp.globalValue;
   }
   if (target === undefined) return false;
+
+  // W-02: warn if the legacy key ALSO exists at non-migrated scopes. The
+  // primitive only migrates the most-specific scope; other-scope values
+  // linger as deprecated keys. Surfacing this via diagLog (xRay) keeps the
+  // limitation diagnosable without spamming users who already had the
+  // expected single-scope setup.
+  const otherScopesWithStaleValues: string[] = [];
+  if (target !== vscode.ConfigurationTarget.WorkspaceFolder && insp.workspaceFolderValue !== undefined) {
+    otherScopesWithStaleValues.push("workspaceFolder");
+  }
+  if (target !== vscode.ConfigurationTarget.Workspace && insp.workspaceValue !== undefined) {
+    otherScopesWithStaleValues.push("workspace");
+  }
+  if (target !== vscode.ConfigurationTarget.Global && insp.globalValue !== undefined) {
+    otherScopesWithStaleValues.push("global");
+  }
+  if (otherScopesWithStaleValues.length > 0) {
+    config.logger.logInfo(
+      `Migration W-02: ${opts.namespace}.${opts.sourceKey} has stale values at additional scope(s) ` +
+      `[${otherScopesWithStaleValues.join(", ")}] that will NOT be migrated automatically. ` +
+      `Remove them manually if no longer needed.`,
+      opts.wkspUri,
+    );
+  }
 
   // Same-scope dest read (Pitfall 2 — never cfg.get() which merges scopes).
   const destNs = opts.destNamespace ?? opts.namespace;
