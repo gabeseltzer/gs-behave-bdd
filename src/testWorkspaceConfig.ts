@@ -6,6 +6,29 @@ export class TestWorkspaceConfigWithWkspUri {
   constructor(public testConfig: TestWorkspaceConfig, public wkspUri: vscode.Uri) { }
 }
 
+/**
+ * W-08 LIMITATION: Phase 16-06 dropped the singular `featuresPath` field from
+ * this mock entirely. That is correct for the production read path
+ * (settings.ts no longer reads the singular key), but the migration logic in
+ * notifications.ts reads `featuresPath` via real
+ * `vscode.workspace.getConfiguration().inspect()` — which integration tests
+ * cannot stub through TestWorkspaceConfig (the surface no longer has the key).
+ *
+ * Migration coverage layers:
+ *   - UNIT: test/unit/notifications.test.ts uses sinon to stub
+ *     `vscode.workspace.getConfiguration` and exhaustively exercises every
+ *     case (DEP-02..DEP-04, D-04 cross-namespace, D-08 empty values, etc.).
+ *   - INTEGRATION: NOT covered. There is no `example-projects/` fixture with
+ *     a legacy `featuresPath` settings.json; an integration test wanting to
+ *     assert post-activate migration cannot construct the precondition.
+ *
+ * If you need integration-test coverage of the migration path, add a fixture
+ * under `example-projects/` that ships `.vscode/settings.json` with
+ * `"gs-behave-bdd.featuresPath": "tests/features"` and assert post-activate
+ * that the value lands in `featuresPaths`. The mock simplification is
+ * deliberate and not the right place to add this coverage.
+ */
+
 // used in extension code to allow us to dynamically inject a workspace configuration
 export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
 
