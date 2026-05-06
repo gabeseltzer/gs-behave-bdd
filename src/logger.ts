@@ -18,7 +18,11 @@ export class Logger {
     }
 
     const wkspPaths = wkspUris.map(u => u.path);
-    if (wkspPaths.length < 2) {
+    if (wkspPaths.length === 0) {
+      // Phase 9: No folders discovered yet (BFS scan may add them later)
+      return;
+    }
+    if (wkspPaths.length === 1) {
       this.channels[wkspUris[0].path] = vscode.window.createOutputChannel("Behave BDD");
       return;
     }
@@ -38,11 +42,11 @@ export class Logger {
   }
 
   show = (wkspUri: vscode.Uri) => {
-    this.channels[wkspUri.path].show();
+    this.ensureChannel(wkspUri).show();
   };
 
   clear = (wkspUri: vscode.Uri) => {
-    this.channels[wkspUri.path].clear();
+    this.ensureChannel(wkspUri).clear();
   };
 
   clearAllWksps = () => {
@@ -51,6 +55,15 @@ export class Logger {
     }
   };
 
+
+  // Phase 9: Lazily create a channel for a workspace that was discovered after
+  // syncChannelsToWorkspaceFolders (e.g., by the BFS subdirectory scanner).
+  private ensureChannel(wkspUri: vscode.Uri): vscode.OutputChannel {
+    if (!this.channels[wkspUri.path]) {
+      this.channels[wkspUri.path] = vscode.window.createOutputChannel("Behave BDD");
+    }
+    return this.channels[wkspUri.path];
+  }
 
   logInfoAllWksps = (text: string, run?: vscode.TestRun) => {
     diagLog(text);
@@ -67,7 +80,7 @@ export class Logger {
   logInfo = (text: string, wkspUri: vscode.Uri, run?: vscode.TestRun) => {
     diagLog(text);
 
-    this.channels[wkspUri.path].appendLine(text);
+    this.ensureChannel(wkspUri).appendLine(text);
     if (run)
       run.appendOutput(text + "\r\n");
   };
@@ -76,7 +89,7 @@ export class Logger {
   logInfoNoLF = (text: string, wkspUri: vscode.Uri, run?: vscode.TestRun) => {
     diagLog(text);
 
-    this.channels[wkspUri.path].append(text);
+    this.ensureChannel(wkspUri).append(text);
     if (run)
       run.appendOutput(text);
   };
@@ -85,8 +98,8 @@ export class Logger {
   logSettingsWarning = (text: string, wkspUri: vscode.Uri, run?: vscode.TestRun) => {
     diagLog(text, wkspUri, DiagLogType.warn);
 
-    this.channels[wkspUri.path].appendLine(text);
-    this.channels[wkspUri.path].show(true);
+    this.ensureChannel(wkspUri).appendLine(text);
+    this.ensureChannel(wkspUri).show(true);
 
     if (run)
       run.appendOutput(text + "\r\n");
@@ -120,7 +133,7 @@ export class Logger {
     diagLog(text, wkspUri, logType);
 
     if (wkspUri) {
-      this.channels[wkspUri.path].appendLine(text);
+      this.ensureChannel(wkspUri).appendLine(text);
     }
     else {
       for (const wkspPath in this.channels) {

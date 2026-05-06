@@ -34,7 +34,9 @@ suite('fileParser - reparseFile debouncing', () => {
     uri: wkspUri,
     name: 'test',
     featuresUri: featuresUri,
+    featuresUris: [featuresUri],
     stepsSearchUri: stepsUri,
+    stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
   } as WorkspaceSettings;
 
@@ -48,7 +50,9 @@ suite('fileParser - reparseFile debouncing', () => {
     uri: wkspUri2,
     name: 'test2',
     featuresUri: featuresUri2,
+    featuresUris: [featuresUri2],
     stepsSearchUri: stepsUri2,
+    stepsSearchUris: [stepsUri2],
     projectUri: wkspUri2,
   } as WorkspaceSettings;
 

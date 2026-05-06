@@ -283,6 +283,10 @@ Each integration suite has:
 - `extension.test.ts` — main assertions
 - `index.ts` — suite entry point
 
+**Local-dev gotcha — VS Code mutex:** Running `npm run test:integration` (or full `npm test`) while your own VS Code is open causes the Dev Host launch to fail with `Another instance of app 'Code' is already active` (typically surfacing as `AssertionError: assert(instances)` inside `getTestSupportFromExtension` in the `multiroot suite`). This is **environmental — not a test regression.** The second VS Code Electron instance launched by `@vscode/test-electron` cannot acquire the `CrossAppIPC` mutex. Two workarounds:
+1. Close your editor before running the integration suite, OR
+2. Pass a separate `--user-data-dir` to `@vscode/test-electron` (or run via CI, which uses a clean profile per job).
+
 ## Development Workflow
 
 ### Debugging

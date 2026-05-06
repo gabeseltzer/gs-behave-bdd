@@ -1,0 +1,5 @@
+{
+  "gs-behave-bdd.featuresPath": "features",
+  "behave-vsc.featuresPath": "features-alt",
+  "gs-behave-bdd.suppressMultiConfigNotification": true
+}

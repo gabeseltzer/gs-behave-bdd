@@ -32,14 +32,17 @@
 				"gs-behave-bdd.projectPath": {
 					"scope": "resource",
 					"type": "string",
-					"markdownDescription": "*workspace-relative* path to the root of your behave project. This is the directory where behave will be executed from (working directory). If not set (the default), the workspace root folder is used. Example: `myproject/backend`.",
+					"markdownDescription": "*workspace-relative* path to the root of your behave project (working directory for behave). **Override only:** Leave blank to use auto-discovery from `behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, or `pyproject.toml`. Set this only if auto-discovery does not detect the correct project root. Example: `myproject/backend`.",
 					"default": ""
 				},
-				"gs-behave-bdd.featuresPath": {
+				"gs-behave-bdd.featuresPaths": {
 					"scope": "resource",
-					"type": "string",
-					"markdownDescription": "*project-relative* path to the features subfolder. If not `features` (the default), then this must tie up with the `\"paths=\"` setting in your behave configuration file. This path is relative to `projectPath` (or workspace root if `projectPath` is not set). Example: `my_behave_tests`.",
-					"default": "features"
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"markdownDescription": "*project-relative* paths to features subfolders. **Override only:** Leave blank to use the paths from your behave config file, or `features/` if no config file is found. Example: `[\"features\", \"features-alt\"]`.",
+					"default": []
 				},
 				"gs-behave-bdd.justMyCode": {
 					"scope": "resource",
@@ -93,6 +96,29 @@
 					"type": "boolean",
 					"markdownDescription": "⚠️ **Warning:** Enabling this may log sensitive information to the output channel, including the full contents of your environment variable presets.\n\nWhen enabled, additional developer debugging information is written to the output channel.",
 					"default": false
+				},
+				"gs-behave-bdd.discoveryDepth": {
+					"scope": "resource",
+					"type": "number",
+					"minimum": 0,
+					"maximum": 10,
+					"markdownDescription": "Maximum directory depth to scan for behave config files (behave.ini, .behaverc, etc.) when no config is found at the workspace root. Set to `0` to disable subdirectory scanning and restore workspace-root-only behavior.",
+					"default": 3
+				},
+				"gs-behave-bdd.discoveryStopOnFirstHit": {
+					"scope": "resource",
+					"type": "boolean",
+					"markdownDescription": "When enabled, the subdirectory config scanner stops at the first depth level that yields a behave config file. When disabled (default), the scanner always scans to `discoveryDepth` so it can report all found configs.",
+					"default": false
+				},
+				"gs-behave-bdd.suppressedNotifications": {
+					"scope": "resource",
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"markdownDescription": "List of notification keys that have been dismissed via 'Don't Show Again'. Edit this list to re-enable suppressed notifications. Known keys: `multiConfigNotification` (multiple behave configs found).",
+					"default": []
 				}
 			}
 		},
@@ -117,6 +143,11 @@
 				"command": "gs-behave-bdd.selectEnvPreset",
 				"title": "Behave: Select Environment Preset",
 				"icon": "$(server-environment)"
+			},
+			{
+				"command": "gs-behave-bdd.selectProject",
+				"title": "Behave BDD: Select Project",
+				"icon": "$(folder-active)"
 			}
 		],
 		"keybindings": [
@@ -234,7 +265,7 @@
 	"name": "gs-behave-bdd",
 	"displayName": "Behave BDD",
 	"description": "Full langague support for Behave feature files. Run and debug tests. Navigate between steps and definitions. Forked from jimasp's behave-vsc",
-	"version": "0.9.19",
+	"version": "1.4.1",
 	"icon": "images/gs-behave-bdd.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",
@@ -271,7 +302,9 @@
 		"ms-python.python"
 	],
 	"activationEvents": [
-		"workspaceContains:**/*.feature"
+		"workspaceContains:**/*.feature",
+		"workspaceContains:**/behave.ini",
+		"workspaceContains:**/.behaverc"
 	],
 	"main": "./dist/extension.js",
 	"scripts": {
@@ -285,13 +318,13 @@
 		"lint": "eslint src --ext ts",
 		"lint:python": "uv run ruff check src/python example-projects && uv run ruff format --check src/python example-projects && uv run python -m mypy src/python",
 		"test:unit": "npm run compile-tests && node ./out/test/test/unit/run.js",
-		"test:integration": "npm run compile-tests && node ./out/test/test/integration/runTestSuites.js --stable",
-		"test:debug-suite": "npm run compile-tests && node ./out/test/test/integration/runDebugSuite.js --insiders",
+		"test:integration": "webpack && npm run compile-tests && node ./out/test/test/integration/runTestSuites.js --stable",
+		"test:debug-suite": "webpack && npm run compile-tests && node ./out/test/test/integration/runDebugSuite.js --insiders",
 		"test": "npm run test:unit && node scripts/maybe-integration-tests.js",
 		"package:fast": "node scripts/package-fast.js",
 		"pretest": "npm run lint && npm run lint:python",
 		"pretestinsiders": "npm run pretest",
-		"testinsiders": "npm run compile-tests && node ./out/test/test/integration/runTestSuites.js --insiders",
+		"testinsiders": "webpack && npm run compile-tests && node ./out/test/test/integration/runTestSuites.js --insiders",
 		"rimraf": "./node_modules/rimraf/bin.js",
 		"clean-output": "rimraf out/ dist/"
 	},

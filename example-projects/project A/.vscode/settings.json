@@ -14,9 +14,11 @@
         "space_var": " ",
         "USERNAME": "bob-163487"
     },
-    "gs-behave-bdd.featuresPath": "behave tests/some tests/",
     "gs-behave-bdd.justMyCode": true,
     "gs-behave-bdd.runParallel": false,
     "gs-behave-bdd.xRay": true,
-    "gs-behave-bdd.activeEnvVarPreset": "staging"
+    "gs-behave-bdd.activeEnvVarPreset": "staging",
+    "gs-behave-bdd.featuresPaths": [
+        "behave tests/some tests"
+    ]
 }
