@@ -123,3 +123,9 @@ The Phase 12 active-project block re-reads `discoveryDepth` at lookup time rathe
 **Multiroot integration mutex flake:** environmental — documented in `AI_INSTRUCTIONS.md` § "Integration Test Structure" (Local-dev gotcha). Surfaces as `Another instance of app 'Code' is already active` / `AssertionError: assert(instances)` when the developer’s own VS Code is running during `npm run test:integration`. No code action needed.
 
 **`test/unit/vscode.mock.ts` legacy fallback (Phase 15 Finding 1):** dead `if (key === 'suppressMultiConfigNotification') return false` branch at L171-173. Unreachable (migration uses `inspect()`); cosmetic one-line cleanup deferred — slated for Phase 18 Plan 01.
+
+## Quick Tasks Completed
+
+| Date | Slug | Commits | Notes |
+|------|------|---------|-------|
+| 2026-05-05 | update-integration-migration-tests | `35e0a48` | Aligned `test/integration/migrations suite/extension.test.ts` with v1.4.0 review B-01 (notification copy) and B-02 (publisher-independent settings query). Closes the integration-test gap flagged in the v1.4.0 review batch. |
