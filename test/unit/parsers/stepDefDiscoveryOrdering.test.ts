@@ -43,7 +43,9 @@ suite('stepDefDiscoveryOrdering', () => {
     uri: wkspUri,
     name: 'project',
     featuresUri,
+    featuresUris: [featuresUri],
     stepsSearchUri: stepsUri,
+    stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
   } as WorkspaceSettings;
 
@@ -232,7 +234,9 @@ suite('stepDefDiscoveryOrdering', () => {
       uri: wkspUri2,
       name: 'project-b',
       featuresUri: featuresUri2,
+      featuresUris: [featuresUri2],
       stepsSearchUri: stepsUri2,
+      stepsSearchUris: [stepsUri2],
       projectUri: wkspUri2,
     } as WorkspaceSettings;
 

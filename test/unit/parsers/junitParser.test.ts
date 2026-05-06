@@ -22,9 +22,12 @@ function makeWkspSettings(featuresRelPath = 'features'): WorkspaceSettings {
     uri: vscode.Uri.file('c:/test'),
     name: 'test',
     featuresUri,
+    featuresUris: [featuresUri],
     // steps under features so getjUnitName doesn't add "features." prefix
     stepsSearchUri: vscode.Uri.joinPath(featuresUri, 'steps'),
+    stepsSearchUris: [vscode.Uri.joinPath(featuresUri, 'steps')],
     workspaceRelativeFeaturesPath: featuresRelPath,
+    workspaceRelativeFeaturesPaths: [featuresRelPath],
     workspaceRelativeProjectPath: '',
   } as unknown as WorkspaceSettings;
 }

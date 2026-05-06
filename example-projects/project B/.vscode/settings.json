@@ -13,7 +13,6 @@
     ],
     "python.testing.unittestEnabled": true,
     "python.testing.pytestEnabled": false,
-    "gs-behave-bdd.featuresPath": "",
     "gs-behave-bdd.runParallel": true,
     "gs-behave-bdd.xRay": true
 }

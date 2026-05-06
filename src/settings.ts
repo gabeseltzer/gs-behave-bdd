@@ -1,8 +1,11 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
 import {
   findHighestTargetParentDirectorySync, findSubdirectorySync, getUrisOfWkspFoldersWithFeatures,
-  getWorkspaceFolder, uriId, WkspError
+  getWorkspaceFolder, uriId, urisMatch, WkspError,
+  DiscoverySource, DiscoveryEntry, getDiscoveryEntry, hasExplicitSetting,
+  normalizeFeaturesPathEntry,
 } from './common';
 import { config } from './configuration';
 import { Logger } from './logger';
@@ -67,22 +70,40 @@ export class WorkspaceSettings {
   public readonly runParallel: boolean;
   public readonly importStrategy: string;
   public readonly stepDefinitionSearchTimeout: number;
+  public readonly discoveryDepth: number;
+  public readonly discoveryStopOnFirstHit: boolean;
+  public readonly suppressedNotifications: readonly string[];
   public readonly workspaceRelativeProjectPath: string;
-  public readonly projectRelativeFeaturesPath: string;
+  // Plural fields (Phase 7, D-03) — non-empty; length-1 in Phase 7, grows in Phase 8
+  public readonly projectRelativeFeaturesPaths: string[];
+  public readonly featuresUris: vscode.Uri[];
+  public readonly stepsSearchUris: vscode.Uri[];
+  public readonly workspaceRelativeFeaturesPaths: string[];
+  // Singular back-compat getters (D-03, D-05) — 32 existing call sites read these
+  public get projectRelativeFeaturesPath(): string { return this.projectRelativeFeaturesPaths[0]; }
+  public get featuresUri(): vscode.Uri { return this.featuresUris[0]; }
+  public get stepsSearchUri(): vscode.Uri { return this.stepsSearchUris[0]; }
+  public get workspaceRelativeFeaturesPath(): string { return this.workspaceRelativeFeaturesPaths[0]; }
+  // D-08 instance method — returns true if uri is inside any featuresUri root
+  public isFileInFeatures(uri: vscode.Uri): boolean {
+    return this.featuresUris.some(
+      fu => uri.path.startsWith(fu.path + '/') || urisMatch(fu, uri)
+    );
+  }
   // convenience properties
   public readonly id: string;
   public readonly uri: vscode.Uri;
   public readonly name: string;
   public readonly projectUri: vscode.Uri;
-  public readonly featuresUri: vscode.Uri;
-  public readonly stepsSearchUri: vscode.Uri;
-  public readonly workspaceRelativeFeaturesPath: string; // computed: projectPath + featuresPath
+  // Discovery metadata (Phase 2 -- INTG-06)
+  public readonly discoverySource: DiscoverySource;
+  public readonly configFileUri: vscode.Uri | undefined;
   // internal
   private readonly _warnings: string[] = [];
   private readonly _fatalErrors: string[] = [];
 
 
-  constructor(wkspUri: vscode.Uri, wkspConfig: vscode.WorkspaceConfiguration, winSettings: WindowSettings, logger: Logger, legacyConfig?: vscode.WorkspaceConfiguration) {
+  constructor(wkspUri: vscode.Uri, wkspConfig: vscode.WorkspaceConfiguration, winSettings: WindowSettings, logger: Logger, legacyConfig?: vscode.WorkspaceConfiguration, discoveryEntry?: DiscoveryEntry) {
     const get = <T>(key: string): T | undefined =>
       legacyConfig ? getWithLegacyFallback<T>(wkspConfig, legacyConfig, key) : wkspConfig.get<T>(key);
 
@@ -90,6 +111,11 @@ export class WorkspaceSettings {
     this.id = uriId(wkspUri);
     const wsFolder = getWorkspaceFolder(wkspUri);
     this.name = wsFolder.name;
+
+    // Discovery metadata -- read from passed-in entry or from cache (INTG-06)
+    const entry = discoveryEntry ?? getDiscoveryEntry(wkspUri);
+    this.discoverySource = entry?.source ?? "convention";
+    this.configFileUri = entry?.configFileUri;
 
     // note: undefined should never happen (or packages.json is wrong) as get will return a default value for packages.json settings
     const envVarOverridesCfg: { [name: string]: string } | undefined = get("envVarOverrides");
@@ -104,9 +130,6 @@ export class WorkspaceSettings {
     const projectPathCfg: string | undefined = get("projectPath");
     if (projectPathCfg === undefined)
       throw "projectPath is undefined";
-    const featuresPathCfg: string | undefined = get("featuresPath");
-    if (featuresPathCfg === undefined)
-      throw "featuresPath is undefined";
     const justMyCodeCfg: boolean | undefined = get("justMyCode");
     if (justMyCodeCfg === undefined)
       throw "justMyCode is undefined";
@@ -121,6 +144,15 @@ export class WorkspaceSettings {
     const stepDefinitionSearchTimeoutCfg: number | undefined = get("stepDefinitionSearchTimeout");
     if (stepDefinitionSearchTimeoutCfg === undefined)
       throw "stepDefinitionSearchTimeout is undefined";
+    const discoveryDepthCfg: number | undefined = get("discoveryDepth");
+    if (discoveryDepthCfg === undefined)
+      throw "discoveryDepth is undefined";
+    const discoveryStopOnFirstHitCfg: boolean | undefined = get("discoveryStopOnFirstHit");
+    if (discoveryStopOnFirstHitCfg === undefined)
+      throw "discoveryStopOnFirstHit is undefined";
+    const suppressedNotificationsCfg: string[] | undefined = get<string[]>("suppressedNotifications");
+    if (suppressedNotificationsCfg === undefined)
+      throw "suppressedNotifications is undefined";
 
 
     this.justMyCode = justMyCodeCfg;
@@ -128,6 +160,9 @@ export class WorkspaceSettings {
     this.importStrategy = importStrategyCfg;
     this.stepDefinitionSearchTimeout = Math.max(1, stepDefinitionSearchTimeoutCfg);
     this.activeEnvVarPreset = activeEnvVarPresetCfg;
+    this.discoveryDepth = Math.max(0, Math.min(10, discoveryDepthCfg));
+    this.discoveryStopOnFirstHit = discoveryStopOnFirstHitCfg;
+    this.suppressedNotifications = suppressedNotificationsCfg;
 
 
     // Process projectPath - this is the root of the behave project
@@ -137,42 +172,90 @@ export class WorkspaceSettings {
       if (!fs.existsSync(this.projectUri.fsPath)) {
         this._fatalErrors.push(`project path ${this.projectUri.fsPath} not found.`);
       }
+    } else if (!hasExplicitSetting(wkspConfig, "projectPath", legacyConfig)
+               && entry?.source === 'config-file' && entry.configFileUri) {
+      // No explicit projectPath and config-file discovery found a config in a subdirectory —
+      // derive projectUri from the config file's directory (e.g. root/autotest/behave.ini → root/autotest/)
+      const configDirUri = vscode.Uri.joinPath(entry.configFileUri, '..');
+      this.workspaceRelativeProjectPath = path.relative(wkspUri.fsPath, configDirUri.fsPath).replace(/\\/g, '/');
+      this.projectUri = configDirUri;
     } else {
       this.projectUri = wkspUri;
     }
 
-    // Process featuresPath - this is relative to projectPath
-    this.projectRelativeFeaturesPath = featuresPathCfg.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim();
+    // Process featuresPaths — Phase 16 / D-15: 3-rung precedence ladder.
+    // Singular `featuresPath` is no longer read here; Plan 03's migrateLegacyFeaturesPath
+    // ran at activation and moved any legacy value into `featuresPaths` at the appropriate scope.
+    // Read optional plural config (D-12: no throw on undefined — VS Code returns undefined for undeclared keys)
+    const featuresPathsCfg: string[] | undefined = get<string[] | undefined>("featuresPaths");
+
+    let projectRelativeFeaturesPaths: string[];
+    if (featuresPathsCfg && Array.isArray(featuresPathsCfg) && featuresPathsCfg.length > 0) {
+      // Rung 1: plural non-empty
+      // W-07: shared helper from common.ts so the regex cannot drift from
+      // notifications.ts's migration dedup (Pitfall 9 from 16-PATTERNS.md).
+      projectRelativeFeaturesPaths = featuresPathsCfg
+        .map(p => normalizeFeaturesPathEntry(p))
+        .filter(p => p.length > 0);
+      if (projectRelativeFeaturesPaths.length === 0) {
+        // Plural was all-empty → fall to convention.
+        projectRelativeFeaturesPaths = ["features"];
+      }
+    } else if (entry?.source === 'config-file' && entry.featuresUris.length > 0) {
+      // Rung 2 (was Rung 3): config-file discovery paths (from behave.ini/setup.cfg/pyproject.toml)
+      projectRelativeFeaturesPaths = entry.featuresUris.map(u =>
+        path.relative(this.projectUri.fsPath, u.fsPath).replace(/\\/g, '/')
+      );
+    } else {
+      // Rung 3 (was Rung 4): neither plural set nor config file → convention
+      projectRelativeFeaturesPaths = ["features"];
+    }
+
+    // D-05 non-empty invariant (defense-in-depth)
+    if (projectRelativeFeaturesPaths.length === 0) projectRelativeFeaturesPaths = ["features"];
+
     // vscode will not substitute a default if an empty string is specified in settings.json
-    if (!this.projectRelativeFeaturesPath)
-      this.projectRelativeFeaturesPath = "features";
-    this.featuresUri = vscode.Uri.joinPath(this.projectUri, this.projectRelativeFeaturesPath);
-    if (this.projectRelativeFeaturesPath === ".")
-      this._fatalErrors.push(`"." is not a valid "gs-behave-bdd.featuresPath" value. The features folder must be a subfolder.`);
-    if (!fs.existsSync(this.featuresUri.fsPath)) {
-      // note - this error should never happen or some logic/hooks are wrong 
-      // (or the user has actually deleted/moved the features path since loading)
-      // because the existence of the path should always be checked by getUrisOfWkspFoldersWithFeatures(true)
-      // before we get here (i.e. called elsewhere when workspace folders/settings are changed etc.)    
-      this._fatalErrors.push(`features path ${this.featuresUri.fsPath} not found.`);
+    projectRelativeFeaturesPaths = projectRelativeFeaturesPaths.map(p => p || "features");
+
+    // D-07 per-entry "." rejection
+    for (const p of projectRelativeFeaturesPaths) {
+      if (p === ".") {
+        this._fatalErrors.push(`"." is not a valid "gs-behave-bdd.featuresPaths" entry. The features folder must be a subfolder.`);
+      }
     }
 
-    // Compute workspace-relative features path for file watchers etc.
-    this.workspaceRelativeFeaturesPath = this.workspaceRelativeProjectPath
-      ? `${this.workspaceRelativeProjectPath}/${this.projectRelativeFeaturesPath}`
-      : this.projectRelativeFeaturesPath;
+    this.projectRelativeFeaturesPaths = projectRelativeFeaturesPaths;
+    this.featuresUris = projectRelativeFeaturesPaths.map(p =>
+      vscode.Uri.joinPath(this.projectUri, p)
+    );
 
-    // default to watching features folder for (possibly multiple) "steps" 
-    // subfolders (e.g. like example project B/features folder)
-    this.stepsSearchUri = vscode.Uri.joinPath(this.featuresUri);
-    if (!findSubdirectorySync(this.stepsSearchUri.fsPath, "steps")) {
-      // if not found, get the highest-level "steps" folder above the features folder inside the project
-      const stepsSearchFsPath = findHighestTargetParentDirectorySync(this.featuresUri.fsPath, this.projectUri.fsPath, "steps");
-      if (stepsSearchFsPath)
-        this.stepsSearchUri = vscode.Uri.file(stepsSearchFsPath);
-      else
-        logger.showWarn(`No "steps" folder found.`, this.uri);
+    // D-06 per-entry existence check
+    for (const u of this.featuresUris) {
+      if (!fs.existsSync(u.fsPath)) {
+        this._fatalErrors.push(`features path ${u.fsPath} not found.`);
+      }
     }
+
+    // Compute workspace-relative features paths for file watchers etc.
+    this.workspaceRelativeFeaturesPaths = projectRelativeFeaturesPaths.map(p =>
+      this.workspaceRelativeProjectPath ? `${this.workspaceRelativeProjectPath}/${p}` : p
+    );
+
+    // stepsSearchUris: per-entry via existing helpers
+    this.stepsSearchUris = this.featuresUris.map(featUri => {
+      let stepsSearchUri = vscode.Uri.joinPath(featUri);
+      if (!findSubdirectorySync(stepsSearchUri.fsPath, "steps")) {
+        const stepsSearchFsPath = findHighestTargetParentDirectorySync(
+          featUri.fsPath, this.projectUri.fsPath, "steps"
+        );
+        if (stepsSearchFsPath) {
+          stepsSearchUri = vscode.Uri.file(stepsSearchFsPath);
+        } else {
+          logger.showWarn(`No "steps" folder found.`, this.uri);
+        }
+      }
+      return stepsSearchUri;
+    });
 
     // parse envVarPresets
     if (envVarPresetsCfg && typeof envVarPresetsCfg === "object") {
@@ -249,15 +332,24 @@ export class WorkspaceSettings {
     });
 
     // build sorted output dict of workspace settings
-    const nonUserSettableWkspSettings = ["name", "uri", "id", "projectUri", "featuresUri", "stepsSearchUri", "workspaceRelativeFeaturesPath"];
+    const nonUserSettableWkspSettings = ["name", "uri", "id", "projectUri", "featuresUri", "stepsSearchUri",
+      "workspaceRelativeFeaturesPath", "configFileUri",
+      "featuresUris", "stepsSearchUris", "projectRelativeFeaturesPaths", "workspaceRelativeFeaturesPaths"];
     const rscSettingsDic: { [name: string]: string; } = {};
     let wkspEntries = Object.entries(this).sort();
     wkspEntries.push(["fullProjectPath", this.projectUri.fsPath]);
-    wkspEntries.push(["fullFeaturesPath", this.featuresUri.fsPath]);
+    wkspEntries.push(["fullFeaturesPaths", this.featuresUris.map(u => u.fsPath).join(", ")]);
     wkspEntries.push(["junitTempPath", config.extensionTempFilesUri.fsPath]);
-    wkspEntries = wkspEntries.filter(([key]) => !key.startsWith("_") && !nonUserSettableWkspSettings.includes(key) && key !== "workspaceRelativeProjectPath" && key !== "projectRelativeFeaturesPath");
+    // N-03: `projectRelativeFeaturesPath` (singular) is a getter (L83) and
+    // never appears in Object.entries(this), so excluding it was dead code.
+    // `workspaceRelativeProjectPath` IS a public readonly own property (L76)
+    // and the filter exclusion below IS load-bearing — it prevents the raw
+    // path from clobbering the user-friendly `projectPath` entry pushed at L348.
+    wkspEntries = wkspEntries.filter(([key]) => !key.startsWith("_") && !nonUserSettableWkspSettings.includes(key) && key !== "workspaceRelativeProjectPath");
     wkspEntries.push(["projectPath", this.workspaceRelativeProjectPath || "(workspace root)"]);
-    wkspEntries.push(["featuresPath", this.projectRelativeFeaturesPath]);
+    wkspEntries.push(["featuresPaths", this.projectRelativeFeaturesPaths.join(", ")]);
+    wkspEntries.push(["discoverySource", this.discoverySource]);
+    wkspEntries.push(["configFileUri", this.configFileUri?.fsPath ?? "(none)"]);
     wkspEntries = wkspEntries.sort();
     wkspEntries.forEach(([key, value]) => {
       rscSettingsDic[key] = value;
