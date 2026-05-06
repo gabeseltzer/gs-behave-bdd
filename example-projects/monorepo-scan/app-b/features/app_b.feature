@@ -1,0 +1,6 @@
+Feature: Monorepo App B
+
+   Scenario: app b test one
+      Given we have behave installed
+      When we implement a successful test
+      Then we will see the result

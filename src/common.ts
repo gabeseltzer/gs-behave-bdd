@@ -8,6 +8,10 @@ import { Scenario, TestData } from './parsers/testFile';
 import { WorkspaceSettings } from './settings';
 import { diagLog } from './logger';
 import { getJunitDirUri } from './watchers/junitWatcher';
+import { findBehaveConfig } from './parsers/configParser';
+import { getCachedScanResult, ScanResultEntry } from './discovery/configScanner';
+import { getActiveProject, isManualProjectPathMode } from './discovery/projectList';
+import { clearPathDiagnostics, setPathResolutionDiagnostics, setSubsumptionDiagnostics } from './handlers/configDiagnostics';
 
 
 
@@ -22,9 +26,34 @@ export const BEHAVE_EXECUTION_ERROR_MESSAGE = "--- BEHAVE EXECUTION ERROR DETECT
 /** Escape regex special characters in a string so it can be used as a literal in a RegExp. */
 export const escapeRegex = (str: string) => str.replace(/[".*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * W-07 single source of truth (Phase 16 D-07): strips a single leading and
+ * single trailing path separator (forward or back), then trims whitespace.
+ *
+ * MUST be used by both the settings.ts featuresPaths normalization rung and
+ * the notifications.ts featuresPath migration dedup. If these two callers
+ * use byte-different regexes, the migration silently double-appends entries
+ * (Pitfall 9 from 16-PATTERNS.md). Centralizing here makes drift impossible.
+ */
+export const normalizeFeaturesPathEntry = (s: string): string =>
+  s.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim();
+
 export const sepr = ":////:"; // separator that cannot exist in file paths, i.e. safe for splitting in a path context
 export const beforeFirstSepr = (str: string) => str.substring(0, str.indexOf(sepr));
 export const afterFirstSepr = (str: string) => str.substring(str.indexOf(sepr) + sepr.length, str.length);
+
+export type DiscoverySource = "settings" | "config-file" | "convention";
+
+export interface DiscoveryEntry {
+  source: DiscoverySource;
+  configFileUri?: vscode.Uri;       // set when source = "config-file"
+  configError?: {                   // set when malformed config found (D-05)
+    configFileUri: vscode.Uri;
+    errorMessage: string;
+  };
+  featuresUris: vscode.Uri[];       // non-empty per D-05; length-1 in every Phase 7 branch
+  alsoFoundConfigs?: vscode.Uri[];  // Phase 9: other configs found during subdir scan
+}
 
 
 // the main purpose of WkspError is that it enables us to have an error containing a workspace uri that 
@@ -123,9 +152,53 @@ export const getActualWorkspaceSetting = <T>(wkspConfig: vscode.WorkspaceConfigu
 }
 
 
-// THIS FUNCTION MUST BE FAST (ideally < 1ms) 
+// Returns true if the named setting has been explicitly set at ANY VS Code scope
+// (global, workspace, or workspace folder). Per D-01: implements INTG-02.
+// Does NOT modify getActualWorkspaceSetting (different callers, different return types).
+export function hasExplicitSetting(
+  wkspConfig: vscode.WorkspaceConfiguration,
+  name: string,
+  legacyConfig?: vscode.WorkspaceConfiguration
+): boolean {
+  const insp = wkspConfig.inspect(name);
+  if (insp && (insp.globalValue !== undefined || insp.workspaceValue !== undefined || insp.workspaceFolderValue !== undefined))
+    return true;
+  if (legacyConfig) {
+    const legacyInsp = legacyConfig.inspect(name);
+    if (legacyInsp?.workspaceFolderValue !== undefined) return true;
+  }
+  return false;
+}
+
+
+// Returns true if the named array setting has been explicitly set to a NON-EMPTY array
+// at any VS Code scope. An empty array [] does NOT count as "explicitly set" (D-14).
+export function hasExplicitNonEmptyArraySetting(
+  wkspConfig: vscode.WorkspaceConfiguration,
+  name: string
+): boolean {
+  const insp = wkspConfig.inspect<string[]>(name);
+  if (!insp) return false;
+  return (Array.isArray(insp.globalValue) && insp.globalValue.length > 0) ||
+    (Array.isArray(insp.workspaceValue) && insp.workspaceValue.length > 0) ||
+    (Array.isArray(insp.workspaceFolderValue) && insp.workspaceFolderValue.length > 0);
+}
+
+// THIS FUNCTION MUST BE FAST (ideally < 1ms)
 // (check performance if you change it)
 let workspaceFoldersWithFeatures: vscode.Uri[];
+const discoveryCache = new Map<string, DiscoveryEntry>();
+
+// Phase 14: Project switch rebuild guard
+let _projectSwitchInProgress = false;
+export function setProjectSwitchInProgress(value: boolean) { _projectSwitchInProgress = value; }
+export function isProjectSwitchInProgress(): boolean { return _projectSwitchInProgress; }
+
+// Export getter so WorkspaceSettings can read discovery results without coupling to the Map
+export function getDiscoveryEntry(wkspUri: vscode.Uri): DiscoveryEntry | undefined {
+  return discoveryCache.get(uriId(wkspUri));
+}
+
 export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.Uri[] => {
 
   if (!forceRefresh && workspaceFoldersWithFeatures)
@@ -133,66 +206,260 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
 
   const start = performance.now();
   workspaceFoldersWithFeatures = [];
+  discoveryCache.clear();
 
   function hasFeaturesFolder(folder: vscode.WorkspaceFolder): boolean {
 
-    // check if projectPath and/or featuresPath specified in settings.json
-    // NOTE: this will return package.json defaults (or failing that, type defaults) if no settings.json found
     const wkspConfig = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri);
     const legacyWkspConfig = vscode.workspace.getConfiguration("behave-vsc", folder.uri);
-    const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath", legacyWkspConfig);
-    const featuresPath = getActualWorkspaceSetting<string>(wkspConfig, "featuresPath", legacyWkspConfig);
 
-    // Determine the project root (either custom projectPath or workspace root)
-    let projectUri = folder.uri;
-    if (projectPath) {
-      projectUri = vscode.Uri.joinPath(folder.uri, projectPath);
-      if (!fs.existsSync(projectUri.fsPath)) {
-        const fullPath = projectUri.fsPath;
-        // Check if the path looks like it was doubled (common mistake)
-        const hint = fullPath.includes(projectPath + path.sep + projectPath)
-          ? ` Note: The path appears to be duplicated - "projectPath" should be relative to the workspace root, not an absolute path.`
-          : "";
-        vscode.window.showWarningMessage(
-          `Behave BDD: Project path not found.\n\n` +
-          `Workspace: "${folder.name}"\n` +
-          `Configured projectPath: "${projectPath}"\n` +
-          `Full path checked: "${fullPath}"${hint}\n\n` +
-          `Behave BDD will ignore this workspace until the path is corrected.`,
-          "OK"
+    // === BRANCH A: Explicit settings detected (D-02, INTG-07) ===
+    // When explicit settings exist at any scope, skip config-file discovery entirely.
+    // Run existing settings-based logic unchanged for backward compatibility.
+    // Phase 16 / D-16: Branch A gate is plural-only. Singular featuresPath is
+    // auto-migrated to featuresPaths at activation (Plan 03/04), so by the time
+    // hasFeaturesFolder runs the singular setting is no longer present.
+    if (hasExplicitSetting(wkspConfig, "projectPath", legacyWkspConfig) ||
+        hasExplicitNonEmptyArraySetting(wkspConfig, "featuresPaths")) {
+
+      const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath", legacyWkspConfig);
+
+      // Determine the project root (either custom projectPath or workspace root)
+      let projectUri = folder.uri;
+      if (projectPath) {
+        projectUri = vscode.Uri.joinPath(folder.uri, projectPath);
+        if (!fs.existsSync(projectUri.fsPath)) {
+          const fullPath = projectUri.fsPath;
+          // Check if the path looks like it was doubled (common mistake)
+          const hint = fullPath.includes(projectPath + path.sep + projectPath)
+            ? ` Note: The path appears to be duplicated - "projectPath" should be relative to the workspace root, not an absolute path.`
+            : "";
+          vscode.window.showWarningMessage(
+            `Behave BDD: Project path not found.\n\n` +
+            `Workspace: "${folder.name}"\n` +
+            `Configured projectPath: "${projectPath}"\n` +
+            `Full path checked: "${fullPath}"${hint}\n\n` +
+            `Behave BDD will ignore this workspace until the path is corrected.`,
+            "OK"
+          );
+          return false;
+        }
+      }
+
+      // === Handle plural featuresPaths (D-11 Rung 1) ===
+      const featuresPathsArr = wkspConfig.get<string[]>("featuresPaths");
+      if (Array.isArray(featuresPathsArr) && featuresPathsArr.length > 0) {
+        const validUris = featuresPathsArr
+          .map(p => p.replace(/^\\|^\//, "").replace(/\\$|\/$/, "").trim())
+          .filter(p => p.length > 0)
+          .map(p => vscode.Uri.joinPath(projectUri, p))
+          .filter(u => fs.existsSync(u.fsPath));
+        if (validUris.length > 0) {
+          discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUris: validUris });
+          return true;
+        }
+      }
+
+      // default features path, no settings.json required
+      // Phase 16 / D-16: With singular featuresPath gone, the only paths Branch A handles are:
+      //   (a) plural featuresPaths array (handled above), or
+      //   (b) projectPath set, no plural, default `features/` folder exists.
+      // For (b), use the convention default. The plural ladder produces equivalent
+      // diagnostics for missing-path errors via per-path resolution at src/settings.ts.
+      const featuresUri = vscode.Uri.joinPath(projectUri, "features");
+      const hasDefaultFeaturesFolder = fs.existsSync(featuresUri.fsPath);
+      if (!hasDefaultFeaturesFolder) {
+        return false; // probably a workspace with no behave requirements
+      }
+      discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUris: [featuresUri] });
+      return true;
+    }
+
+    // === BRANCH B: No explicit settings -- config-file discovery (INTG-01) ===
+    const configResult = findBehaveConfig(folder.uri);
+
+    if (configResult) {
+      if (configResult.ok) {
+        // Clear stale path diagnostics before emitting new ones
+        clearPathDiagnostics(configResult.configFileUri);
+
+        // Dedup overlapping/duplicate paths (D-09, D-11)
+        const dedupResult = dedupResolvedPaths(
+          configResult.resolvedPaths, configResult.rawPaths, configResult.pathLineNumbers
         );
+
+        // Emit subsumption warnings (D-10)
+        if (dedupResult.subsumedPaths.length > 0) {
+          setSubsumptionDiagnostics(configResult.configFileUri, dedupResult.subsumedPaths);
+        }
+
+        // Partition deduped paths into valid (exist on disk) and invalid
+        const validPaths: vscode.Uri[] = [];
+        const invalidPaths: { rawPath: string; lineNumber: number }[] = [];
+        for (let i = 0; i < dedupResult.resolvedPaths.length; i++) {
+          if (fs.existsSync(dedupResult.resolvedPaths[i].fsPath)) {
+            validPaths.push(dedupResult.resolvedPaths[i]);
+          } else {
+            invalidPaths.push({
+              rawPath: dedupResult.rawPaths[i],
+              lineNumber: dedupResult.pathLineNumbers[i],
+            });
+          }
+        }
+
+        // Emit per-path Error diagnostics for invalid paths (D-04)
+        if (invalidPaths.length > 0) {
+          setPathResolutionDiagnostics(configResult.configFileUri, invalidPaths);
+        }
+
+        // Partial success: use valid paths (D-04)
+        if (validPaths.length > 0) {
+          discoveryCache.set(uriId(folder.uri), {
+            source: "config-file",
+            configFileUri: configResult.configFileUri,
+            featuresUris: validPaths,
+          });
+          return true;
+        }
+
+        // ALL paths failed — do NOT fall through to convention (D-06)
         return false;
+      } else {
+        // ok:false -- malformed config file; capture error, fall through to convention (D-06)
+        // Store a partial entry so Phase 3 can read the configError
+        discoveryCache.set(uriId(folder.uri), {
+          source: "convention",
+          configError: {
+            configFileUri: configResult.configFileUri,
+            errorMessage: configResult.errorMessage,
+          },
+          featuresUris: [vscode.Uri.joinPath(folder.uri, "features")], // placeholder (length-1 per D-05)
+        });
       }
     }
 
-    // default features path, no settings.json required
-    let featuresUri = vscode.Uri.joinPath(projectUri, "features");
-
-    // try/catch with await vwfs.stat(uri) is much too slow atm
-    const hasDefaultFeaturesFolder = fs.existsSync(featuresUri.fsPath);
-
-    if (!featuresPath && !hasDefaultFeaturesFolder) {
-      return false; // probably a workspace with no behave requirements
+    // === BRANCH B fallthrough: features/ convention (INTG-01 last resort) ===
+    const conventionFeaturesUri = vscode.Uri.joinPath(folder.uri, "features");
+    if (fs.existsSync(conventionFeaturesUri.fsPath)) {
+      const existing = discoveryCache.get(uriId(folder.uri));
+      discoveryCache.set(uriId(folder.uri), {
+        ...existing,                  // preserves configError if set from malformed config above
+        source: "convention",
+        featuresUris: [conventionFeaturesUri],
+      });
+      return true;
     }
 
-    // default features folder and nothing specified in settings.json (or default specified)
-    if (hasDefaultFeaturesFolder && !featuresPath)
-      return true;
+    // === Phase 12: Check active project from project list ===
+    // Phase 17 fix: also gate on currentDiscoveryDepth so a stale activeProject
+    // (cached at activation depth) does not resurrect a subdir config when the user
+    // later lowers discoveryDepth below where the active project lives.
+    // Note: this is a deliberate read-time check, not a cache-invalidation hook —
+    // activeProjectCache outlives the settings that influence its keys, and a proper
+    // clearScanResultCache()-paired invalidation is tracked as v1.4.0 follow-up tech debt
+    // (see .planning/v1.4.0-MILESTONE-AUDIT.md tech_debt list).
+    if (!isManualProjectPathMode(folder.uri)) {
+      const activeProject = getActiveProject(folder.uri);
+      // N-04: this getConfiguration call is on the <1ms hot path; cost is one
+      // scope-chain walk per workspace folder per cache miss. For 10+ root
+      // workspaces with frequent invalidation this could matter. Documented
+      // as v1.4.0 tech debt — out of scope here, but flagged for awareness.
+      const currentDiscoveryDepth = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri).get<number>("discoveryDepth") ?? 3;
+      if (activeProject && activeProject.depth <= currentDiscoveryDepth) {
+        const subdirConfigResult = findBehaveConfig(activeProject.dirUri);
+        if (subdirConfigResult && subdirConfigResult.ok) {
+          clearPathDiagnostics(subdirConfigResult.configFileUri);
 
-    featuresUri = vscode.Uri.joinPath(projectUri, featuresPath as string);
-    if (fs.existsSync(featuresUri.fsPath) && vscode.workspace.getWorkspaceFolder(featuresUri) === folder)
-      return true;
+          const dedupResult = dedupResolvedPaths(
+            subdirConfigResult.resolvedPaths, subdirConfigResult.rawPaths, subdirConfigResult.pathLineNumbers
+          );
 
-    // we don't use config.logger.showWarn here, because we may not have a logger yet
-    const projectPathInfo = projectPath ? ` (relative to projectPath "${projectPath}")` : "";
-    vscode.window.showWarningMessage(
-      `Behave BDD: Features path not found.\n\n` +
-      `Workspace: "${folder.name}"\n` +
-      `Configured featuresPath: "${featuresPath}"${projectPathInfo}\n` +
-      `Full path checked: "${featuresUri.fsPath}"\n\n` +
-      `Behave BDD will ignore this workspace until the path is corrected.`,
-      "OK"
-    );
+          if (dedupResult.subsumedPaths.length > 0) {
+            setSubsumptionDiagnostics(subdirConfigResult.configFileUri, dedupResult.subsumedPaths);
+          }
+
+          const validPaths: vscode.Uri[] = [];
+          const invalidPaths: { rawPath: string; lineNumber: number }[] = [];
+          for (let i = 0; i < dedupResult.resolvedPaths.length; i++) {
+            if (fs.existsSync(dedupResult.resolvedPaths[i].fsPath)) {
+              validPaths.push(dedupResult.resolvedPaths[i]);
+            } else {
+              invalidPaths.push({
+                rawPath: dedupResult.rawPaths[i],
+                lineNumber: dedupResult.pathLineNumbers[i],
+              });
+            }
+          }
+
+          if (invalidPaths.length > 0) {
+            setPathResolutionDiagnostics(subdirConfigResult.configFileUri, invalidPaths);
+          }
+
+          if (validPaths.length > 0) {
+            // Build alsoFoundConfigs from the full scan result for Phase 9 notification compatibility
+            const cachedScan = getCachedScanResult(folder.uri);
+            const alsoFound = cachedScan
+              ? [cachedScan.primary, ...cachedScan.alsoFound]
+                  .filter((e): e is ScanResultEntry => e !== undefined)
+                  .filter(e => !urisMatch(e.configFileUri, activeProject.configFileUri))
+                  .map(e => e.configFileUri)
+              : [];
+
+            discoveryCache.set(uriId(folder.uri), {
+              source: "config-file",
+              configFileUri: subdirConfigResult.configFileUri,
+              featuresUris: validPaths,
+              alsoFoundConfigs: alsoFound.length > 0 ? alsoFound : undefined,
+            });
+            return true;
+          }
+        }
+      }
+    }
+
+    // === Phase 9: Fallback — check cached subdirectory scan result ===
+    const scanResult = getCachedScanResult(folder.uri);
+    if (scanResult?.primary) {
+      const subdirConfigResult = findBehaveConfig(scanResult.primary.dirUri);
+      if (subdirConfigResult && subdirConfigResult.ok) {
+        clearPathDiagnostics(subdirConfigResult.configFileUri);
+
+        const dedupResult = dedupResolvedPaths(
+          subdirConfigResult.resolvedPaths, subdirConfigResult.rawPaths, subdirConfigResult.pathLineNumbers
+        );
+
+        if (dedupResult.subsumedPaths.length > 0) {
+          setSubsumptionDiagnostics(subdirConfigResult.configFileUri, dedupResult.subsumedPaths);
+        }
+
+        const validPaths: vscode.Uri[] = [];
+        const invalidPaths: { rawPath: string; lineNumber: number }[] = [];
+        for (let i = 0; i < dedupResult.resolvedPaths.length; i++) {
+          if (fs.existsSync(dedupResult.resolvedPaths[i].fsPath)) {
+            validPaths.push(dedupResult.resolvedPaths[i]);
+          } else {
+            invalidPaths.push({
+              rawPath: dedupResult.rawPaths[i],
+              lineNumber: dedupResult.pathLineNumbers[i],
+            });
+          }
+        }
+
+        if (invalidPaths.length > 0) {
+          setPathResolutionDiagnostics(subdirConfigResult.configFileUri, invalidPaths);
+        }
+
+        if (validPaths.length > 0) {
+          discoveryCache.set(uriId(folder.uri), {
+            source: "config-file",
+            configFileUri: subdirConfigResult.configFileUri,
+            featuresUris: validPaths,
+            alsoFoundConfigs: scanResult.alsoFound.map(e => e.configFileUri),
+          });
+          return true;
+        }
+      }
+    }
 
     return false;
   }
@@ -215,10 +482,9 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
   if (workspaceFoldersWithFeatures.length === 0) {
     if (folders.length === 1 && folders[0].name === "gs-behave-bdd")
       throw `Please disable the marketplace Behave BDD extension before beginning development!`;
-    else
-      throw `Extension was activated because a '*.feature' file was found in a workspace folder, but ` +
-      `none of the workspace folders contain either a root 'features' folder or a settings.json that specifies a valid 'gs-behave-bdd.featuresPath'.\n` +
-      `Please add a valid 'gs-behave-bdd.featuresPath' property to your workspace settings.json file and then restart vscode.`;
+    // Phase 9: Don't throw on 0 folders — the async BFS scanner may discover
+    // subdirectory configs after initial activation. Return empty so activate()
+    // can proceed and the scanner gets a chance to run.
   }
 
   return workspaceFoldersWithFeatures;
@@ -247,6 +513,92 @@ export const getWorkspaceSettingsForFile = (fileorFolderUri: vscode.Uri | undefi
   if (!wkspUri)
     return undefined;
   return config.workspaceSettings[wkspUri.path];
+}
+
+
+// D-09 — Returns the first featuresUri that contains fileUri,
+// or undefined if fileUri is outside every root. The `+ '/'` guard prevents sibling-prefix
+// false positives (e.g. /features matching /featuresA — see Pitfall 3); urisMatch handles
+// the exact-root case where fileUri === root.
+// Phase 8 per-document-root scoping handlers call it.
+export function getFeaturesRootForFile(
+  wkspSettings: WorkspaceSettings,
+  fileUri: vscode.Uri
+): vscode.Uri | undefined {
+  return wkspSettings.featuresUris.find(
+    root => fileUri.path.startsWith(root.path + '/') || urisMatch(root, fileUri)
+  );
+}
+
+
+export interface SubsumedPath {
+  rawPath: string;
+  lineNumber: number;
+  subsumedBy: string;
+}
+
+export interface DedupResult {
+  resolvedPaths: vscode.Uri[];
+  rawPaths: string[];
+  pathLineNumbers: number[];
+  subsumedPaths: SubsumedPath[];
+}
+
+// Deduplicates resolved paths by removing exact duplicates (case-insensitive via uriId)
+// and paths subsumed by a broader parent (D-09). Sorted by path length ascending so parent
+// paths always win over children regardless of input order.
+export function dedupResolvedPaths(
+  resolvedPaths: vscode.Uri[],
+  rawPaths: string[],
+  pathLineNumbers: number[]
+): DedupResult {
+  const entries = resolvedPaths.map((uri, i) => ({
+    uri,
+    rawPath: rawPaths[i],
+    lineNumber: pathLineNumbers[i],
+    id: uriId(uri),
+  }));
+
+  // Sort by URI path length ascending — broader (shorter) paths first so parent wins (D-09)
+  entries.sort((a, b) => a.uri.path.length - b.uri.path.length);
+
+  const accepted: typeof entries = [];
+  const seenIds = new Set<string>();
+  const subsumedPaths: SubsumedPath[] = [];
+
+  for (const entry of entries) {
+    // Exact duplicate check (case-insensitive via uriId, D-11)
+    if (seenIds.has(entry.id)) {
+      const winner = accepted.find(a => a.id === entry.id);
+      subsumedPaths.push({
+        rawPath: entry.rawPath,
+        lineNumber: entry.lineNumber,
+        subsumedBy: winner?.rawPath ?? entry.rawPath,
+      });
+      continue;
+    }
+
+    // Subsumption check: is this path contained within an already-accepted broader path?
+    const parent = accepted.find(a => entry.uri.path.startsWith(a.uri.path + '/'));
+    if (parent) {
+      subsumedPaths.push({
+        rawPath: entry.rawPath,
+        lineNumber: entry.lineNumber,
+        subsumedBy: parent.rawPath,
+      });
+      continue;
+    }
+
+    accepted.push(entry);
+    seenIds.add(entry.id);
+  }
+
+  return {
+    resolvedPaths: accepted.map(e => e.uri),
+    rawPaths: accepted.map(e => e.rawPath),
+    pathLineNumbers: accepted.map(e => e.lineNumber),
+    subsumedPaths,
+  };
 }
 
 
@@ -335,7 +687,8 @@ export function cleanBehaveText(text: string) {
 // Directories that never contain useful Python/feature files — skipped by findFiles
 export const DEFAULT_EXCLUDE_DIRS = new Set([
   '__pycache__', '.git', 'node_modules', '.venv', '.tox',
-  '.mypy_cache', '.pytest_cache', '.eggs', '*.egg-info'
+  '.mypy_cache', '.pytest_cache', '.eggs', '*.egg-info',
+  'dist', 'out', 'build', 'coverage'
 ]);
 
 function isDirExcluded(dirName: string, excludeDirs: Set<string>): boolean {

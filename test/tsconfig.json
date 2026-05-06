@@ -3,6 +3,7 @@
     "compilerOptions": {
         "outDir": "../out/test",
         "sourceMap": true,
+        "skipLibCheck": true,
         "types": [
             "mocha",
             "node"
