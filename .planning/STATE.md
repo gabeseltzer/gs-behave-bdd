@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.4.0
 milestone_name: Deprecate featuresPath & Notification Suppression
 status: shipped
-last_updated: "2026-05-04T00:00:00Z"
+last_updated: "2026-05-06T00:00:00Z"
 progress:
   total_phases: 4
   completed_phases: 4
@@ -129,3 +129,4 @@ The Phase 12 active-project block re-reads `discoveryDepth` at lookup time rathe
 | Date | Slug | Commits | Notes |
 |------|------|---------|-------|
 | 2026-05-05 | update-integration-migration-tests | `35e0a48` | Aligned `test/integration/migrations suite/extension.test.ts` with v1.4.0 review B-01 (notification copy) and B-02 (publisher-independent settings query). Closes the integration-test gap flagged in the v1.4.0 review batch. |
+| 2026-05-06 | formally-dismiss-stale-uat-verification | (pending) | Closed out the two outstanding `/gsd-audit-uat` items by flipping `04-HUMAN-UAT.md` test results from `skipped` → `pass` (superseded by Phase 04 unit tests + 1.2.0/1.4.0 integration coverage) and `15-VERIFICATION.md` frontmatter from `human_needed` → `passed` (deferred manual checks resolved by the Phase 17 real-VSCode migrations integration suite). Audit now reports 0 outstanding items. Docs-only; no code changed. |

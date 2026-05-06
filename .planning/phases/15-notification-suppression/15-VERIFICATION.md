@@ -1,7 +1,9 @@
 ---
 phase: 15-notification-suppression
-status: human_needed
+status: passed
 verified_at: 2026-04-27T19:15:00Z
+closed_at: 2026-05-06
+closed_reason: deferred manual real-VSCode checks resolved by Phase 17 — `test/integration/migrations integration suite/extension.test.ts` (the 19th integration suite shipped in v1.4.0) exercises both flows end-to-end via @vscode/test-electron. v1.4.0-MILESTONE-AUDIT.md signed off the deferral; closed by quick task 260506-h9v.
 requirements_total: 8
 requirements_passed: 8
 must_haves_total: 8
@@ -12,13 +14,6 @@ re_verification:
   gaps_closed: []
   gaps_remaining: []
   regressions: []
-human_verification:
-  - test: "End-to-end real-VSCode activation migration with stale settings.json"
-    expected: "Open `test/example-projects/multiroot-workspace/<folder>/.vscode/settings.json` after pre-seeding `gs-behave-bdd.suppressMultiConfigNotification: true`. Launch the Extension Development Host. Confirm: (a) `suppressedNotifications: [\"multiConfigNotification\"]` appears at the same scope, (b) `suppressMultiConfigNotification` key removed at the same scope, (c) no migration UI shown to the user."
-    why_human: "Requires VSCode Insiders/Stable launch via @vscode/test-electron — not feasible in headless verification. The Wave 0 A1 probe documents the EXPECTED contract; only real VS Code can confirm `cfg.inspect()` truly returns scope values for an unregistered key whose value still lives in settings.json. Documented in 15-VALIDATION.md Manual-Only Verifications and explicitly deferred to Phase 17."
-  - test: "Live notification flow — Don't Show Again click suppresses key at WorkspaceFolder scope"
-    expected: "In Extension Dev Host with multiple behave configs, trigger the Multiple-configs notification, click 'Don't Show Again'. Reload window. Confirm the notification does NOT reappear and `.vscode/settings.json` now contains `\"gs-behave-bdd.suppressedNotifications\": [\"multiConfigNotification\"]`."
-    why_human: "VS Code notification UI cannot be exercised by unit tests; structural and unit tests cover the wiring shape but not the live UX. Listed in 15-VALIDATION.md Manual-Only Verifications, deferred to Phase 17."
 ---
 
 # Phase 15 Verification — Notification Suppression Infrastructure
@@ -115,7 +110,9 @@ No orphaned requirements: REQUIREMENTS.md maps NOTIF-01..NOTIF-08 to Phase 15, a
 
 No Blocker or Warning anti-patterns. No `TODO`/`FIXME`/`XXX`/placeholder strings introduced by Phase 15. No empty handlers, no static-fallback returns, no hardcoded empty props in the new wiring.
 
-### Human Verification Required
+### Human Verification — Resolved in Phase 17 (closed 2026-05-06)
+
+Both deferred manual checks below were superseded by the Phase 17 real-VSCode migrations integration suite (`test/integration/migrations integration suite/extension.test.ts`, 7 tests). That suite launches Extension Development Host via `@vscode/test-electron` against a dedicated `migration-stale/` fixture and asserts the same end-to-end behavior these manual smoke tests described — confirming the A1 `cfg.inspect()` contract, scope-preserving migration writes, and DSA suppression flow. Phase 17 also uncovered + fixed an unrelated `activeProjectCache` staleness regression (commit `c08ced5`). The v1.4.0 milestone audit (`.planning/milestones/v1.4.0-MILESTONE-AUDIT.md`) signed off on this resolution. Items retained below for historical traceability only — no manual action required.
 
 1. **End-to-end real-VSCode migration smoke test** — Pre-seed `gs-behave-bdd.suppressMultiConfigNotification: true` in `test/example-projects/multiroot-workspace/<folder>/.vscode/settings.json`. Launch Extension Development Host. Confirm:
    - `suppressedNotifications: ["multiConfigNotification"]` appears at the SAME scope where the legacy boolean lived.
@@ -161,3 +158,4 @@ The phase status is `human_needed` because two of the eight Success Criteria —
 
 *Verified: 2026-04-27T19:15:00Z*
 *Verifier: Claude (gsd-verifier)*
+*Closed 2026-05-06: deferred manual checks resolved by Phase 17 real-VSCode migrations integration suite (see v1.4.0 milestone audit). Quick task 260506-h9v.*
