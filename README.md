@@ -24,16 +24,17 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
 7. Support for tests that aren't in the root workspace directory (ie for monorepos).
 8. Support for [step libraries](https://github.com/behave/behave/blob/main/features/step.use_step_library.feature).
 9. Fix issues with step parsing that was inconsistent with Behave (case sensitivity and colons).
-10. **Auto-discovery** of behave projects from native config files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`). No `featuresPath` or `projectPath` settings needed in most cases.
+10. **Auto-discovery** of behave projects from native config files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`). No `featuresPaths` or `projectPath` settings needed in most cases.
 11. **Monorepo support** with automatic subdirectory scanning for behave configs. Multi-path `paths` entries in config files are fully supported.
 12. **Project switching** for workspaces with multiple behave projects. A status bar indicator and "Select Project" command let you switch between discovered projects.
+13. **Per-notification suppression.** Click "Don't Show Again" on any suppressible notification and it stays dismissed for that workspace folder. Backed by the `gs-behave-bdd.suppressedNotifications` array setting — visible in Settings UI, editable by hand, and scoped per workspace folder.
 
 ### Old from the original extension
 
 - Run or Debug behave tests, either from the test side bar or from inside a feature file.
 - Select to run/debug all tests, a nested folder, or just a single feature or scenario.
 - See failed test run result inside the feature file. (Full run results are available in the Behave BDD output window.)
-- Extensive run customisation settings (e.g. `runParallel`, `featuresPath`, `envVarOverrides`, etc.)
+- Extensive run customisation settings (e.g. `runParallel`, `featuresPaths`, `envVarOverrides`, etc.)
 - Two-way step navigation:
   - "Go to Step Definition" from inside a feature file (default F12).
   - "Find All Step References" from inside a step file (default Alt+F12).
@@ -99,9 +100,11 @@ Example 3:
   .       |   |   +-- steps.py    
 ```
 
-> **Note:** In most cases you don't need these settings. The extension auto-discovers your behave project from config files. Use `projectPath` and `featuresPath` only as manual overrides when auto-discovery doesn't suit your setup.
+> **Note:** In most cases you don't need these settings. The extension auto-discovers your behave project from config files. Use `projectPath` and `featuresPaths` only as manual overrides when auto-discovery doesn't suit your setup.
 
-- If your features folder is not called "features", or is not in your project root, then you can add a behave config file (e.g. `behave.ini` or `.behaverc`) to your project folder and add a `paths` setting and then update the `featuresPath` setting in extension settings to match. This is a relative path to your project folder. For example:
+> **Migrating from `featuresPath`:** The previous `featuresPath` (singular) setting was removed in v1.4.0 and replaced by `featuresPaths` (plural array). If you had `featuresPath` set, the extension migrates it automatically on activation — no action required. The plural form means you can now point the extension at multiple test directories from a single workspace folder.
+
+- If your features folder is not called "features", or is not in your project root, then you can add a behave config file (e.g. `behave.ini` or `.behaverc`) to your project folder and add a `paths` setting and then set the `featuresPaths` setting in extension settings to match. Each entry is a relative path to your project folder. For example:
 
 ```text
 # behave.ini
@@ -109,12 +112,12 @@ Example 3:
 paths=my_tests/behave_features
 
 // settings.json
-{ 
-  "gs-behave-bdd.featuresPath": "my_tests/behave_features" 
+{
+  "gs-behave-bdd.featuresPaths": ["my_tests/behave_features"]
 }
 ```
 
-- If your behave project is not in the workspace root (e.g. in a monorepo), you can use the `projectPath` setting to specify where your behave project lives. The `featuresPath` is then relative to this project path. For example:
+- If your behave project is not in the workspace root (e.g. in a monorepo), you can use the `projectPath` setting to specify where your behave project lives. The `featuresPaths` entries are then relative to this project path. For example:
 
 ```text
 // Directory structure:
@@ -126,9 +129,9 @@ paths=my_tests/behave_features
 //           └── steps/
 
 // settings.json
-{ 
+{
   "gs-behave-bdd.projectPath": "backend",
-  "gs-behave-bdd.featuresPath": "features"
+  "gs-behave-bdd.featuresPaths": ["features"]
 }
 ```
 
@@ -136,7 +139,7 @@ paths=my_tests/behave_features
 
 ## Auto-Discovery & Project Switching
 
-The extension automatically discovers your behave project by reading native behave configuration files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`). If any of these files exist in your workspace, the extension reads the `paths` setting and configures itself — no manual `featuresPath` or `projectPath` settings needed.
+The extension automatically discovers your behave project by reading native behave configuration files (`behave.ini`, `.behaverc`, `setup.cfg`, `tox.ini`, `pyproject.toml`). If any of these files exist in your workspace, the extension reads the `paths` setting and configures itself — no manual `featuresPaths` or `projectPath` settings needed.
 
 ### Multi-path configs
 
@@ -156,7 +159,7 @@ The status bar indicator is hidden when only one project exists or when `project
 
 ## Extension settings
 
-- This extension has various options to customise your test run via `settings.json`, e.g. `runParallel`, `featuresPath`, and `envVarOverrides`.
+- This extension has various options to customise your test run via `settings.json`, e.g. `runParallel`, `featuresPaths`, and `envVarOverrides`.
 - By default, the extension uses its own bundled copy of behave. If you want to use behave from your Python environment instead (e.g. for a newer version), set `importStrategy` to `"fromEnvironment"` in your `settings.json`.
 - You can also disable/enable `justMyCode` for debug (via `settings.json` not `launch.json`).
 - If you are using a multi-root workspace with multiple projects that contain feature files, you can set up default settings in your `*.code-workspace` file, then optionally override these as required in the `settings.json` in each workspace folder.
@@ -216,7 +219,7 @@ The status bar indicator is hidden when only one project exists or when `project
 ### Otherwise
 
 - Does your project meet the [workspace requirements](#workspace-requirements) and have the [required project directory structure](#required-project-directory-structure)?
-- If you have set the `featuresPath` in extension settings, make sure it matches the `paths` setting in your behave configuration file.
+- If you have set the `featuresPaths` in extension settings, make sure it matches the `paths` setting in your behave configuration file.
 - Did you set extension settings in your user settings instead of your workspace settings?
 - Have you tried *manually* running the behave command that is logged in the Behave BDD output window?
 - If you are getting different results running all tests vs running a test separately, then it is probably due to lack of test isolation.
