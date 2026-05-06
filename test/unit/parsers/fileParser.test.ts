@@ -41,7 +41,9 @@ suite('fileParser - reparseFile', () => {
     uri: wkspUri,
     name: 'test',
     featuresUri: featuresUri,
+    featuresUris: [featuresUri],
     stepsSearchUri: stepsUri,
+    stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
   } as WorkspaceSettings;
 

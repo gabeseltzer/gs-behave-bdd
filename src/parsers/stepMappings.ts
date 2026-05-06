@@ -58,13 +58,13 @@ export async function waitOnReadyForStepsNavigation(waitMs: number, uri: vscode.
   return ready;
 }
 
-export function rebuildStepMappings(featuresUri: vscode.Uri): number {
+export function rebuildStepMappings(featuresUri: vscode.Uri, stepDefsUri?: vscode.Uri): number {
 
   const start = performance.now();
   deleteStepMappings(featuresUri);
 
   // get filtered objects before we loop
-  const { featureFileSteps, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes } = _getFilteredSteps(featuresUri);
+  const { featureFileSteps, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes } = _getFilteredSteps(featuresUri, stepDefsUri ?? featuresUri);
 
   let processed = 0;
   let exactMatchCount = 0;
@@ -94,9 +94,9 @@ export function rebuildStepMappings(featuresUri: vscode.Uri): number {
 }
 
 
-function _getFilteredSteps(featuresUri: vscode.Uri) {
-  const featureFileSteps = getFeatureFileSteps(featuresUri);
-  const wkspStepFileSteps = getStepFileSteps(featuresUri);
+function _getFilteredSteps(featureStepsUri: vscode.Uri, stepDefsUri: vscode.Uri) {
+  const featureFileSteps = getFeatureFileSteps(featureStepsUri);
+  const wkspStepFileSteps = getStepFileSteps(stepDefsUri);
   const exactSteps = new Map(wkspStepFileSteps.filter(([k,]) => !k.includes(parseRepWildcard)));
   const paramsSteps = new Map(wkspStepFileSteps.filter(([k,]) => k.includes(parseRepWildcard)));
 

@@ -6,6 +6,29 @@ export class TestWorkspaceConfigWithWkspUri {
   constructor(public testConfig: TestWorkspaceConfig, public wkspUri: vscode.Uri) { }
 }
 
+/**
+ * W-08 LIMITATION: Phase 16-06 dropped the singular `featuresPath` field from
+ * this mock entirely. That is correct for the production read path
+ * (settings.ts no longer reads the singular key), but the migration logic in
+ * notifications.ts reads `featuresPath` via real
+ * `vscode.workspace.getConfiguration().inspect()` — which integration tests
+ * cannot stub through TestWorkspaceConfig (the surface no longer has the key).
+ *
+ * Migration coverage layers:
+ *   - UNIT: test/unit/notifications.test.ts uses sinon to stub
+ *     `vscode.workspace.getConfiguration` and exhaustively exercises every
+ *     case (DEP-02..DEP-04, D-04 cross-namespace, D-08 empty values, etc.).
+ *   - INTEGRATION: NOT covered. There is no `example-projects/` fixture with
+ *     a legacy `featuresPath` settings.json; an integration test wanting to
+ *     assert post-activate migration cannot construct the precondition.
+ *
+ * If you need integration-test coverage of the migration path, add a fixture
+ * under `example-projects/` that ships `.vscode/settings.json` with
+ * `"gs-behave-bdd.featuresPath": "tests/features"` and assert post-activate
+ * that the value lands in `featuresPaths`. The mock simplification is
+ * deliberate and not the right place to add this coverage.
+ */
+
 // used in extension code to allow us to dynamically inject a workspace configuration
 export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
 
@@ -13,7 +36,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   private envVarPresets: { [presetName: string]: { [name: string]: string } } | undefined;
   private activeEnvVarPreset: string | undefined;
   private projectPath: string | undefined;
-  private featuresPath: string | undefined;
+  private featuresPaths: string[] | undefined;
   private justMyCode: boolean | undefined;
   private multiRootRunWorkspacesInParallel: boolean | undefined;
   private runParallel: boolean | undefined;
@@ -21,31 +44,37 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   private verboseLogging: boolean | undefined;
   private importStrategy: string | undefined;
   private stepDefinitionSearchTimeout: number | undefined;
+  private discoveryDepth: number | undefined;
+  private discoveryStopOnFirstHit: boolean | undefined;
+  private suppressedNotifications: string[] | undefined;
 
   // all user-settable settings in settings.json or *.code-workspace
   constructor({
-    envVarOverrides, envVarPresets, activeEnvVarPreset, projectPath, featuresPath: featuresPath, justMyCode,
+    envVarOverrides, envVarPresets, activeEnvVarPreset, projectPath, featuresPaths, justMyCode,
     multiRootRunWorkspacesInParallel,
-    runParallel, xRay, verboseLogging, importStrategy, stepDefinitionSearchTimeout
+    runParallel, xRay, verboseLogging, importStrategy, stepDefinitionSearchTimeout, discoveryDepth, discoveryStopOnFirstHit, suppressedNotifications
   }: {
     envVarOverrides: { [name: string]: string } | undefined,
     envVarPresets?: { [presetName: string]: { [name: string]: string } } | undefined,
     activeEnvVarPreset?: string | undefined,
     projectPath?: string | undefined,
-    featuresPath: string | undefined,
+    featuresPaths?: string[] | undefined,
     justMyCode: boolean | undefined,
     multiRootRunWorkspacesInParallel: boolean | undefined,
     runParallel: boolean | undefined,
     xRay: boolean | undefined,
     verboseLogging?: boolean | undefined,
     importStrategy?: string | undefined,
-    stepDefinitionSearchTimeout?: number | undefined
+    stepDefinitionSearchTimeout?: number | undefined,
+    discoveryDepth?: number | undefined,
+    discoveryStopOnFirstHit?: boolean | undefined,
+    suppressedNotifications?: string[] | undefined
   }) {
     this.envVarOverrides = envVarOverrides;
     this.envVarPresets = envVarPresets;
     this.activeEnvVarPreset = activeEnvVarPreset;
     this.projectPath = projectPath;
-    this.featuresPath = featuresPath;
+    this.featuresPaths = featuresPaths;
     this.justMyCode = justMyCode;
     this.runParallel = runParallel;
     this.multiRootRunWorkspacesInParallel = multiRootRunWorkspacesInParallel;
@@ -53,6 +82,9 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     this.verboseLogging = verboseLogging;
     this.importStrategy = importStrategy;
     this.stepDefinitionSearchTimeout = stepDefinitionSearchTimeout;
+    this.discoveryDepth = discoveryDepth;
+    this.discoveryStopOnFirstHit = discoveryStopOnFirstHit;
+    this.suppressedNotifications = suppressedNotifications;
   }
 
   get<T>(section: string): T {
@@ -73,8 +105,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.activeEnvVarPreset === undefined ? "" : this.activeEnvVarPreset);
       case "projectPath":
         return <T><unknown>(this.projectPath === undefined ? "" : this.projectPath);
-      case "featuresPath":
-        return <T><unknown>(this.featuresPath === undefined ? "features" : this.featuresPath);
+      case "featuresPaths":
+        return <T><unknown>(this.featuresPaths ?? []);
       case "multiRootRunWorkspacesInParallel":
         return <T><unknown>(this.multiRootRunWorkspacesInParallel === undefined ? true : this.multiRootRunWorkspacesInParallel);
       case "justMyCode":
@@ -89,6 +121,12 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.importStrategy === undefined ? "useBundled" : this.importStrategy);
       case "stepDefinitionSearchTimeout":
         return <T><unknown>(this.stepDefinitionSearchTimeout === undefined ? 20 : this.stepDefinitionSearchTimeout);
+      case "discoveryDepth":
+        return <T><unknown>(this.discoveryDepth === undefined ? 3 : this.discoveryDepth);
+      case "discoveryStopOnFirstHit":
+        return <T><unknown>(this.discoveryStopOnFirstHit === undefined ? false : this.discoveryStopOnFirstHit);
+      case "suppressedNotifications":
+        return <T><unknown>(this.suppressedNotifications ?? []);
       default:
         debugger; // eslint-disable-line no-debugger
         throw new Error("get() missing case for section: " + section);
@@ -122,8 +160,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
       case "justMyCode":
         response = <T><unknown>this.justMyCode;
         break;
-      case "featuresPath":
-        response = <T><unknown>this.featuresPath;
+      case "featuresPaths":
+        response = <T><unknown>this.featuresPaths;
         break;
       case "multiRootRunWorkspacesInParallel":
         response = <T><unknown>this.multiRootRunWorkspacesInParallel;
@@ -142,6 +180,15 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         break;
       case "stepDefinitionSearchTimeout":
         response = <T><unknown>this.stepDefinitionSearchTimeout;
+        break;
+      case "discoveryDepth":
+        response = <T><unknown>this.discoveryDepth;
+        break;
+      case "discoveryStopOnFirstHit":
+        response = <T><unknown>this.discoveryStopOnFirstHit;
+        break;
+      case "suppressedNotifications":
+        response = <T><unknown>this.suppressedNotifications;
         break;
       default:
         debugger; // eslint-disable-line no-debugger
@@ -169,21 +216,16 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
       }
     }
 
-    const getExpectedFeaturesPath = (): string => {
-      switch (this.featuresPath) {
-        case "":
-        case undefined:
-          return "features";
-        default:
-          return this.featuresPath.trim().replace(/^\\|^\//, "").replace(/\\$|\/$/, "");
-      }
+    const getExpectedFeaturesFolder = (): string => {
+      const features = (this.featuresPaths && this.featuresPaths[0]) || "features";
+      return features.trim().replace(/^\\|^\//, "").replace(/\\$|\/$/, "");
     }
 
     // Combined workspace-relative path to features folder
     const getExpectedWorkspaceRelativeFeaturesPath = (): string => {
       const projectPath = getExpectedProjectPath();
-      const featuresPath = getExpectedFeaturesPath();
-      return projectPath ? `${projectPath}/${featuresPath}` : featuresPath;
+      const folder = getExpectedFeaturesFolder();
+      return projectPath ? `${projectPath}/${folder}` : folder;
     }
 
     const getExpectedProjectUri = (): vscode.Uri => {
@@ -196,7 +238,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     const getExpectedFeaturesUri = (): vscode.Uri => {
       if (!wkspUri)
         throw "you must supply wkspUri to call getExpectedFeaturesUri";
-      return vscode.Uri.joinPath(getExpectedProjectUri(), getExpectedFeaturesPath());
+      return vscode.Uri.joinPath(getExpectedProjectUri(), getExpectedFeaturesFolder());
     }
 
 
@@ -217,8 +259,6 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>this.get("envVarOverrides");
       case "projectPath":
         return <T><unknown>getExpectedProjectPath();
-      case "featuresPath":
-        return <T><unknown>getExpectedFeaturesPath();
       case "workspaceRelativeFeaturesPath":
         return <T><unknown>getExpectedWorkspaceRelativeFeaturesPath();
       case "projectUri":
@@ -239,7 +279,10 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.importStrategy === undefined ? "useBundled" : this.importStrategy);
       case "stepDefinitionSearchTimeout":
         return <T><unknown>(this.stepDefinitionSearchTimeout === undefined ? 20 : this.stepDefinitionSearchTimeout);
-
+      case "discoveryDepth":
+        return <T><unknown>(this.discoveryDepth === undefined ? 3 : this.discoveryDepth);
+      case "discoveryStopOnFirstHit":
+        return <T><unknown>(this.discoveryStopOnFirstHit === undefined ? false : this.discoveryStopOnFirstHit);
       default:
         debugger; // eslint-disable-line no-debugger
         throw new Error("getExpected() missing case for section: " + section);

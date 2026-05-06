@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { getWorkspaceSettingsForFile, isFeatureFile } from "../common";
+import { getWorkspaceSettingsForFile, isFeatureFile, getFeaturesRootForFile } from "../common";
 import { getFixtureByTag, getFixtures } from "../parsers/fixtureParser";
 import { getFeatureTags } from "../parsers/featureParser";
 import { config } from "../configuration";
@@ -21,7 +21,8 @@ export function validateFixtureTags(document: vscode.TextDocument): void {
     }
 
     const diagnostics: vscode.Diagnostic[] = [];
-    const tags = getFeatureTags(wkspSettings.featuresUri).filter(t => t.uri.toString() === document.uri.toString());
+    const root = getFeaturesRootForFile(wkspSettings, document.uri) ?? wkspSettings.featuresUri;
+    const tags = getFeatureTags(root).filter(t => t.uri.toString() === document.uri.toString());
     const availableFixtures = getFixtures(wkspSettings.featuresUri);
 
     for (const tag of tags) {

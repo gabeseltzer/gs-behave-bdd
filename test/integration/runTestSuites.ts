@@ -128,6 +128,88 @@ async function runTestSuites() {
       launchArgs
     });
 
+    launchArgs = ["example-projects/config-only"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './config-only suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = ["example-projects/pyproject-config"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './pyproject-config suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = ["example-projects/malformed-config"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './malformed-config suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = ["example-projects/watcher-integration"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './watcher-integration suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = ["example-projects/multi-path"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './multi-path suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = ["example-projects/multi-path-settings"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './multi-path-settings suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = ["example-projects/monorepo-scan"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './monorepo-scan suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+
+    launchArgs = ["example-projects/project-switch"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './project-switch suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
+    launchArgs = ["example-projects/migration-stale"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './migrations suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
     console.log("test run complete");
 
   } catch (err) {

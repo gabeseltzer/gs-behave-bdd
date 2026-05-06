@@ -27,6 +27,10 @@ class ExtensionConfiguration implements Configuration {
   private static _configuration?: ExtensionConfiguration;
   private _windowSettings: WindowSettings | undefined = undefined;
   private _resourceSettings: { [wkspUriPath: string]: WorkspaceSettings } = {};
+  // W-06: per-uri tracker so getter-path WkspError surfaces are emitted ONCE
+  // per workspace (across the lifetime of the singleton). Without this, the
+  // workspaceSettings getter silently demoted genuine errors to diagLog.
+  private _failedSettingsWorkspaces = new Set<string>();
 
   private constructor() {
     ExtensionConfiguration._configuration = this;
@@ -52,6 +56,10 @@ class ExtensionConfiguration implements Configuration {
 
   // called by onDidChangeConfiguration
   public reloadSettings(wkspUri: vscode.Uri, testConfig?: vscode.WorkspaceConfiguration) {
+    // W-06: clear the per-uri "already surfaced" flag so a workspace that
+    // previously failed and is now being re-loaded will surface a fresh
+    // notification if it still fails (fix-then-break cycle).
+    this._failedSettingsWorkspaces.delete(wkspUri.path);
     if (testConfig) {
       this._windowSettings = new WindowSettings(testConfig);
       this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri, testConfig, this._windowSettings, this.logger);
@@ -78,9 +86,29 @@ class ExtensionConfiguration implements Configuration {
     const winSettings = this.globalSettings;
     getUrisOfWkspFoldersWithFeatures().forEach(wkspUri => {
       if (!this._resourceSettings[wkspUri.path]) {
-        this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
-          vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri), winSettings, this.logger,
-          vscode.workspace.getConfiguration("behave-vsc", wkspUri));
+        try {
+          this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
+            vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri), winSettings, this.logger,
+            vscode.workspace.getConfiguration("behave-vsc", wkspUri));
+        } catch (e) {
+          // WorkspaceSettings throws WkspError on fatal config errors (e.g. bad featuresPaths).
+          // The error is already logged via the workspace's output channel inside logSettings()
+          // before the throw. Swallow here so a single misconfigured workspace doesn't poison
+          // iteration / settings access for unrelated workspaces (e.g. an integration test for
+          // workspace A asserting its own settings should not throw because workspace B has a
+          // bad path). Direct callers of reloadSettings() still observe the throw.
+          //
+          // W-06: surface ONCE per workspace via showError so users with a genuinely broken
+          // config see a one-shot notification (they would otherwise see nothing in the UI
+          // unless the FIRST settings-loading code path was a direct reloadSettings caller).
+          // Per-uri tracking prevents spamming if the getter is hit repeatedly for the same
+          // bad workspace.
+          if (!this._failedSettingsWorkspaces.has(wkspUri.path)) {
+            this._failedSettingsWorkspaces.add(wkspUri.path);
+            this.logger.showError(e, wkspUri);
+          }
+          diagLog(`workspaceSettings getter: skipping ${wkspUri.path} due to: ${e}`, wkspUri);
+        }
       }
     });
     return this._resourceSettings;

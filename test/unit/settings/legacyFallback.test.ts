@@ -101,7 +101,7 @@ suite('legacy settings fallback (getWithLegacyFallback)', () => {
 
 });
 
-// makeWkspConfig sets workspaceFolderValue (resource-scope settings like featuresPath live here).
+// makeWkspConfig sets workspaceFolderValue (resource-scope settings like projectPath live here).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeWkspConfig(folderValues: Record<string, unknown>): any {
   return {
@@ -119,30 +119,6 @@ function makeWkspConfig(folderValues: Record<string, unknown>): any {
 }
 
 suite('getActualWorkspaceSetting legacy fallback (hasFeaturesFolder scenario)', () => {
-
-  test('returns new config value when explicitly set', () => {
-    const newConfig = makeWkspConfig({ featuresPath: 'my_tests' });
-    const legacyConfig = makeWkspConfig({ featuresPath: 'old_tests' });
-    assert.strictEqual(getActualWorkspaceSetting(newConfig, 'featuresPath', legacyConfig), 'my_tests');
-  });
-
-  test('falls back to legacy workspaceFolderValue when new key not explicitly set', () => {
-    // This is the real-world bug: user has "behave-vsc.featuresPath" but not "gs-behave-bdd.featuresPath"
-    const newConfig = makeWkspConfig({}); // no workspaceFolderValue set
-    const legacyConfig = makeWkspConfig({ featuresPath: 'my_tests' });
-    assert.strictEqual(getActualWorkspaceSetting(newConfig, 'featuresPath', legacyConfig), 'my_tests');
-  });
-
-  test('returns undefined when neither config has explicit value', () => {
-    const newConfig = makeWkspConfig({});
-    const legacyConfig = makeWkspConfig({});
-    assert.strictEqual(getActualWorkspaceSetting(newConfig, 'featuresPath', legacyConfig), undefined);
-  });
-
-  test('returns undefined when no legacyConfig provided and new key not set', () => {
-    const newConfig = makeWkspConfig({});
-    assert.strictEqual(getActualWorkspaceSetting(newConfig, 'featuresPath'), undefined);
-  });
 
   test('also handles projectPath legacy fallback', () => {
     const newConfig = makeWkspConfig({});

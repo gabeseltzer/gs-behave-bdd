@@ -48,8 +48,8 @@ suite('findFiles', () => {
       assert.ok(DEFAULT_EXCLUDE_DIRS.has('*.egg-info'));
     });
 
-    test('should have exactly 9 entries', () => {
-      assert.strictEqual(DEFAULT_EXCLUDE_DIRS.size, 9);
+    test('should have exactly 13 entries', () => {
+      assert.strictEqual(DEFAULT_EXCLUDE_DIRS.size, 13);
     });
   });
 

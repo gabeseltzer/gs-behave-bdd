@@ -31,13 +31,19 @@ export class Uri {
   }
 
   static parse(value: string): Uri {
+    // Extract scheme from URI
+    const schemeMatch = value.match(/^([a-zA-Z][a-zA-Z0-9+\-.]*):\/\//);
+    const scheme = schemeMatch ? schemeMatch[1].toLowerCase() : 'file';
+
     // Strip file:// or file:/// prefix and decode to a plain path
     const stripped = value.replace(/^file:\/\/\/?/i, '');
     // On Windows the path starts with a drive letter, e.g. /c:/foo -> c:/foo
     const fsPath = stripped.startsWith('/') && /^\/[a-zA-Z]:/.test(stripped)
       ? stripped.slice(1)
       : stripped;
-    return new Uri('file', fsPath);
+    const uri = new Uri(scheme, fsPath);
+    uri.scheme = scheme;
+    return uri;
   }
 
   static joinPath(base: Uri, ...pathSegments: string[]): Uri {
@@ -124,6 +130,10 @@ export class SemanticTokensLegend {
   constructor(public tokenTypes: string[], public tokenModifiers: string[] = []) { }
 }
 
+export class RelativePattern {
+  constructor(public base: Uri | string, public pattern: string) { }
+}
+
 export const workspace = {
   fs: {
     readFile: () => Promise.resolve(Buffer.from('')),
@@ -152,6 +162,12 @@ export const workspace = {
       if (key === 'stepDefinitionSearchTimeout') {
         return 10;
       }
+      if (key === 'discoveryDepth') {
+        return 3;
+      }
+      if (key === 'discoveryStopOnFirstHit') {
+        return false;
+      }
       return defaultValue;
     },
     has: () => false,
@@ -167,6 +183,12 @@ export const workspace = {
   onDidSaveTextDocument: () => ({ dispose: () => { /* mock */ } }),
   onDidOpenTextDocument: () => ({ dispose: () => { /* mock */ } }),
   onDidCloseTextDocument: () => ({ dispose: () => { /* mock */ } }),
+  createFileSystemWatcher: (_pattern: unknown): unknown => ({
+    onDidCreate: () => ({ dispose: () => { /* mock */ } }),
+    onDidChange: () => ({ dispose: () => { /* mock */ } }),
+    onDidDelete: () => ({ dispose: () => { /* mock */ } }),
+    dispose: () => { /* mock */ },
+  }),
 };
 
 export const languages = {
@@ -227,6 +249,12 @@ export enum FileType {
   SymbolicLink = 64
 }
 
+export enum ConfigurationTarget {
+  Global = 1,
+  Workspace = 2,
+  WorkspaceFolder = 3
+}
+
 export enum DiagnosticSeverity {
   Error = 0,
   Warning = 1,
@@ -272,6 +300,10 @@ export class SemanticTokens {
 export class SemanticTokensBuilder {
   push(..._args: unknown[]) { /* mock */ }
   build() { return new SemanticTokens(new Uint32Array(0)); }
+}
+
+export class ThemeIcon {
+  constructor(public readonly id: string, public readonly color?: unknown) { }
 }
 
 export class CodeLens {

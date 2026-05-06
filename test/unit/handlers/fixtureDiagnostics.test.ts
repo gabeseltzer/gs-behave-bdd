@@ -29,7 +29,7 @@ suite('fixtureDiagnostics', () => {
     sandbox.stub(common, 'isFeatureFile').returns(opts.isFeature ?? true);
     sandbox.stub(common, 'getWorkspaceSettingsForFile').returns(
       'wkspSettings' in opts ? opts.wkspSettings as ReturnType<typeof common.getWorkspaceSettingsForFile>
-        : { uri: mockUri, featuresUri: mockUri } as ReturnType<typeof common.getWorkspaceSettingsForFile>
+        : { uri: mockUri, featuresUri: mockUri, featuresUris: [mockUri] } as ReturnType<typeof common.getWorkspaceSettingsForFile>
     );
     sandbox.stub(featureParser, 'getFeatureTags').returns(opts.featureTags ?? []);
     sandbox.stub(fixtureParser, 'getFixtures').returns(opts.fixtures ?? []);
