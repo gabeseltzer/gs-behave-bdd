@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: Migration Consent & behave-vsc Cleanup
 status: executing
-last_updated: "2026-05-07T19:02:14.336Z"
+last_updated: "2026-05-07T20:59:43.996Z"
 last_activity: 2026-05-07 -- Phase 019 execution started
 progress:
   total_phases: 4
@@ -140,9 +140,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 
 > Closed by Phase 18 Plan 02 audit-rollup; pattern remains for future redesign. Preserved here so the v1.4.0 milestone-audit recommendations survive `/gsd-complete-milestone v1.4.0`.
 
-**`activeProjectCache` invalidation pattern (`src/common.ts` `hasFeaturesFolder()`):**
-
-The Phase 12 active-project block re-reads `discoveryDepth` at lookup time rather than invalidating `activeProjectCache` when discovery-influencing settings change. Working but ad-hoc — see commit `c08ced5` (re-applied from `27f14e0` after a diagnostic revert/re-revert during the Phase 17 regression bisect) and the WHY comment near `src/common.ts:347`. Recommended follow-up: pair `clearScanResultCache()` with project-list invalidation when discovery-influencing settings change. **Tracked into v1.5.0 as CLEANUP-02 (Phase 19).**
+**`activeProjectCache` invalidation pattern (`src/common.ts` `hasFeaturesFolder()`):** ✅ **RESOLVED by Phase 19 Plan 04 (CLEANUP-02).** `configurationChangedHandler` now calls `clearActiveProjectCache()` alongside `clearScanResultCache()` whenever any scan-shaping setting changes (D-09: `discoveryDepth`, `discoveryStopOnFirstHit`, `projectPath`, `projectPaths`, `featuresPath`, `featuresPaths`). The v1.4.0 read-time `discoveryDepth` re-read in `src/common.ts` and its surrounding tech-debt comment block are gone; TEST-06 pins the new shape.
 
 **Multiroot integration mutex flake:** environmental — documented in `AI_INSTRUCTIONS.md` § "Integration Test Structure" (Local-dev gotcha). Surfaces as `Another instance of app 'Code' is already active` / `AssertionError: assert(instances)` when the developer’s own VS Code is running during `npm run test:integration`. No code action needed.
 

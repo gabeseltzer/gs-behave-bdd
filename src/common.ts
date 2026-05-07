@@ -351,21 +351,12 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     }
 
     // === Phase 12: Check active project from project list ===
-    // Phase 17 fix: also gate on currentDiscoveryDepth so a stale activeProject
-    // (cached at activation depth) does not resurrect a subdir config when the user
-    // later lowers discoveryDepth below where the active project lives.
-    // Note: this is a deliberate read-time check, not a cache-invalidation hook —
-    // activeProjectCache outlives the settings that influence its keys, and a proper
-    // clearScanResultCache()-paired invalidation is tracked as v1.4.0 follow-up tech debt
-    // (see .planning/v1.4.0-MILESTONE-AUDIT.md tech_debt list).
+    // Phase 19 / CLEANUP-02: activeProjectCache is now invalidated proactively
+    // by configurationChangedHandler when scan-shaping settings change (D-09).
+    // The v1.4.0 read-time discoveryDepth re-read is gone.
     if (!isManualProjectPathMode(folder.uri)) {
       const activeProject = getActiveProject(folder.uri);
-      // N-04: this getConfiguration call is on the <1ms hot path; cost is one
-      // scope-chain walk per workspace folder per cache miss. For 10+ root
-      // workspaces with frequent invalidation this could matter. Documented
-      // as v1.4.0 tech debt — out of scope here, but flagged for awareness.
-      const currentDiscoveryDepth = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri).get<number>("discoveryDepth") ?? 3;
-      if (activeProject && activeProject.depth <= currentDiscoveryDepth) {
+      if (activeProject) {
         const subdirConfigResult = findBehaveConfig(activeProject.dirUri);
         if (subdirConfigResult && subdirConfigResult.ok) {
           clearPathDiagnostics(subdirConfigResult.configFileUri);
