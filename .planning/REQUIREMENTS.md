@@ -88,4 +88,36 @@
 
 ## Traceability
 
-(Filled by gsd-roadmapper when ROADMAP.md is created.)
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CONSENT-01 | Phase 21 | Pending |
+| CONSENT-02 | Phase 21 | Pending |
+| CONSENT-03 | Phase 21 | Pending |
+| CONSENT-04 | Phase 21 | Pending |
+| CONSENT-05 | Phase 19 | Pending |
+| CONSENT-06 | Phase 21 | Pending |
+| CONSENT-07 | Phase 19 | Pending |
+| CONSENT-08 | Phase 19 | Pending |
+| CONSENT-09 | Phase 19 | Pending |
+| MIGRATE-01 | Phase 20 | Pending |
+| MIGRATE-02 | Phase 20 | Pending |
+| MIGRATE-03 | Phase 20 | Pending |
+| MIGRATE-04 | Phase 19 | Pending |
+| MIGRATE-05 | Phase 21 | Pending |
+| MIGRATE-06 | Phase 21 | Pending |
+| MIGRATE-07 | Phase 19 | Pending |
+| MIGRATE-08 | Phase 19 | Pending |
+| MIGRATE-09 | Phase 19 | Pending |
+| CLEANUP-01 | Phase 22 | Pending |
+| CLEANUP-02 | Phase 19 | Pending |
+| TEST-01 | Phase 21 | Pending |
+| TEST-02 | Phase 21 | Pending |
+| TEST-03 | Phase 19 | Pending |
+| TEST-04 | Phase 20 | Pending |
+| TEST-05 | Phase 19 | Pending |
+| TEST-06 | Phase 19 | Pending |
+| TEST-07 | Phase 22 | Pending |
+| DOC-01 | Phase 22 | Pending |
+| DOC-02 | Phase 22 | Pending |
+
+**Coverage:** 29/29 mapped (note: 31 requirements minus 2 — CONSENT and MIGRATE counts confirmed: 9 CONSENT + 9 MIGRATE + 2 CLEANUP + 7 TEST + 2 DOC = 29 distinct IDs above; all v1.5.0 requirements assigned to exactly one phase).

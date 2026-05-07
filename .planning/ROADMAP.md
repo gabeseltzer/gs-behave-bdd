@@ -7,6 +7,7 @@
 - ✅ **1.2.0 Multi-Path & Monorepo-Aware Discovery** — Phases 7-11 (shipped 2026-04-22)
 - ✅ **1.3.0 Project Switching** — Phases 12-14 (shipped 2026-04-23)
 - ✅ **v1.4.0 Deprecate featuresPath & Notification Suppression** — Phases 15-18 (shipped 2026-05-04)
+- 🚧 **v1.5.0 Migration Consent & `behave-vsc` Cleanup** — Phases 19-22 (in progress)
 
 ## Phases
 
@@ -67,3 +68,74 @@ Archive: [milestones/v1.3.0-ROADMAP.md](milestones/v1.3.0-ROADMAP.md)
 Archive: [milestones/v1.4.0-ROADMAP.md](milestones/v1.4.0-ROADMAP.md)
 
 </details>
+
+### 🚧 v1.5.0 Migration Consent & `behave-vsc` Cleanup (Phases 19-22) — IN PROGRESS
+
+**Milestone goal:** Make settings migration opt-in via per-migration consent prompts, complete the cross-extension migration off `behave-vsc`, and pay down the `activeProjectCache` invalidation debt from v1.4.0.
+
+**Granularity:** coarse · **Requirements:** 29/29 mapped (CONSENT-01..09, MIGRATE-01..09, CLEANUP-01..02, TEST-01..07, DOC-01..02)
+
+#### Summary
+
+- [ ] **Phase 19: Migration Foundation** — Register `migrationMode` / `completedMigrations` settings, build the per-scope evaluator, ship the recheck command, and pay down the `activeProjectCache` invalidation debt.
+- [ ] **Phase 20: Migration Registry** — Refactor v1.4.0's two migrations into the new registry and add `behave-vsc` → `gs-behave-bdd` entries for every silent-fallback key.
+- [ ] **Phase 21: Consent UX (Case 2 & Case 3 Prompts)** — Wire activation-time scanning to non-blocking notifications, implement the case 2 / case 3 actions, and honour `migrationMode` overrides + dismissal semantics.
+- [ ] **Phase 22: Cleanup, Integration & Docs** — Remove the `behave-vsc` silent fallback reads, add the consent-flow integration suite, and document the new UX in README + setting descriptions.
+
+#### Phase Details
+
+##### Phase 19: Migration Foundation
+**Goal**: The new migration plumbing — settings, evaluator, recheck command — is in place and exercised by unit tests, and the v1.4.0 `activeProjectCache` debt is closed.
+**Depends on**: Nothing (continues from v1.4.0 phase 18)
+**Requirements**: CONSENT-05, CONSENT-07, CONSENT-08, CONSENT-09, MIGRATE-04, MIGRATE-07, MIGRATE-08, MIGRATE-09, CLEANUP-02, TEST-03, TEST-05, TEST-06
+**Success Criteria** (what must be TRUE):
+  1. `gs-behave-bdd.migrationMode` (enum, default `prompt`) and `gs-behave-bdd.completedMigrations` (string[], default `[]`) are visible and editable per-scope in the Settings UI with clear descriptions.
+  2. The migration evaluator inspects each unfinished migration × each VS Code scope (Global / Workspace / WorkspaceFolder) and dispatches to case 1 / 2 / 3 logic; mark-Finished writes land at the correct scope and a fresh workspace folder starts with an empty `completedMigrations`.
+  3. *Behave BDD: Recheck Migrations* appears in the command palette and, when invoked, clears `completedMigrations` for the writeable scopes and re-runs the scan.
+  4. Empty / whitespace legacy values are treated as case 1 (no prompt, no copy), matching v1.4.0's `skip-with-removal` semantics; all migrations route through the existing `migrateScopedSetting` primitive (no parallel implementations).
+  5. Changing `discoveryDepth` invalidates `activeProjectCache` via `clearScanResultCache()` + project-list invalidation, replacing the v1.4.0 read-time re-read in `src/common.ts:347`; a unit test pins the new behavior.
+**Plans**: TBD
+
+##### Phase 20: Migration Registry
+**Goal**: A single registry holds every migration entry the extension knows about — both v1.4.0's two existing migrations and the new `behave-vsc` cross-extension entries — and they all flow through the case 1/2/3 evaluator built in Phase 19.
+**Depends on**: Phase 19
+**Requirements**: MIGRATE-01, MIGRATE-02, MIGRATE-03, TEST-04
+**Success Criteria** (what must be TRUE):
+  1. `migrateLegacyFeaturesPath` and `migrateLegacySuppressMultiConfig` are registered as registry entries; their old activation-time silent auto-migration call sites are gone, and they only run via the evaluator.
+  2. New `behave-vsc` → `gs-behave-bdd` migration entries cover every silent-fallback key currently read in `src/configuration.ts` (`legacyWinConfig` / `legacyWkspConfig`), `src/common.ts:202`, and `src/discovery/projectList.ts:167` — exhaustive list confirmed at plan time (`featuresPath`, env presets, `runParallel`, `xRay`, `projectPath`, etc.).
+  3. Re-running migrations on already-Finished entries is a no-op (idempotency guarantee).
+  4. Unit tests exercise each registered legacy → canonical key pair and idempotency.
+**Plans**: TBD
+
+##### Phase 21: Consent UX (Case 2 & Case 3 Prompts)
+**Goal**: Users see the right prompt at activation — case 2 honours `migrationMode`, case 3 always prompts with four actions — and dismissal vs. explicit choice behaves as designed.
+**Depends on**: Phase 20
+**Requirements**: CONSENT-01, CONSENT-02, CONSENT-03, CONSENT-04, CONSENT-06, MIGRATE-05, MIGRATE-06, TEST-01, TEST-02
+**Success Criteria** (what must be TRUE):
+  1. On activation, any unfinished migration × scope hitting case 2 or case 3 produces a non-blocking notification; case 1 is silent.
+  2. With `migrationMode = prompt`, case 2 hits show three actions (*Migrate and delete legacy* / *Migrate and keep legacy* / *Don't migrate*); picking any of the three marks the migration Finished at that scope and the prompt does not re-fire.
+  3. With `migrationMode = migrate-and-delete` / `migrate-and-keep` / `skip`, case 2 hits run silently with the corresponding action and mark Finished at that scope.
+  4. Case 3 hits *always* show four actions (*overwrite-and-delete* / *overwrite-and-keep* / *keep-canonical-and-delete-legacy* / *keep-both*) regardless of `migrationMode`; the chosen action runs and marks Finished at that scope.
+  5. Dismissing a notification (X / click-away) leaves the migration unfinished at that scope so it re-surfaces on the next activation.
+**Plans**: TBD
+**UI hint**: yes
+
+##### Phase 22: Cleanup, Integration & Docs
+**Goal**: The `behave-vsc` silent fallback reads are gone, the new consent flow is verified end-to-end in real VS Code, and users have accurate documentation describing the behavior change.
+**Depends on**: Phase 21
+**Requirements**: CLEANUP-01, TEST-07, DOC-01, DOC-02
+**Success Criteria** (what must be TRUE):
+  1. `src/configuration.ts` (`legacyWinConfig` / `legacyWkspConfig`), `src/common.ts:202`, and `src/discovery/projectList.ts:167` no longer read the `behave-vsc.*` namespace; the extension reads only canonical `gs-behave-bdd.*` keys after v1.5.0.
+  2. A new `example-projects/migration-consent/` fixture with seeded `behave-vsc.*` settings drives an integration test that exercises the full flow: prompt fires, user picks an action, migration completes, `completedMigrations` is written.
+  3. README clearly explains the consent UX, the `migrationMode` / `completedMigrations` settings, the *Recheck Migrations* command, and the migration path off the `behave-vsc` extension — with a prominent callout that v1.5.0 stops honouring legacy `behave-vsc.*` reads.
+  4. Setting descriptions for `migrationMode` and `completedMigrations` in package.json read clearly in the Settings UI and match README copy.
+**Plans**: TBD
+
+#### Progress
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 19. Migration Foundation | 0/0 | Not started | - |
+| 20. Migration Registry | 0/0 | Not started | - |
+| 21. Consent UX (Case 2 & Case 3 Prompts) | 0/0 | Not started | - |
+| 22. Cleanup, Integration & Docs | 0/0 | Not started | - |
