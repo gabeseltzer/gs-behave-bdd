@@ -40,6 +40,7 @@ import {
 import { buildQuickPickItems, computeStatusBarState, ProjectQuickPickItem } from './discovery/selectProjectHelpers';
 import { JunitWatcher } from './watchers/junitWatcher';
 import { migrateLegacySuppressMultiConfig, migrateLegacyFeaturesPath, showSuppressibleNotification } from './notifications';
+import { recheckMigrationsCommandHandler } from './migrations';
 
 
 const testData = new WeakMap<vscode.TestItem, BehaveTestData>();
@@ -442,6 +443,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         }
         await vscode.commands.executeCommand('gs-behave-bdd.findStepReferences');
       }),
+      vscode.commands.registerCommand('gs-behave-bdd.recheckMigrations', () => recheckMigrationsCommandHandler()),
       // Legacy command aliases for users migrating from behave-vsc — preserves custom keybindings
       vscode.commands.registerTextEditorCommand(`behave-vsc.gotoStep`, gotoStepHandler),
       vscode.commands.registerTextEditorCommand(`behave-vsc.findStepReferences`, findStepReferencesHandler),
