@@ -96,10 +96,10 @@ Archive: [milestones/v1.4.0-ROADMAP.md](milestones/v1.4.0-ROADMAP.md)
   5. Changing `discoveryDepth` invalidates `activeProjectCache` via `clearScanResultCache()` + project-list invalidation, replacing the v1.4.0 read-time re-read in `src/common.ts:347`; a unit test pins the new behavior.
 **Plans:** 4 plans
 Plans:
-- [ ] 019-01-PLAN.md — Register `gs-behave-bdd.migrationMode` (enum) and `gs-behave-bdd.completedMigrations` (string[]) in package.json with schema-test pins (CONSENT-05/07/08).
-- [ ] 019-02-PLAN.md — Build the migrations module: types, empty registry (D-05), per-scope evaluator with case 1/2/3 dispatch, and per-scope completedMigrations helpers (MIGRATE-04/07/08/09, TEST-03).
-- [ ] 019-03-PLAN.md — Ship the *Behave BDD: Recheck Migrations* command with quick-pick scope picker, clear, and rescan via the standard evaluator path (CONSENT-09, TEST-05).
-- [ ] 019-04-PLAN.md — Add `clearActiveProjectCache()`, broaden the `configurationChangedHandler` rescan branch to all scan-shaping keys, and remove the v1.4.0 read-time discoveryDepth re-read (CLEANUP-02, TEST-06).
+- [x] 019-01-PLAN.md — Register `gs-behave-bdd.migrationMode` (enum) and `gs-behave-bdd.completedMigrations` (string[]) in package.json with schema-test pins (CONSENT-05/07/08).
+- [x] 019-02-PLAN.md — Build the migrations module: types, empty registry (D-05), per-scope evaluator with case 1/2/3 dispatch, and per-scope completedMigrations helpers (MIGRATE-04/07/08/09, TEST-03).
+- [x] 019-03-PLAN.md — Ship the *Behave BDD: Recheck Migrations* command with quick-pick scope picker, clear, and rescan via the standard evaluator path (CONSENT-09, TEST-05).
+- [x] 019-04-PLAN.md — Add `clearActiveProjectCache()`, broaden the `configurationChangedHandler` rescan branch to all scan-shaping keys, and remove the v1.4.0 read-time discoveryDepth re-read (CLEANUP-02, TEST-06).
 
 ##### Phase 20: Migration Registry
 **Goal**: A single registry holds every migration entry the extension knows about — both v1.4.0's two existing migrations and the new `behave-vsc` cross-extension entries — and they all flow through the case 1/2/3 evaluator built in Phase 19.
