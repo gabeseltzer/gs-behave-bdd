@@ -6,6 +6,7 @@ import {
   markMigrationFinishedAtScope,
   evaluateMigration,
   evaluateAllMigrations,
+  recheckMigrationsCommandHandler,
   ALL_MIGRATION_SCOPES,
   type MigrationEntry,
 } from '../../src/migrations';
@@ -469,5 +470,148 @@ suite('Phase 19 — evaluateMigration: idempotency + independence + sweep', () =
     const r = await evaluateAllMigrations(MOCK_URI, undefined, [TEST_ENTRY]);
     // 3 scopes × 1 entry = 3 results.
     assert.strictEqual(r.length, ALL_MIGRATION_SCOPES.length);
+  });
+});
+
+// ─── Plan 03: recheckMigrationsCommandHandler (CONSENT-09 / TEST-05) ─────────
+
+suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
+  let updateSpy: sinon.SinonSpy;
+  let showQuickPickStub: sinon.SinonStub;
+
+  setup(() => {
+    updateSpy = sinon.spy(() => Promise.resolve());
+    stubLogger();
+    // Default: cfg.update succeeds. Tests can override via the spy reference.
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makePerKeyScopedConfig({}, updateSpy),
+    );
+    showQuickPickStub = sinon.stub(vscode.window, 'showQuickPick');
+  });
+  teardown(() => sinon.restore());
+
+  function setWorkspace(opts: {
+    workspaceFile?: unknown;
+    workspaceFolders?: { uri: { path: string } }[];
+  }): void {
+    sinon.stub(vscode.workspace, 'workspaceFile').value(opts.workspaceFile);
+    sinon.stub(vscode.workspace, 'workspaceFolders').value(opts.workspaceFolders);
+  }
+
+  test('4.1: no .code-workspace + 1 folder — quick-pick has Global + Workspace Folder only', async () => {
+    setWorkspace({ workspaceFile: undefined, workspaceFolders: [{ uri: MOCK_URI }] });
+    showQuickPickStub.resolves(undefined); // user dismisses
+    await recheckMigrationsCommandHandler();
+    assert.strictEqual(showQuickPickStub.callCount, 1);
+    const items = showQuickPickStub.firstCall.args[0];
+    assert.strictEqual(items.length, 2, 'Workspace scope filtered out per D-07');
+    const labels = items.map((i: { label: string }) => i.label);
+    assert.ok(labels.includes('Global'));
+    assert.ok(labels.includes('Workspace Folder'));
+    assert.ok(!labels.includes('Workspace'));
+  });
+
+  test('4.2: .code-workspace open + folder — all 3 scopes shown', async () => {
+    setWorkspace({
+      workspaceFile: vscode.Uri.file('/fake.code-workspace'),
+      workspaceFolders: [{ uri: MOCK_URI }],
+    });
+    showQuickPickStub.resolves(undefined);
+    await recheckMigrationsCommandHandler();
+    const items = showQuickPickStub.firstCall.args[0];
+    assert.strictEqual(items.length, 3);
+    const labels = items.map((i: { label: string }) => i.label);
+    assert.ok(labels.includes('Global'));
+    assert.ok(labels.includes('Workspace'));
+    assert.ok(labels.includes('Workspace Folder'));
+  });
+
+  test('4.3: no folders — only Global is shown; pick Global short-circuits without evaluator', async () => {
+    setWorkspace({ workspaceFile: undefined, workspaceFolders: undefined });
+    const items: { label: string; target: unknown }[] = [];
+    showQuickPickStub.callsFake((arr: unknown[]) => {
+      // capture for assertion
+      (arr as { label: string; target: unknown }[]).forEach(i => items.push(i));
+      return Promise.resolve(arr[0]);
+    });
+    await recheckMigrationsCommandHandler();
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].label, 'Global');
+    // cfg.update was called for the clear, but evaluateAllMigrations was NOT invoked
+    // (no folders to iterate). updateSpy should be exactly 1 call (the clear write).
+    assert.strictEqual(updateSpy.callCount, 1);
+  });
+
+  test('4.4: user cancels (showQuickPick → undefined) — no update, no evaluator', async () => {
+    setWorkspace({ workspaceFile: undefined, workspaceFolders: [{ uri: MOCK_URI }] });
+    showQuickPickStub.resolves(undefined);
+    await recheckMigrationsCommandHandler();
+    assert.strictEqual(updateSpy.called, false, 'no clear write on cancel');
+  });
+
+  test('4.5: pick Global — writes [] at Global, then evaluates for each folder', async () => {
+    const folder = { uri: MOCK_URI };
+    setWorkspace({ workspaceFile: undefined, workspaceFolders: [folder] });
+    showQuickPickStub.callsFake((arr: { label: string }[]) =>
+      Promise.resolve(arr.find(i => i.label === 'Global')),
+    );
+    await recheckMigrationsCommandHandler();
+    const clearCall = updateSpy.getCalls().find(c => c.args[0] === 'completedMigrations');
+    assert.ok(clearCall, 'clear write must occur');
+    assert.deepStrictEqual(clearCall!.args[1], []);
+    assert.strictEqual(clearCall!.args[2], vscode.ConfigurationTarget.Global);
+  });
+
+  test('4.6: pick Workspace Folder — writes [] at WorkspaceFolder for that folder', async () => {
+    setWorkspace({ workspaceFile: undefined, workspaceFolders: [{ uri: MOCK_URI }] });
+    showQuickPickStub.callsFake((arr: { label: string }[]) =>
+      Promise.resolve(arr.find(i => i.label === 'Workspace Folder')),
+    );
+    await recheckMigrationsCommandHandler();
+    const clearCall = updateSpy.getCalls().find(c => c.args[0] === 'completedMigrations');
+    assert.ok(clearCall);
+    assert.strictEqual(clearCall!.args[2], vscode.ConfigurationTarget.WorkspaceFolder);
+  });
+
+  test('4.7: pick Workspace — writes [] at Workspace target', async () => {
+    setWorkspace({
+      workspaceFile: vscode.Uri.file('/fake.code-workspace'),
+      workspaceFolders: [{ uri: MOCK_URI }],
+    });
+    showQuickPickStub.callsFake((arr: { label: string }[]) =>
+      Promise.resolve(arr.find(i => i.label === 'Workspace')),
+    );
+    await recheckMigrationsCommandHandler();
+    const clearCall = updateSpy.getCalls().find(c => c.args[0] === 'completedMigrations');
+    assert.ok(clearCall);
+    assert.strictEqual(clearCall!.args[2], vscode.ConfigurationTarget.Workspace);
+  });
+
+  test('4.8: cfg.update rejection — logs and bails (no evaluator pass)', async () => {
+    sinon.restore();
+    const rejecting = sinon.spy(() => Promise.reject(new Error('read-only workspace')));
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makePerKeyScopedConfig({}, rejecting),
+    );
+    const { logInfo } = stubLogger();
+    sinon.stub(vscode.workspace, 'workspaceFile').value(undefined);
+    sinon.stub(vscode.workspace, 'workspaceFolders').value([{ uri: MOCK_URI }]);
+    sinon.stub(vscode.window, 'showQuickPick').callsFake((arr: unknown) =>
+      Promise.resolve((arr as { label: string }[]).find(i => i.label === 'Global')),
+    );
+    await assert.doesNotReject(() => recheckMigrationsCommandHandler());
+    assert.strictEqual(rejecting.callCount, 1, 'cfg.update was attempted once');
+    assert.strictEqual(logInfo.called, true, 'failure logged via logInfo');
+  });
+
+  test('4.9: empty registry post-clear — handler completes without firing onCaseHit', async () => {
+    setWorkspace({ workspaceFile: undefined, workspaceFolders: [{ uri: MOCK_URI }] });
+    showQuickPickStub.callsFake((arr: { label: string }[]) =>
+      Promise.resolve(arr.find(i => i.label === 'Global')),
+    );
+    const onCaseHit = sinon.spy();
+    await recheckMigrationsCommandHandler({ onCaseHit });
+    // Phase 19 D-05: empty registry — evaluator returns [], no hook fires.
+    assert.strictEqual(onCaseHit.called, false);
   });
 });

@@ -144,6 +144,10 @@ export const workspace = {
   },
   getWorkspaceFolder: (uri: Uri) => ({ uri, name: 'mock-workspace', index: 0 }),
   workspaceFolders: [],
+  // Phase 19 Plan 03: recheckCommand inspects workspaceFile to know whether
+  // Workspace scope is writeable (D-07). Stubs may overwrite this via Sinon
+  // to simulate a .code-workspace being open.
+  workspaceFile: undefined as Uri | undefined,
   getConfiguration: (section?: string) => ({
     get: (key: string, defaultValue?: unknown) => {
       // Return default values for known configuration keys
@@ -219,7 +223,10 @@ export const window = {
     reveal: () => Promise.resolve(),
     onDidChangeVisibility: () => ({ dispose: () => { /* mock */ } })
   }),
-  registerTreeDataProvider: () => ({ dispose: () => { /* mock */ } })
+  registerTreeDataProvider: () => ({ dispose: () => { /* mock */ } }),
+  // Phase 19 Plan 03: recheckCommand uses showQuickPick for the scope picker
+  // (D-06). Default returns undefined (user dismissed); stubs override via Sinon.
+  showQuickPick: (_items?: unknown, _options?: unknown): Promise<unknown> => Promise.resolve(undefined),
 };
 
 export const debug = {
