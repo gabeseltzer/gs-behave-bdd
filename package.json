@@ -164,6 +164,10 @@
 				"command": "gs-behave-bdd.selectProject",
 				"title": "Behave BDD: Select Project",
 				"icon": "$(folder-active)"
+			},
+			{
+				"command": "gs-behave-bdd.recheckMigrations",
+				"title": "Behave BDD: Recheck Migrations"
 			}
 		],
 		"keybindings": [

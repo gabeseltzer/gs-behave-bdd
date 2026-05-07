@@ -102,3 +102,49 @@ suite('package.json schema — Phase 19 (CONSENT-05/07/08)', () => {
       'markdownDescription must mention the *Recheck Migrations* command (CONSENT-08)');
   });
 });
+
+suite('package.json + extension.ts — Phase 19 Plan 03 (CONSENT-09)', () => {
+  let pkg: { contributes: { commands?: { command: string; title: string }[] } };
+  let pkgPath: string;
+
+  suiteSetup(() => {
+    pkgPath = path.resolve(__dirname, '../../../../package.json');
+    if (!fs.existsSync(pkgPath)) {
+      pkgPath = path.resolve(__dirname, '../../../package.json');
+    }
+    pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  });
+
+  test('5.1: contributes.commands exposes recheckMigrations with the CONSENT-09 title', () => {
+    const cmds = pkg.contributes.commands ?? [];
+    const matches = cmds.filter(c => c.command === 'gs-behave-bdd.recheckMigrations');
+    assert.strictEqual(matches.length, 1, 'exactly one recheckMigrations contribution');
+    assert.strictEqual(
+      matches[0].title,
+      'Behave BDD: Recheck Migrations',
+      'title must match CONSENT-09 wording (palette display string)',
+    );
+  });
+
+  test('5.2: src/extension.ts wires registerCommand for gs-behave-bdd.recheckMigrations', () => {
+    const candidates = [
+      path.resolve(__dirname, '../../../../src/extension.ts'),
+      path.resolve(__dirname, '../../../src/extension.ts'),
+    ];
+    const extPath = candidates.find(p => fs.existsSync(p));
+    assert.ok(extPath, 'could not locate src/extension.ts');
+    const src = fs.readFileSync(extPath, 'utf8');
+    // The literal command id must appear exactly once and be wired through
+    // registerCommand (Phase 15 Plan 05 structural-test pattern).
+    const occurrences = src.split('gs-behave-bdd.recheckMigrations').length - 1;
+    assert.strictEqual(occurrences, 1, 'command id should appear exactly once in extension.ts');
+    const idIdx = src.indexOf("'gs-behave-bdd.recheckMigrations'");
+    assert.ok(idIdx > 0, 'literal command id must be present');
+    // Look back ~80 chars for the registerCommand( token to confirm the wiring.
+    const window = src.slice(Math.max(0, idIdx - 80), idIdx);
+    assert.ok(
+      window.includes('registerCommand('),
+      'recheckMigrations command id must be inside a vscode.commands.registerCommand() call',
+    );
+  });
+});
