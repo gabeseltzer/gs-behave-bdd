@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: Migration Consent & behave-vsc Cleanup
-status: in_progress
-last_updated: "2026-05-07T17:00:00.000Z"
-last_activity: 2026-05-07
+status: executing
+last_updated: "2026-05-07T19:02:14.336Z"
+last_activity: 2026-05-07 -- Phase 019 execution started
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
+  total_plans: 4
   completed_plans: 0
   percent: 0
 ---
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** v1.5.0 — make settings migration opt-in via per-migration consent prompts, complete the cross-extension migration off `behave-vsc`, and pay down the `activeProjectCache` invalidation debt from v1.4.0.
+**Current focus:** Phase 019 — migration-foundation
 
 ## Current Position
 
-Phase: 19 — Migration Foundation (context gathered)
-Plan: —
-Status: CONTEXT.md written; ready for `/gsd-plan-phase 19`
+Phase: 019 (migration-foundation) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 019
 Resume file: .planning/phases/019-migration-foundation/019-CONTEXT.md
-Last activity: 2026-05-07 — Phase 19 context captured (4 gray areas decided)
+Last activity: 2026-05-07 -- Phase 019 execution started
 
 ```
 [----] Phase 19  Migration Foundation
