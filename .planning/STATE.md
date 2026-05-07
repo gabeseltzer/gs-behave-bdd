@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: Migration Consent & behave-vsc Cleanup
-status: planning
-last_updated: "2026-05-07T16:46:55.320Z"
+status: in_progress
+last_updated: "2026-05-07T17:00:00.000Z"
 last_activity: 2026-05-07
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,24 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-04 — v1.4.0 shipped)
+See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Planning next milestone — run `/gsd-new-milestone` to define scope.
+**Current focus:** v1.5.0 — make settings migration opt-in via per-migration consent prompts, complete the cross-extension migration off `behave-vsc`, and pay down the `activeProjectCache` invalidation debt from v1.4.0.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 19 — Migration Foundation (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-07 — Milestone v1.5.0 started
+Status: Roadmap created; ready for `/gsd-plan-phase 19`
+Last activity: 2026-05-07 — v1.5.0 ROADMAP.md drafted (4 phases, 31 requirements mapped)
+
+```
+[----] Phase 19  Migration Foundation
+[----] Phase 20  Migration Registry
+[----] Phase 21  Consent UX (Case 2 & Case 3 Prompts)
+[----] Phase 22  Cleanup, Integration & Docs
+```
 
 ## Performance Metrics
 
@@ -36,12 +43,23 @@ Last activity: 2026-05-07 — Milestone v1.5.0 started
 - Milestones shipped: 5 (1.0.0 2026-04-16, 1.1.0 2026-04-17, 1.2.0 2026-04-22, 1.3.0 2026-04-23, v1.4.0 2026-05-04)
 - Total phases completed: 18 (1.0.0: 1-3, 1.1.0: 4-6, 1.2.0: 7-11, 1.3.0: 12-14, v1.4.0: 15-18)
 - Total plans completed: 52 (1.0.0: 6, 1.1.0: 9, 1.2.0: 13, 1.3.0: 7, v1.4.0: 17)
+- Tests at v1.4.0 close: 697 unit + 19 integration suites passing
 
 ## Accumulated Context
+
+### v1.5.0 Decisions
+
+- Coarse granularity → 4 phases for v1.5.0 (resisted per-task splits seen in v1.4.0).
+- Phase numbering continues from v1.4.0 (last phase 18) → v1.5.0 starts at phase 19.
+- `activeProjectCache` invalidation (CLEANUP-02) lands in Phase 19 alongside foundation work — independent of migration UX, eliminates v1.4.0 carry-forward regression risk early.
+- `CLEANUP-01` (silent-fallback removal) deferred to Phase 22, after the new migration flow has shipped and been bedded in by the integration suite — most user-visible behaviour change in v1.5.0.
+- v1.4.0's two migrations (`migrateLegacyFeaturesPath`, `migrateLegacySuppressMultiConfig`) both refactor through the new registry in Phase 20, alongside the new `behave-vsc` entries — single coherent landing point for all registry work.
+- All migrations continue to route through the v1.4.0 `migrateScopedSetting<TSrc, TDest>` primitive — no parallel implementations.
 
 ### Roadmap Evolution
 
 - Phase 18 added: Address v1.4.0 tech debt: artifact rollups, mock cleanup
+- v1.5.0 added: Phases 19-22 for Migration Consent & `behave-vsc` Cleanup (2026-05-07)
 
 ### Decisions
 
@@ -123,7 +141,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 
 **`activeProjectCache` invalidation pattern (`src/common.ts` `hasFeaturesFolder()`):**
 
-The Phase 12 active-project block re-reads `discoveryDepth` at lookup time rather than invalidating `activeProjectCache` when discovery-influencing settings change. Working but ad-hoc — see commit `c08ced5` (re-applied from `27f14e0` after a diagnostic revert/re-revert during the Phase 17 regression bisect) and the WHY comment near `src/common.ts:347`. Recommended follow-up: pair `clearScanResultCache()` with project-list invalidation when discovery-influencing settings change. Tracked here so the v1.4.0 milestone-audit recommendation isn’t lost.
+The Phase 12 active-project block re-reads `discoveryDepth` at lookup time rather than invalidating `activeProjectCache` when discovery-influencing settings change. Working but ad-hoc — see commit `c08ced5` (re-applied from `27f14e0` after a diagnostic revert/re-revert during the Phase 17 regression bisect) and the WHY comment near `src/common.ts:347`. Recommended follow-up: pair `clearScanResultCache()` with project-list invalidation when discovery-influencing settings change. **Tracked into v1.5.0 as CLEANUP-02 (Phase 19).**
 
 **Multiroot integration mutex flake:** environmental — documented in `AI_INSTRUCTIONS.md` § "Integration Test Structure" (Local-dev gotcha). Surfaces as `Another instance of app 'Code' is already active` / `AssertionError: assert(instances)` when the developer’s own VS Code is running during `npm run test:integration`. No code action needed.
 
@@ -136,3 +154,9 @@ The Phase 12 active-project block re-reads `discoveryDepth` at lookup time rathe
 | 2026-05-05 | update-integration-migration-tests | `35e0a48` | Aligned `test/integration/migrations suite/extension.test.ts` with v1.4.0 review B-01 (notification copy) and B-02 (publisher-independent settings query). Closes the integration-test gap flagged in the v1.4.0 review batch. |
 | 2026-05-06 | formally-dismiss-stale-uat-verification | `dd5dc87` | Closed out the two outstanding `/gsd-audit-uat` items by flipping `04-HUMAN-UAT.md` test results from `skipped` → `pass` (superseded by Phase 04 unit tests + 1.2.0/1.4.0 integration coverage) and `15-VERIFICATION.md` frontmatter from `human_needed` → `passed` (deferred manual checks resolved by the Phase 17 real-VSCode migrations integration suite). Audit now reports 0 outstanding items. Docs-only; no code changed. |
 | 2026-05-06 | update-readme-for-v1-4-0-featurespaths-p | `e9e2fb4` | Brought README up to date with the v1.4.0 user-facing surface: replaced 8 `featuresPath` references with `featuresPaths` (plural, array syntax in both settings.json examples), added a "Migrating from `featuresPath`" callout, and added feature item #13 introducing per-notification suppression + the `suppressedNotifications` setting. Docs-only; no code changed. |
+
+## Session Continuity
+
+**Last action:** v1.5.0 ROADMAP.md drafted — 4 phases (19-22), 31 requirements mapped, traceability table populated.
+**Next action:** Run `/gsd-plan-phase 19` to decompose the Migration Foundation phase into plans.
+**Loaded context:** PROJECT.md, REQUIREMENTS.md, MILESTONES.md, config.json.
