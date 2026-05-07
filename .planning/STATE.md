@@ -1,14 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4.0
-milestone_name: Deprecate featuresPath & Notification Suppression
-status: shipped
-last_updated: "2026-05-06T00:00:00Z"
+milestone: v1.5.0
+milestone_name: Migration Consent & behave-vsc Cleanup
+status: planning
+last_updated: "2026-05-07T16:46:55.320Z"
+last_activity: 2026-05-07
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 17
-  completed_plans: 17
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -22,7 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-04 — v1.4.0 shipped)
 
 ## Current Position
 
-Milestone v1.4.0 shipped 2026-05-04. No active phase.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-07 — Milestone v1.5.0 started
 
 ## Performance Metrics
 
