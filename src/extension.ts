@@ -35,7 +35,7 @@ import { scanForBehaveConfig, setCachedScanResult, getCachedScanResult, clearSca
 import { findBehaveConfig } from './parsers/configParser';
 import {
   initProjectListPersistence, rebuildProjectList, getActiveProject, getProjectList,
-  setActiveProject, isManualProjectPathMode
+  setActiveProject, isManualProjectPathMode, clearActiveProjectCache
 } from './discovery/projectList';
 import { buildQuickPickItems, computeStatusBarState, ProjectQuickPickItem } from './discovery/selectProjectHelpers';
 import { JunitWatcher } from './watchers/junitWatcher';
@@ -1016,12 +1016,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         // will not only change the set of workspaces we are watching, but also the output channels
         config.logger.syncChannelsToWorkspaceFolders();
 
-        // Phase 9: Clear scan cache on settings change so re-discovery can re-scan
-        const needsRescan = forceFullRefresh || (event && (event.affectsConfiguration('gs-behave-bdd.discoveryDepth') ||
-            event.affectsConfiguration('gs-behave-bdd.discoveryStopOnFirstHit') ||
-            event.affectsConfiguration('gs-behave-bdd.projectPath')));
+        // Phase 19 D-09 / CLEANUP-02: any change to scan-shaping settings invalidates
+        // BOTH the scan-result cache AND the active-project cache. Replaces the v1.4.0
+        // read-time discoveryDepth re-read in src/common.ts (CLEANUP-02 / D-11).
+        const needsRescan = forceFullRefresh || (event && (
+          event.affectsConfiguration('gs-behave-bdd.discoveryDepth') ||
+          event.affectsConfiguration('gs-behave-bdd.discoveryStopOnFirstHit') ||
+          event.affectsConfiguration('gs-behave-bdd.projectPath') ||
+          event.affectsConfiguration('gs-behave-bdd.projectPaths') ||
+          event.affectsConfiguration('gs-behave-bdd.featuresPath') ||
+          event.affectsConfiguration('gs-behave-bdd.featuresPaths')
+        ));
         if (needsRescan) {
           clearScanResultCache();
+          clearActiveProjectCache();
         }
 
         // Phase 9: Re-run BFS scan for undiscovered workspaces when scan-affecting settings change
