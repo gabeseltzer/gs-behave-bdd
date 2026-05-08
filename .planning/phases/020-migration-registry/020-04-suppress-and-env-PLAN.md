@@ -17,7 +17,7 @@ must_haves:
   truths:
     - "`suppressMultiConfigToArray` is exported from src/migrations/suppressedNotifications.ts and preserves the v1.4.0 boolean->array-append semantics byte-for-byte."
     - "`mergeRecord<T>` deep-merge utility is exported from src/migrations/envPresets.ts; the preset-level + var-level transforms compose it to produce case-2 behavior (legacy wins on var collision)."
-    - "Three registry entries land: `suppressMultiConfig-self`, `envVarPresets-from-behavevsc`, `envVarOverrides-from-behavevsc` — bringing total to 16 (Plan 05 adds 17th — none; total stays 16). Wait — recount per D-A4.4: 11 + 2 + 1 + 2 = 16. CONTEXT.md D-A4.4 states 17 total. The discrepancy is reconciled by Plan 05 (see <reconciliation> below)."
+    - "Four transform-bearing entries land in this plan (`suppressMultiConfig-self`, `suppressedNotifications-from-behavevsc`, `envVarPresets-from-behavevsc`, `envVarOverrides-from-behavevsc`) bringing the registry to 17 total per D-A4.4 (Plan 02 = 11 plain + Plan 03 = 2 featuresPath + Plan 04 = 4 = 17). See `<reconciliation>` below for the per-entry justification, especially why `suppressedNotifications-from-behavevsc` is required."
     - "The v1.4.0 wrapper `migrateLegacySuppressMultiConfig` continues to export `Promise<void>` and the 8 sub-cases in test/unit/notifications.test.ts still pass."
     - "Pitfall 4 covered: case-2 transform with canonical=undefined returns `{ kind: 'write', value: legacy }` — not skipDest."
   artifacts:
@@ -28,7 +28,7 @@ must_haves:
       provides: "mergeRecord<T> utility + envVarPresetsTransform + envVarOverridesTransform + envPresetEntries (length 2)"
       exports: ["mergeRecord", "envVarPresetsTransform", "envVarOverridesTransform", "envPresetEntries"]
     - path: "src/migrations/registry.ts"
-      provides: "MIGRATION_REGISTRY size becomes 16"
+      provides: "MIGRATION_REGISTRY size becomes 17 (final)"
     - path: "src/notifications.ts"
       provides: "migrateLegacySuppressMultiConfig refactored to delegate to lifted transform"
     - path: "test/unit/migrations/suppressedNotifications.test.ts"
