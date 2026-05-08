@@ -8,6 +8,17 @@ import type { TransformResult } from '../notifications';
  * downstream phases can rely on it.
  */
 export interface MigrationEntry<TSrc = unknown, TDest = unknown> {
+  /**
+   * Unique migration id. Phase 20 naming convention (CONTEXT.md D-A4 / Pitfall 3):
+   *
+   * - `<key>-from-behavevsc`  — cross-extension entry migrating `behave-vsc.<key>`
+   *                             → `gs-behave-bdd.<key>` (covers the 15 plain entries
+   *                             plus `featuresPath-from-behavevsc`).
+   * - `<key>-self`            — intra-namespace entry migrating one `gs-behave-bdd` key
+   *                             to another (e.g. `featuresPath-self`, `suppressMultiConfig-self`).
+   *
+   * Id must be globally unique across all registry entries (see registry-invariants test).
+   */
   readonly id: string;
   readonly sourceNamespace: string;
   readonly sourceKey: string;
