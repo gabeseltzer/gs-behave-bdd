@@ -37,9 +37,9 @@
 
 ### Migration Registry & Mechanics
 
-- [ ] **MIGRATE-01**: `migrateLegacyFeaturesPath` refactored to register as a migration entry in the new registry. No more silent auto-migration on activation; runs through the case 1/2/3 evaluator.
-- [ ] **MIGRATE-02**: `migrateLegacySuppressMultiConfig` refactored to register as a migration entry in the new registry. No more silent auto-migration on activation; runs through the case 1/2/3 evaluator.
-- [ ] **MIGRATE-03**: New `behave-vsc` → `gs-behave-bdd` migration entries registered for every silently-fallback-read key currently in `src/configuration.ts` (`legacyWinConfig` / `legacyWkspConfig`), `src/common.ts:202`, and `src/discovery/projectList.ts:167`. Confirm the exhaustive list at plan time (`featuresPath`, env presets, `runParallel`, `xRay`, `projectPath`, etc.).
+- [x] **MIGRATE-01**: `migrateLegacyFeaturesPath` refactored to register as a migration entry in the new registry. No more silent auto-migration on activation; runs through the case 1/2/3 evaluator.
+- [x] **MIGRATE-02**: `migrateLegacySuppressMultiConfig` refactored to register as a migration entry in the new registry. No more silent auto-migration on activation; runs through the case 1/2/3 evaluator.
+- [x] **MIGRATE-03**: New `behave-vsc` → `gs-behave-bdd` migration entries registered for every silently-fallback-read key currently in `src/configuration.ts` (`legacyWinConfig` / `legacyWkspConfig`), `src/common.ts:202`, and `src/discovery/projectList.ts:167`. Confirm the exhaustive list at plan time (`featuresPath`, env presets, `runParallel`, `xRay`, `projectPath`, etc.).
 - [ ] **MIGRATE-04**: Migration evaluator: for each unfinished migration × each VS Code scope (Global / Workspace / WorkspaceFolder), inspect both keys at that scope and dispatch to case 1 / 2 / 3 logic.
 - [ ] **MIGRATE-05**: Case 2 actions implemented: *migrate-and-delete* (copy legacy → canonical, clear legacy at the same scope), *migrate-and-keep* (copy only), *don't-migrate* (no-op). All three mark Finished at that scope.
 - [ ] **MIGRATE-06**: Case 3 actions implemented: *overwrite-and-delete* (copy legacy → canonical overwriting, clear legacy), *overwrite-and-keep* (copy overwriting, keep legacy), *keep-canonical-and-delete-legacy* (no copy, clear legacy), *keep-both* (no-op). All four mark Finished at that scope.
@@ -99,9 +99,9 @@
 | CONSENT-07 | Phase 19 | Pending |
 | CONSENT-08 | Phase 19 | Pending |
 | CONSENT-09 | Phase 19 | Pending |
-| MIGRATE-01 | Phase 20 | Pending |
-| MIGRATE-02 | Phase 20 | Pending |
-| MIGRATE-03 | Phase 20 | Pending |
+| MIGRATE-01 | Phase 20 | Complete |
+| MIGRATE-02 | Phase 20 | Complete |
+| MIGRATE-03 | Phase 20 | Complete |
 | MIGRATE-04 | Phase 19 | Pending |
 | MIGRATE-05 | Phase 21 | Pending |
 | MIGRATE-06 | Phase 21 | Pending |

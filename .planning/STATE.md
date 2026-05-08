@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: Migration Consent & behave-vsc Cleanup
-status: completed
-last_updated: "2026-05-08T15:26:58.934Z"
-last_activity: 2026-05-07 -- Phase 019 verified PASS
+status: verifying
+last_updated: "2026-05-08T16:11:53.749Z"
+last_activity: 2026-05-08
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_plans: 9
+  completed_plans: 5
+  percent: 56
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
 
 ## Current Position
 
-Phase: 019 (migration-foundation) — COMPLETE ✅
+Phase: 20
 Plan: 4 of 4 complete; verifier PASS (5/5 must-haves, 739/739 tests)
-Status: Phase 019 done; ready for Phase 020 (Migration Registry)
-Resume file: .planning/phases/020-migration-registry/020-CONTEXT.md
-Last activity: 2026-05-07 -- Phase 019 verified PASS
+Status: Phase complete — ready for verification
+Resume file: None
+Last activity: 2026-05-08
 
 ```
 [####] Phase 19  Migration Foundation ✅
@@ -153,6 +153,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 | 2026-05-05 | update-integration-migration-tests | `35e0a48` | Aligned `test/integration/migrations suite/extension.test.ts` with v1.4.0 review B-01 (notification copy) and B-02 (publisher-independent settings query). Closes the integration-test gap flagged in the v1.4.0 review batch. |
 | 2026-05-06 | formally-dismiss-stale-uat-verification | `dd5dc87` | Closed out the two outstanding `/gsd-audit-uat` items by flipping `04-HUMAN-UAT.md` test results from `skipped` → `pass` (superseded by Phase 04 unit tests + 1.2.0/1.4.0 integration coverage) and `15-VERIFICATION.md` frontmatter from `human_needed` → `passed` (deferred manual checks resolved by the Phase 17 real-VSCode migrations integration suite). Audit now reports 0 outstanding items. Docs-only; no code changed. |
 | 2026-05-06 | update-readme-for-v1-4-0-featurespaths-p | `e9e2fb4` | Brought README up to date with the v1.4.0 user-facing surface: replaced 8 `featuresPath` references with `featuresPaths` (plural, array syntax in both settings.json examples), added a "Migrating from `featuresPath`" callout, and added feature item #13 introducing per-notification suppression + the `suppressedNotifications` setting. Docs-only; no code changed. |
+| Phase 020 P01 | 10m | 2 tasks | 2 files |
 
 ## Session Continuity
 
