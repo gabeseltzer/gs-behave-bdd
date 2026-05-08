@@ -110,7 +110,13 @@ Plans:
   2. New `behave-vsc` → `gs-behave-bdd` migration entries cover every silent-fallback key currently read in `src/configuration.ts` (`legacyWinConfig` / `legacyWkspConfig`), `src/common.ts:202`, and `src/discovery/projectList.ts:167` — exhaustive list confirmed at plan time (`featuresPath`, env presets, `runParallel`, `xRay`, `projectPath`, etc.).
   3. Re-running migrations on already-Finished entries is a no-op (idempotency guarantee).
   4. Unit tests exercise each registered legacy → canonical key pair and idempotency.
-**Plans**: TBD
+**Plans:** 5 plans
+Plans:
+- [ ] 020-01-scaffolding-PLAN.md — Document entry-id naming convention; add registry invariants test (no collisions, count gate). Resolves RESEARCH.md Q1/Q2/Q3 in-plan.
+- [ ] 020-02-plain-entries-PLAN.md — makePlainEntry factory + 11 plain cross-namespace entries (MIGRATE-03 / TEST-04 dimensions a + b).
+- [ ] 020-03-features-path-PLAN.md — Lift featuresPathMergeWithDedup; register featuresPath-self + featuresPath-from-behavevsc; refactor migrateLegacyFeaturesPath wrapper to delegate (MIGRATE-01).
+- [ ] 020-04-suppress-and-env-PLAN.md — suppressedNotifications + envPresets transforms (5 entries); refactor migrateLegacySuppressMultiConfig wrapper (MIGRATE-02 / MIGRATE-03 / Pitfall 4).
+- [ ] 020-05-activation-wiring-PLAN.md — Wire evaluateAllMigrations into extension.ts; delete src/extension.ts:348-350 silent calls; flip registry-count assertion to hard pin (D-A6.1).
 
 ##### Phase 21: Consent UX (Case 2 & Case 3 Prompts)
 **Goal**: Users see the right prompt at activation — case 2 honours `migrationMode`, case 3 always prompts with four actions — and dismissal vs. explicit choice behaves as designed.
@@ -141,6 +147,6 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 19. Migration Foundation | 0/4 | Not started | - |
-| 20. Migration Registry | 0/0 | Not started | - |
+| 20. Migration Registry | 0/5 | Not started | - |
 | 21. Consent UX (Case 2 & Case 3 Prompts) | 0/0 | Not started | - |
 | 22. Cleanup, Integration & Docs | 0/0 | Not started | - |
