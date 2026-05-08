@@ -459,9 +459,12 @@ suite('Phase 19 — evaluateMigration: idempotency + independence + sweep', () =
     assert.strictEqual(completedWrites[0].args[2], vscode.ConfigurationTarget.Global);
   });
 
-  test('3.14: evaluateAllMigrations with empty registry returns []', async () => {
+  test('3.14: evaluateAllMigrations with explicitly empty registry returns []', async () => {
     setupConfigStub({});
-    const r = await evaluateAllMigrations(MOCK_URI);
+    // Pass an empty injectable registry; the real MIGRATION_REGISTRY is populated
+    // by Phase 20 and is no longer empty. This test verifies the injectable-registry
+    // path, not the global registry state.
+    const r = await evaluateAllMigrations(MOCK_URI, undefined, []);
     assert.deepStrictEqual(r, []);
   });
 
@@ -604,14 +607,20 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
     assert.strictEqual(logInfo.called, true, 'failure logged via logInfo');
   });
 
-  test('4.9: empty registry post-clear — handler completes without firing onCaseHit', async () => {
+  test('4.9: post-clear — evaluator runs for every registry entry (all case 1, onCaseHit fires)', async () => {
     setWorkspace({ workspaceFile: undefined, workspaceFolders: [{ uri: MOCK_URI }] });
     showQuickPickStub.callsFake((arr: { label: string }[]) =>
       Promise.resolve(arr.find(i => i.label === 'Global')),
     );
     const onCaseHit = sinon.spy();
     await recheckMigrationsCommandHandler({ onCaseHit });
-    // Phase 19 D-05: empty registry — evaluator returns [], no hook fires.
-    assert.strictEqual(onCaseHit.called, false);
+    // Phase 20: MIGRATION_REGISTRY now has 11 plain entries; all are case 1 at
+    // every scope (stub returns undefined for all keys), so onCaseHit fires
+    // 11 entries × 3 scopes = 33 times with case: 1.
+    assert.strictEqual(onCaseHit.called, true, 'onCaseHit should fire for case-1 entries');
+    assert.ok(
+      onCaseHit.getCalls().every(c => c.args[0] === 1),
+      'all hook calls should be case 1 (neither set)',
+    );
   });
 });
