@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { config } from './configuration';
 import { diagLog } from './logger';
-import { normalizeFeaturesPathEntry } from './common';
+import { featuresPathMergeWithDedup } from './migrations/featuresPath';
 
 /**
  * Phase 15: Notification suppression infrastructure.
@@ -281,66 +281,23 @@ export async function migrateLegacySuppressMultiConfig(wkspUri: vscode.Uri): Pro
   // Public signature is Promise<void> — discard the boolean return.
 }
 
-// Phase 16 — namespaces inspected for legacy featuresPath. D-02: both source values
-// land in canonical gs-behave-bdd.featuresPaths. behave-vsc.featuresPaths is NEVER written.
-const FEATURES_PATH_NAMESPACES: readonly ("gs-behave-bdd" | "behave-vsc")[] =
-  ["gs-behave-bdd", "behave-vsc"] as const;
-
-// Phase 16 — D-07 single source of truth. The actual implementation lives in
-// common.ts (W-07) so settings.ts and notifications.ts cannot drift. Aliased
-// here under the original name to keep call sites stable and review-friendly.
-const normalizePathEntry = normalizeFeaturesPathEntry;
-
 /**
- * Phase 16 / DEP-02, DEP-03: One-shot migration of the legacy
- * `featuresPath: string` setting (in EITHER `gs-behave-bdd` or `behave-vsc` namespace
- * per D-02) to the canonical `gs-behave-bdd.featuresPaths: string[]` setting.
+ * Phase 20 D-A4.1: refactored to delegate to featuresPathMergeWithDedup.
+ * Public Promise<boolean> signature preserved through v1.5.0; full deletion is Phase 22.
  *
- * For each source namespace × each detected scope:
- *   - Same-scope merge-with-dedup: append the singular into existing plural
- *     (post-normalization comparison per D-07).
- *   - Empty/whitespace-only legacy values: skip dest write, still remove legacy (D-08).
- *   - Default-equivalent ("features") and known-fatal (".") values: migrate literally
- *     (D-09); the per-entry fatal-error guard at src/settings.ts:232-234 handles
- *     the "." case downstream.
- *
- * Cross-scope and cross-namespace independence (D-04): each (namespace × scope) hit
- * migrates independently into gs-behave-bdd.featuresPaths at the matching scope.
- *
- * @returns true iff at least one (namespace × scope) was migrated; false otherwise (D-01).
- *
- * Never throws on update() rejection — primitive logs via config.logger.logInfo (D-05).
- *
- * @see .planning/phases/16-deprecate-featurespath/16-PATTERNS.md (Phase 16 wrapper)
+ * Never throws — primitive logs via diagLog on update() rejection (D-05).
+ * Registry entries: featuresPath-self, featuresPath-from-behavevsc.
  */
 export async function migrateLegacyFeaturesPath(wkspUri: vscode.Uri): Promise<boolean> {
   let anyMigrated = false;
-  for (const sourceNs of FEATURES_PATH_NAMESPACES) {
+  for (const sourceNs of ['gs-behave-bdd', 'behave-vsc'] as const) {
     const migrated = await migrateScopedSetting<string, string[]>({
       namespace: sourceNs,
-      sourceKey: "featuresPath",
-      destNamespace: "gs-behave-bdd",     // D-02: canonical destination, even when source is behave-vsc
-      destKey: "featuresPaths",
+      sourceKey: 'featuresPath',
+      destNamespace: 'gs-behave-bdd',
+      destKey: 'featuresPaths',
       wkspUri,
-      transform: (legacyValue, existingArr) => {
-        // D-08: empty/whitespace → remove source but skip dest write.
-        if (legacyValue === undefined || typeof legacyValue !== 'string' || legacyValue.trim() === "") {
-          return { kind: 'skipDest', removeSource: true };
-        }
-        const normalized = normalizePathEntry(legacyValue);
-        if (normalized === "") {
-          // Post-normalization empty (e.g., the value was "/" or "\\").
-          return { kind: 'skipDest', removeSource: true };
-        }
-        // D-06 / D-07: same-scope merge-with-dedup, post-normalization comparison.
-        const current = Array.isArray(existingArr) ? [...existingArr] : [];
-        if (current.some(p => normalizePathEntry(p) === normalized)) {
-          // Already present — write the unchanged array (still triggers source removal
-          // via the primitive's kind='write' branch).
-          return { kind: 'write', value: current };
-        }
-        return { kind: 'write', value: [...current, normalized] };
-      },
+      transform: featuresPathMergeWithDedup,
     });
     anyMigrated = anyMigrated || migrated;
   }
