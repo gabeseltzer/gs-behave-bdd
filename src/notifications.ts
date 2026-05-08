@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { config } from './configuration';
 import { diagLog } from './logger';
 import { featuresPathMergeWithDedup } from './migrations/featuresPath';
+import { suppressMultiConfigToArray } from './migrations/suppressedNotifications';
 
 /**
  * Phase 15: Notification suppression infrastructure.
@@ -249,34 +250,17 @@ async function migrateScopedSetting<TSrc, TDest>(opts: {
 }
 
 /**
- * Phase 15 / NOTIF-06 — refactored in Phase 16 to call the migrateScopedSetting
- * primitive (D-MOD). Public signature unchanged: Promise<void>.
- *
- * Behavior preserved:
- *   - When legacyValue !== true (including false): NO update() calls (callCount === 0).
- *   - When legacyValue === true: write [...existingArr, "multiConfigNotification"]
- *     (deduped) at the detected scope, then remove the legacy boolean.
- *   - On update() rejection: log via config.logger.logInfo, return.
+ * Phase 20 thin shim delegating to `suppressMultiConfigToArray` (registry entry id:
+ * `suppressMultiConfig-self`). Public `Promise<void>` signature preserved for the
+ * `test/unit/notifications.test.ts` regression bar (Pitfall 1). Full deletion is Phase 22.
  */
 export async function migrateLegacySuppressMultiConfig(wkspUri: vscode.Uri): Promise<void> {
   await migrateScopedSetting<boolean, string[]>({
-    namespace: "gs-behave-bdd",
-    sourceKey: "suppressMultiConfigNotification",
-    destKey: "suppressedNotifications",
+    namespace: 'gs-behave-bdd',
+    sourceKey: 'suppressMultiConfigNotification',
+    destKey: 'suppressedNotifications',
     wkspUri,
-    transform: (legacyValue, existingArr) => {
-      if (legacyValue !== true) {
-        // Pre-refactor parity: no dest write AND no source removal (callCount === 0
-        // contract at notifications.test.ts L335).
-        return { kind: 'skipDest', removeSource: false };
-      }
-      const current = Array.isArray(existingArr) ? [...existingArr] : [];
-      if (current.includes("multiConfigNotification")) {
-        // Already present — write the unchanged array (still triggers source removal).
-        return { kind: 'write', value: current };
-      }
-      return { kind: 'write', value: [...current, "multiConfigNotification"] };
-    },
+    transform: suppressMultiConfigToArray,
   });
   // Public signature is Promise<void> — discard the boolean return.
 }
