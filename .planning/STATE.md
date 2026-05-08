@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: Migration Consent & behave-vsc Cleanup
 status: verifying
-last_updated: "2026-05-08T16:26:40.481Z"
+last_updated: "2026-05-08T16:35:33.162Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 9
-  completed_plans: 7
-  percent: 78
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -154,6 +154,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 | 2026-05-06 | formally-dismiss-stale-uat-verification | `dd5dc87` | Closed out the two outstanding `/gsd-audit-uat` items by flipping `04-HUMAN-UAT.md` test results from `skipped` → `pass` (superseded by Phase 04 unit tests + 1.2.0/1.4.0 integration coverage) and `15-VERIFICATION.md` frontmatter from `human_needed` → `passed` (deferred manual checks resolved by the Phase 17 real-VSCode migrations integration suite). Audit now reports 0 outstanding items. Docs-only; no code changed. |
 | 2026-05-06 | update-readme-for-v1-4-0-featurespaths-p | `e9e2fb4` | Brought README up to date with the v1.4.0 user-facing surface: replaced 8 `featuresPath` references with `featuresPaths` (plural, array syntax in both settings.json examples), added a "Migrating from `featuresPath`" callout, and added feature item #13 introducing per-notification suppression + the `suppressedNotifications` setting. Docs-only; no code changed. |
 | Phase 020 P01 | 10m | 2 tasks | 2 files |
+| Phase 020-migration-registry P04 | 25m | 5 tasks | 6 files |
 
 ## Session Continuity
 
