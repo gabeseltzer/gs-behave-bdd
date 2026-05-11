@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
 
 Phase: 021 (consent-ux-case-2-case-3-prompts) — COMPLETE (functionally)
 Plan: 3 of 3 ✅
-Status: All 3 plans complete (consent-module, activation-wiring, tests). Ready for Phase 22 (Cleanup, Integration & Docs) or phase verification.
+Status: All 3 plans complete + verification gate PASSED (021-VERIFICATION.md, 849 unit tests). Ready for Phase 22 (Cleanup, Integration & Docs).
 Resume file: None
 Last activity: 2026-05-11
 
@@ -161,6 +161,6 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 
 ## Session Continuity
 
-**Last action:** Completed Phase 021 Plan 03 (tests) — `test/unit/migrations/consent.test.ts` added with 23 tests; unit suite 826 → 849 passing; commit `24ff1a5`. Phase 21 functionally complete (all 3 plans shipped).
-**Next action:** Phase 21 verification gate (if desired) or proceed to Phase 22 (Cleanup, Integration & Docs).
+**Last action:** Phase 021 verification gate PASSED � 021-VERIFICATION.md created; REQUIREMENTS.md flipped CONSENT-02/03/TEST-01/02 to complete; ESLint clean; 849 unit tests passing.
+**Next action:** Proceed to Phase 22 (Cleanup, Integration & Docs).
 **Loaded context:** PROJECT.md, REQUIREMENTS.md, MILESTONES.md, config.json.
