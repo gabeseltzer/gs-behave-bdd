@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: Migration Consent & behave-vsc Cleanup
 status: executing
-last_updated: "2026-05-11T18:30:00.000Z"
+last_updated: "2026-05-11T19:15:00.000Z"
 last_activity: 2026-05-11
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 12
-  completed_plans: 11
-  percent: 92
+  completed_plans: 12
+  percent: 100
 ---
 
 # Project State
@@ -24,16 +24,16 @@ See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
 
 ## Current Position
 
-Phase: 021 (consent-ux-case-2-case-3-prompts) — EXECUTING
-Plan: 3 of 3
-Status: Plan 02 (activation-wiring) complete; Plan 03 (tests) next
+Phase: 021 (consent-ux-case-2-case-3-prompts) — COMPLETE (functionally)
+Plan: 3 of 3 ✅
+Status: All 3 plans complete (consent-module, activation-wiring, tests). Ready for Phase 22 (Cleanup, Integration & Docs) or phase verification.
 Resume file: None
 Last activity: 2026-05-11
 
 ```
 [####] Phase 19  Migration Foundation ✅
 [----] Phase 20  Migration Registry
-[##--] Phase 21  Consent UX (Case 2 & Case 3 Prompts)
+[####] Phase 21  Consent UX (Case 2 & Case 3 Prompts) ✅
 [----] Phase 22  Cleanup, Integration & Docs
 ```
 
@@ -76,6 +76,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - [Phase 16]: Pitfall 8: config.reloadSettings called WITHOUT await (sync void)
 - [Phase 16]: Plan 05: Schema entry gs-behave-bdd.featuresPath removed (DEP-01); settings.ts ladder collapsed to 3 rungs (D-15); common.ts hasFeaturesFolder Branch A is plural-only (D-16). Executed Task 2 before Task 1 to keep every commit's compile graph green. 4 obsolete tests in multiPathPrecedence.test.ts deferred to Plan 06 alongside testWorkspaceConfig.ts mock surgery and fixture cascade.
 - [Phase 21]: Plan 02: activation-wiring — replaced bare evaluateAllMigrations(wkspUri) call with D-A3.4 collect-then-prompt; `void runConsentFlow(wkspUri, hits, mode)` is fire-and-forget so activation never blocks on prompts. Promise.all parallelism, reloadSettings, and outer try/catch preserved. 826 unit tests passing; 2 structural substring assertions in notifications.test.ts widened to match the new hooks-arg shape (Rule 1).
+- [Phase 21]: Plan 03: tests — 23 new Mocha/Sinon unit tests in `test/unit/migrations/consent.test.ts` pin the consent UX contract (case-2 actions × 3 + dismissal, case-2 silent modes × 3, case-3 actions × 4 + dismissal, case-3-prompts-when-skip per D-A4.3, grouping × 4, audit-log × 3). Unit suite 826 → 849 passing. Test-only plan; no src changes. No deviations.
 - [Phase 16]: Plan 06: atomic mock surgery + 8-file fixture cascade. Singular featuresPath surface removed from TestWorkspaceConfig (D-17/DEP-06); 11 obsolete tests deleted, helper edge-case tests retargeted from featuresPath to projectPath to preserve coverage. 4 deferred Plan-05 failures resolved. Full unit suite 696 passing 0 failing. 34 migration tests preserved (D-MOD regression bar GREEN). Phase 16 functionally complete.
 
 ### v1.4.0 Decisions
@@ -160,6 +161,6 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 
 ## Session Continuity
 
-**Last action:** v1.5.0 ROADMAP.md drafted — 4 phases (19-22), 31 requirements mapped, traceability table populated.
-**Next action:** Run `/gsd-plan-phase 19` to decompose the Migration Foundation phase into plans.
+**Last action:** Completed Phase 021 Plan 03 (tests) — `test/unit/migrations/consent.test.ts` added with 23 tests; unit suite 826 → 849 passing; commit `24ff1a5`. Phase 21 functionally complete (all 3 plans shipped).
+**Next action:** Phase 21 verification gate (if desired) or proceed to Phase 22 (Cleanup, Integration & Docs).
 **Loaded context:** PROJECT.md, REQUIREMENTS.md, MILESTONES.md, config.json.
