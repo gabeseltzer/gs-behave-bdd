@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: Migration Consent & behave-vsc Cleanup
 status: executing
-last_updated: "2026-05-11T17:33:17.950Z"
+last_updated: "2026-05-11T18:30:00.000Z"
 last_activity: 2026-05-11
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 12
-  completed_plans: 10
-  percent: 83
+  completed_plans: 11
+  percent: 92
 ---
 
 # Project State
@@ -25,15 +25,15 @@ See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
 ## Current Position
 
 Phase: 021 (consent-ux-case-2-case-3-prompts) — EXECUTING
-Plan: 2 of 3
-Status: Ready to execute
+Plan: 3 of 3
+Status: Plan 02 (activation-wiring) complete; Plan 03 (tests) next
 Resume file: None
 Last activity: 2026-05-11
 
 ```
 [####] Phase 19  Migration Foundation ✅
 [----] Phase 20  Migration Registry
-[----] Phase 21  Consent UX (Case 2 & Case 3 Prompts)
+[##--] Phase 21  Consent UX (Case 2 & Case 3 Prompts)
 [----] Phase 22  Cleanup, Integration & Docs
 ```
 
@@ -75,6 +75,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - [Phase 16]: D-18 ordering: featuresPath migration runs before suppressMultiConfig at activation
 - [Phase 16]: Pitfall 8: config.reloadSettings called WITHOUT await (sync void)
 - [Phase 16]: Plan 05: Schema entry gs-behave-bdd.featuresPath removed (DEP-01); settings.ts ladder collapsed to 3 rungs (D-15); common.ts hasFeaturesFolder Branch A is plural-only (D-16). Executed Task 2 before Task 1 to keep every commit's compile graph green. 4 obsolete tests in multiPathPrecedence.test.ts deferred to Plan 06 alongside testWorkspaceConfig.ts mock surgery and fixture cascade.
+- [Phase 21]: Plan 02: activation-wiring — replaced bare evaluateAllMigrations(wkspUri) call with D-A3.4 collect-then-prompt; `void runConsentFlow(wkspUri, hits, mode)` is fire-and-forget so activation never blocks on prompts. Promise.all parallelism, reloadSettings, and outer try/catch preserved. 826 unit tests passing; 2 structural substring assertions in notifications.test.ts widened to match the new hooks-arg shape (Rule 1).
 - [Phase 16]: Plan 06: atomic mock surgery + 8-file fixture cascade. Singular featuresPath surface removed from TestWorkspaceConfig (D-17/DEP-06); 11 obsolete tests deleted, helper edge-case tests retargeted from featuresPath to projectPath to preserve coverage. 4 deferred Plan-05 failures resolved. Full unit suite 696 passing 0 failing. 34 migration tests preserved (D-MOD regression bar GREEN). Phase 16 functionally complete.
 
 ### v1.4.0 Decisions
