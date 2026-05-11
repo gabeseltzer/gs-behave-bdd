@@ -130,7 +130,7 @@ Plans:
   5. Dismissing a notification (X / click-away) leaves the migration unfinished at that scope so it re-surfaces on the next activation.
 **Plans:** 3 plans
 Plans:
-- [ ] 021-01-consent-module-PLAN.md — Create src/migrations/consent.ts (types, helpers, formatters, 7 action handlers, runConsentFlow orchestrator) + re-export from src/migrations/index.ts.
+- [x] 021-01-consent-module-PLAN.md — Create src/migrations/consent.ts (types, helpers, formatters, 7 action handlers, runConsentFlow orchestrator) + re-export from src/migrations/index.ts.
 - [ ] 021-02-activation-wiring-PLAN.md — Wire collect-then-prompt pattern into src/extension.ts:~338 (fire-and-forget runConsentFlow).
 - [ ] 021-03-tests-PLAN.md — Add test/unit/migrations/consent.test.ts (TEST-01 + TEST-02 + grouping + audit logging).
 **UI hint**: yes

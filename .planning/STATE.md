@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: Migration Consent & behave-vsc Cleanup
-status: verifying
-last_updated: "2026-05-08T16:41:46.269Z"
-last_activity: 2026-05-08
+status: executing
+last_updated: "2026-05-11T17:33:17.950Z"
+last_activity: 2026-05-11
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_plans: 12
+  completed_plans: 10
+  percent: 83
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Phase 019 — migration-foundation
+**Current focus:** Phase 021 — consent-ux-case-2-case-3-prompts
 
 ## Current Position
 
-Phase: 20
-Plan: 4 of 4 complete; verifier PASS (5/5 must-haves, 739/739 tests)
-Status: Phase complete — ready for verification
+Phase: 021 (consent-ux-case-2-case-3-prompts) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Resume file: None
-Last activity: 2026-05-08
+Last activity: 2026-05-11
 
 ```
 [####] Phase 19  Migration Foundation ✅
@@ -155,6 +155,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 | 2026-05-06 | update-readme-for-v1-4-0-featurespaths-p | `e9e2fb4` | Brought README up to date with the v1.4.0 user-facing surface: replaced 8 `featuresPath` references with `featuresPaths` (plural, array syntax in both settings.json examples), added a "Migrating from `featuresPath`" callout, and added feature item #13 introducing per-notification suppression + the `suppressedNotifications` setting. Docs-only; no code changed. |
 | Phase 020 P01 | 10m | 2 tasks | 2 files |
 | Phase 020-migration-registry P04 | 25m | 5 tasks | 6 files |
+| Phase 021 P01 | 25min | 3 tasks | 3 files |
 
 ## Session Continuity
 
