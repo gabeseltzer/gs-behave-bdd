@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: Migration Consent & behave-vsc Cleanup
-status: verifying
-last_updated: "2026-05-11T19:14:59.228Z"
-last_activity: 2026-05-11
+status: executing
+last_updated: "2026-05-11T19:49:55.939Z"
+last_activity: 2026-05-11 -- Phase 022 execution started
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 12
+  total_plans: 15
   completed_plans: 12
-  percent: 100
+  percent: 80
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Phase 021 — consent-ux-case-2-case-3-prompts
+**Current focus:** Phase 022 — cleanup-integration-docs
 
 ## Current Position
 
-Phase: 021 (consent-ux-case-2-case-3-prompts) — COMPLETE (functionally)
-Plan: 3 of 3 ✅
-Status: All 3 plans complete + verification gate PASSED (021-VERIFICATION.md, 849 unit tests). Ready for Phase 22 (Cleanup, Integration & Docs).
+Phase: 022 (cleanup-integration-docs) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 022
 Resume file: .planning/phases/022-cleanup-integration-docs/022-CONTEXT.md
-Last activity: 2026-05-11
+Last activity: 2026-05-11 -- Phase 022 execution started
 
 ```
 [####] Phase 19  Migration Foundation ✅
