@@ -144,7 +144,11 @@ Plans:
   2. A new `example-projects/migration-consent/` fixture with seeded `behave-vsc.*` settings drives an integration test that exercises the full flow: prompt fires, user picks an action, migration completes, `completedMigrations` is written.
   3. README clearly explains the consent UX, the `migrationMode` / `completedMigrations` settings, the *Recheck Migrations* command, and the migration path off the `behave-vsc` extension — with a prominent callout that v1.5.0 stops honouring legacy `behave-vsc.*` reads.
   4. Setting descriptions for `migrationMode` and `completedMigrations` in package.json read clearly in the Settings UI and match README copy.
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 022-01-cleanup-PLAN.md — Remove all silent behave-vsc.* fallback reads, delete getWithLegacyFallback ladder, drop legacyConfig from WindowSettings/WorkspaceSettings + helpers (CLEANUP-01).
+- [ ] 022-02-integration-test-PLAN.md — New example-projects/migration-consent/ fixture + integration suite covering Case 1 silent, Case 2 Migrate & delete, Case 3 Overwrite & delete (TEST-07).
+- [ ] 022-03-docs-PLAN.md — README bullet #14 + migration sub-section; tighten package.json descriptions for migrationMode + completedMigrations (DOC-01, DOC-02).
 
 #### Progress
 
@@ -153,4 +157,4 @@ Plans:
 | 19. Migration Foundation | 4/4 | Complete | 2026-05-07 |
 | 20. Migration Registry | 5/5 | Complete | 2026-05-08 |
 | 21. Consent UX (Case 2 & Case 3 Prompts) | 3/3 | Complete | 2026-05-11 |
-| 22. Cleanup, Integration & Docs | 0/0 | Not started | - |
+| 22. Cleanup, Integration & Docs | 0/3 | Planned | - |
