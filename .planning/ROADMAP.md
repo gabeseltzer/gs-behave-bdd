@@ -128,7 +128,11 @@ Plans:
   3. With `migrationMode = migrate-and-delete` / `migrate-and-keep` / `skip`, case 2 hits run silently with the corresponding action and mark Finished at that scope.
   4. Case 3 hits *always* show four actions (*overwrite-and-delete* / *overwrite-and-keep* / *keep-canonical-and-delete-legacy* / *keep-both*) regardless of `migrationMode`; the chosen action runs and marks Finished at that scope.
   5. Dismissing a notification (X / click-away) leaves the migration unfinished at that scope so it re-surfaces on the next activation.
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 021-01-consent-module-PLAN.md — Create src/migrations/consent.ts (types, helpers, formatters, 7 action handlers, runConsentFlow orchestrator) + re-export from src/migrations/index.ts.
+- [ ] 021-02-activation-wiring-PLAN.md — Wire collect-then-prompt pattern into src/extension.ts:~338 (fire-and-forget runConsentFlow).
+- [ ] 021-03-tests-PLAN.md — Add test/unit/migrations/consent.test.ts (TEST-01 + TEST-02 + grouping + audit logging).
 **UI hint**: yes
 
 ##### Phase 22: Cleanup, Integration & Docs
@@ -148,5 +152,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 19. Migration Foundation | 0/4 | Not started | - |
 | 20. Migration Registry | 0/5 | Not started | - |
-| 21. Consent UX (Case 2 & Case 3 Prompts) | 0/0 | Not started | - |
+| 21. Consent UX (Case 2 & Case 3 Prompts) | 0/3 | Not started | - |
 | 22. Cleanup, Integration & Docs | 0/0 | Not started | - |
