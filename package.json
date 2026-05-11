@@ -115,7 +115,7 @@
 					"scope": "resource",
 					"type": "string",
 					"enum": ["prompt", "migrate-and-delete", "migrate-and-keep", "skip"],
-					"markdownDescription": "Default strategy for case 2 migration prompts (legacy setting present, canonical setting absent at the same scope). `prompt` (default) shows a notification with three actions. `migrate-and-delete` silently copies the legacy value into the canonical key and removes the legacy key. `migrate-and-keep` silently copies the legacy value into the canonical key and leaves the legacy key in place. `skip` silently marks the migration as Finished without copying. Case 3 (both legacy and canonical set) always prompts regardless of this setting. Run *Behave BDD: Recheck Migrations* from the command palette to re-evaluate.",
+					"markdownDescription": "Default strategy for migrating legacy `behave-vsc.*` settings when only the legacy key is set (case 2): `prompt` (default) asks per scope, `migrate-and-delete` / `migrate-and-keep` apply silently, `skip` finishes without copying. Case 3 (both legacy and canonical set) always prompts regardless; run *Behave BDD: Recheck Migrations* to re-evaluate.",
 					"default": "prompt"
 				},
 				"gs-behave-bdd.completedMigrations": {
@@ -124,7 +124,7 @@
 					"items": {
 						"type": "string"
 					},
-					"markdownDescription": "List of migration IDs that have been finished at this scope. Edited automatically by the extension after each migration is evaluated. Each VS Code scope (Global / Workspace / Workspace Folder) maintains its own array — a new workspace folder starts empty and is automatically scanned on first activation. Run *Behave BDD: Recheck Migrations* from the command palette to clear this list and re-prompt.",
+					"markdownDescription": "Array of migration IDs marked Finished at this scope. Each VS Code scope (Global / Workspace / Workspace Folder) maintains its own list; run *Behave BDD: Recheck Migrations* to clear and re-prompt.",
 					"default": []
 				},
 				"gs-behave-bdd.suppressedNotifications": {

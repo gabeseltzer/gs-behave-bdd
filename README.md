@@ -28,6 +28,36 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
 11. **Monorepo support** with automatic subdirectory scanning for behave configs. Multi-path `paths` entries in config files are fully supported.
 12. **Project switching** for workspaces with multiple behave projects. A status bar indicator and "Select Project" command let you switch between discovered projects.
 13. **Per-notification suppression.** Click "Don't Show Again" on any suppressible notification and it stays dismissed for that workspace folder. Backed by the `gs-behave-bdd.suppressedNotifications` array setting — visible in Settings UI, editable by hand, and scoped per workspace folder.
+14. **Migration from `behave-vsc`.** This fork now reads settings only from its own `gs-behave-bdd.*` namespace. On activation it scans your existing `behave-vsc.*` settings and offers per-scope consent prompts to migrate them forward. The new `gs-behave-bdd.migrationMode` and `gs-behave-bdd.completedMigrations` settings, plus the *Behave BDD: Recheck Migrations* command, give you control over when and how the migration runs.
+
+#### Migrating from `behave-vsc`
+
+> **v1.5.0 behavior change.** Silent fallback reads of `behave-vsc.*` settings are removed. The extension only reads its own `gs-behave-bdd.*` keys at runtime. If you pick *Don't migrate* / `skip`, your legacy values stay in `settings.json` but the extension stops honoring them — copy them across manually or run *Behave BDD: Recheck Migrations* to be re-prompted.
+
+On activation, the extension scans each unfinished migration against every VS Code scope (Global / Workspace / Workspace Folder). Three outcomes are possible per scope:
+
+- **Neither legacy nor canonical set:** silently marked Finished. No prompt, no writes.
+- **Legacy set, canonical not set:** the *case 2* prompt (controlled by `migrationMode`). Three actions: *Migrate & delete*, *Migrate & keep*, *Don't migrate*.
+- **Both legacy and canonical set:** the *case 3* prompt (always shown, regardless of `migrationMode`). Four actions: *Overwrite & delete*, *Overwrite & keep*, *Keep canonical*, *Keep both*.
+
+**`gs-behave-bdd.migrationMode`** controls case 2 only. Values:
+
+- `prompt` (default) — show the case 2 prompt and let the user choose.
+- `migrate-and-delete` — silently copy legacy → canonical, then clear the legacy key.
+- `migrate-and-keep` — silently copy legacy → canonical, leave the legacy key alone.
+- `skip` — silently mark Finished without copying.
+
+Case 3 ignores this setting and always prompts.
+
+```json
+{
+  "gs-behave-bdd.migrationMode": "migrate-and-delete"
+}
+```
+
+**`gs-behave-bdd.completedMigrations`** is an array of migration IDs that have been finished at the current scope. Each VS Code scope (Global / Workspace / Workspace Folder) keeps its own array, so opening a new workspace folder starts with an empty list and triggers a fresh scan. The extension updates this array automatically; you rarely need to edit it by hand.
+
+**`Behave BDD: Recheck Migrations`** (command palette) is the supported way to re-trigger the scan. It clears `completedMigrations` for the scopes you can write to and re-runs the evaluator — useful if you previously picked `skip` and changed your mind, or if you pasted `behave-vsc.*` settings into a workspace that has already been migrated.
 
 ### Old from the original extension
 
