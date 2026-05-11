@@ -5,3 +5,5 @@ export { isMigrationFinishedAtScope, markMigrationFinishedAtScope } from './comp
 export type { EvaluationResult, EvaluatorHooks } from './evaluator';
 export { evaluateMigration, evaluateAllMigrations } from './evaluator';
 export { recheckMigrationsCommandHandler } from './recheckCommand';
+export { runConsentFlow, readMigrationMode } from './consent';
+export type { Case2Action, Case3Action, MigrationMode, ConsentHit } from './consent';
