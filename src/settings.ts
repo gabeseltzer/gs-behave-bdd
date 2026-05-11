@@ -11,24 +11,6 @@ import { config } from './configuration';
 import { Logger } from './logger';
 
 
-// Returns the new config value if explicitly set at any scope; otherwise falls back to the legacy
-// config value (to support users migrating from behave-vsc); finally falls back to the new default.
-function getWithLegacyFallback<T>(
-  newConfig: vscode.WorkspaceConfiguration,
-  legacyConfig: vscode.WorkspaceConfiguration,
-  key: string
-): T | undefined {
-  const insp = newConfig.inspect<T>(key);
-  const isExplicit = insp !== undefined && (
-    insp.globalValue !== undefined ||
-    insp.workspaceValue !== undefined ||
-    insp.workspaceFolderValue !== undefined
-  );
-  if (isExplicit) return newConfig.get<T>(key);
-  const legacyValue = legacyConfig.get<T>(key);
-  return legacyValue !== undefined ? legacyValue : newConfig.get<T>(key);
-}
-
 export class WindowSettings {
   // class for package.json "window" settings
   // these apply to the whole vscode instance, but may be set in settings.json or *.code-workspace
@@ -37,9 +19,8 @@ export class WindowSettings {
   public readonly xRay: boolean;
   public readonly verboseLogging: boolean;
 
-  constructor(winConfig: vscode.WorkspaceConfiguration, legacyConfig?: vscode.WorkspaceConfiguration) {
-    const get = <T>(key: string): T | undefined =>
-      legacyConfig ? getWithLegacyFallback<T>(winConfig, legacyConfig, key) : winConfig.get<T>(key);
+  constructor(winConfig: vscode.WorkspaceConfiguration) {
+    const get = <T>(key: string): T | undefined => winConfig.get<T>(key);
 
     // note: undefined should never happen (or packages.json is wrong) as get will return a default value for packages.json settings
     const multiRootRunWorkspacesInParallelCfg: boolean | undefined = get("multiRootRunWorkspacesInParallel");
@@ -103,9 +84,8 @@ export class WorkspaceSettings {
   private readonly _fatalErrors: string[] = [];
 
 
-  constructor(wkspUri: vscode.Uri, wkspConfig: vscode.WorkspaceConfiguration, winSettings: WindowSettings, logger: Logger, legacyConfig?: vscode.WorkspaceConfiguration, discoveryEntry?: DiscoveryEntry) {
-    const get = <T>(key: string): T | undefined =>
-      legacyConfig ? getWithLegacyFallback<T>(wkspConfig, legacyConfig, key) : wkspConfig.get<T>(key);
+  constructor(wkspUri: vscode.Uri, wkspConfig: vscode.WorkspaceConfiguration, winSettings: WindowSettings, logger: Logger, discoveryEntry?: DiscoveryEntry) {
+    const get = <T>(key: string): T | undefined => wkspConfig.get<T>(key);
 
     this.uri = wkspUri;
     this.id = uriId(wkspUri);
@@ -172,7 +152,7 @@ export class WorkspaceSettings {
       if (!fs.existsSync(this.projectUri.fsPath)) {
         this._fatalErrors.push(`project path ${this.projectUri.fsPath} not found.`);
       }
-    } else if (!hasExplicitSetting(wkspConfig, "projectPath", legacyConfig)
+    } else if (!hasExplicitSetting(wkspConfig, "projectPath")
                && entry?.source === 'config-file' && entry.configFileUri) {
       // No explicit projectPath and config-file discovery found a config in a subdirectory —
       // derive projectUri from the config file's directory (e.g. root/autotest/behave.ini → root/autotest/)
