@@ -146,9 +146,9 @@ Plans:
   4. Setting descriptions for `migrationMode` and `completedMigrations` in package.json read clearly in the Settings UI and match README copy.
 **Plans:** 3 plans
 Plans:
-- [ ] 022-01-cleanup-PLAN.md — Remove all silent behave-vsc.* fallback reads, delete getWithLegacyFallback ladder, drop legacyConfig from WindowSettings/WorkspaceSettings + helpers (CLEANUP-01).
+- [x] 022-01-cleanup-PLAN.md — Remove all silent behave-vsc.* fallback reads, delete getWithLegacyFallback ladder, drop legacyConfig from WindowSettings/WorkspaceSettings + helpers (CLEANUP-01).
 - [ ] 022-02-integration-test-PLAN.md — New example-projects/migration-consent/ fixture + integration suite covering Case 1 silent, Case 2 Migrate & delete, Case 3 Overwrite & delete (TEST-07).
-- [ ] 022-03-docs-PLAN.md — README bullet #14 + migration sub-section; tighten package.json descriptions for migrationMode + completedMigrations (DOC-01, DOC-02).
+- [x] 022-03-docs-PLAN.md — README bullet #14 + migration sub-section; tighten package.json descriptions for migrationMode + completedMigrations (DOC-01, DOC-02).
 
 #### Progress
 
