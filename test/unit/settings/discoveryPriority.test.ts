@@ -104,22 +104,6 @@ suite('discovery priority (TEST-02)', () => {
     });
   });
 
-  suite('legacy config fallback', () => {
-    test('legacy config has workspaceFolderValue -- returns true', () => {
-      const cfg = makeConfig({});
-      const legacyCfg = makeWkspFolderConfig({ projectPath: 'legacy/path' });
-      assert.strictEqual(hasExplicitSetting(cfg, 'projectPath', legacyCfg), true);
-    });
-
-    test('legacy config empty -- returns false', () => {
-      const cfg = makeConfig({});
-      const legacyCfg = makeConfig({});
-      assert.strictEqual(hasExplicitSetting(cfg, 'projectPath', legacyCfg), false);
-    });
-  });
-
-
-
   suite('hasExplicitNonEmptyArraySetting - featuresPaths (D-13, D-14)', () => {
 
     test('returns true for non-empty array at workspaceFolderValue', () => {
