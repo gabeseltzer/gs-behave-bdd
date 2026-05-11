@@ -35,11 +35,12 @@ import { scanForBehaveConfig, setCachedScanResult, getCachedScanResult, clearSca
 import { findBehaveConfig } from './parsers/configParser';
 import {
   initProjectListPersistence, rebuildProjectList, getActiveProject, getProjectList,
-  setActiveProject, isManualProjectPathMode
+  setActiveProject, isManualProjectPathMode, clearActiveProjectCache
 } from './discovery/projectList';
 import { buildQuickPickItems, computeStatusBarState, ProjectQuickPickItem } from './discovery/selectProjectHelpers';
 import { JunitWatcher } from './watchers/junitWatcher';
-import { migrateLegacySuppressMultiConfig, migrateLegacyFeaturesPath, showSuppressibleNotification } from './notifications';
+import { showSuppressibleNotification } from './notifications';
+import { recheckMigrationsCommandHandler, evaluateAllMigrations } from './migrations';
 
 
 const testData = new WeakMap<vscode.TestItem, BehaveTestData>();
@@ -326,58 +327,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       }
     });
 
-    // Phase 15 / NOTIF-06 + Phase 16 / DEP-02..DEP-04: per-workspace settings migrations.
-    // D-18 ordering:
-    //   (1) featuresPath migration FIRST (data shape — populates featuresPaths array)
-    //   (2) suppressMultiConfig migration SECOND (UX cleanup — populates suppressedNotifications)
-    //   (3) reloadSettings ONCE (sync void — Pitfall 8: do NOT await)
-    //   (4) Post-loop notification fires for each workspace where featuresPath migration returned true.
-    //       Notification fires AFTER reloadSettings so isSuppressed() reads current cache (Pitfall 4).
-    // Must complete BEFORE updateDiscoveryUX so the multi-config notification (Phase 15) and
-    // the featuresPath migration notification (Phase 16) honor the migrated suppression state.
-    // B-03: Run per-workspace migrations concurrently. The D-18 ordering
-    // (featuresPath → suppressMultiConfig → reloadSettings) is preserved
-    // WITHIN each workspace's async function; parallelism is across workspaces,
-    // which are independent (each (namespace × scope) update is bound to its
-    // own wkspUri). This avoids the activate()-fast contract violation where
-    // a single slow cfg.update stalls every other workspace's discovery UX.
-    const migrationResults = await Promise.all(
+    // Phase 20 D-A6.1: evaluator drives every registered migration.
+    // Phase 21 will inject a hooks object that wires case 2 / case 3 notifications;
+    // Phase 20 ships without hooks so the evaluator runs case-1 silent finishes.
+    // B-03: run per-workspace migrations concurrently (parallelism across workspaces).
+    // Pitfall 8: reloadSettings is synchronous — do NOT await.
+    await Promise.all(
       getUrisOfWkspFoldersWithFeatures().map(async (wkspUri) => {
-        let migrated = false;
         try {
-          migrated = await migrateLegacyFeaturesPath(wkspUri);     // D-18 step 1: data shape; D-05 ensures no throw
-          await migrateLegacySuppressMultiConfig(wkspUri);          // D-18 step 2: UX cleanup; D-07 ensures no throw
-          config.reloadSettings(wkspUri);                           // D-18 step 3: reloadSettings is synchronous — no await needed
+          await evaluateAllMigrations(wkspUri);
+          config.reloadSettings(wkspUri);
         } catch (e) {
-          // Defense-in-depth — D-05/D-07 prevent throws from the helpers, but wrap so activation
-          // continues if reloadSettings ever throws.
-          config.logger.logInfo(`Phase 15/16 migration error: ${e}`, wkspUri);
+          // Defense-in-depth: evaluator never throws (Phase 19 D-03), but
+          // reloadSettings is not contracted to never throw.
+          config.logger.logInfo(`Phase 20 migration evaluator error: ${e}`, wkspUri);
         }
-        return { wkspUri, migrated };
       }),
     );
-    const pendingFeaturesPathNotifs: vscode.Uri[] = migrationResults
-      .filter(r => r.migrated)
-      .map(r => r.wkspUri);
-
-    // Phase 16 / DEP-04: fire migration notification per migrated workspace folder (D-10, D-11).
-    // Fire-and-forget per the existing multi-config notification pattern (extension.ts:165-177);
-    // showSuppressibleNotification handles "Don't Show Again" internally (D-12).
-    for (const wkspUri of pendingFeaturesPathNotifs) {
-      showSuppressibleNotification(
-        "featuresPathMigration",                                  // D-13: suppression key
-        "Behave BDD: migrated your 'featuresPath' setting to the new 'featuresPaths' array. 'featuresPath' is deprecated and will be removed in a future release.",
-        ["Open Settings"],                                        // D-12: single user-visible button
-        wkspUri,
-      ).then(action => {
-        if (action === "Open Settings") {
-          // Use publisher-independent search query (matches the multi-config notification pattern at L139).
-          // Deep-links to the specific setting and survives publisher renames.
-          vscode.commands.executeCommand("workbench.action.openSettings", "gs-behave-bdd.featuresPaths");
-        }
-        // "Don't Show Again" intercepted internally by showSuppressibleNotification — never returned.
-      });
-    }
 
     // Phase 3: Surface discovery results (UX-01 through UX-05)
     updateDiscoveryUX(getUrisOfWkspFoldersWithFeatures(), false);
@@ -442,6 +408,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         }
         await vscode.commands.executeCommand('gs-behave-bdd.findStepReferences');
       }),
+      vscode.commands.registerCommand('gs-behave-bdd.recheckMigrations', () => recheckMigrationsCommandHandler()),
       // Legacy command aliases for users migrating from behave-vsc — preserves custom keybindings
       vscode.commands.registerTextEditorCommand(`behave-vsc.gotoStep`, gotoStepHandler),
       vscode.commands.registerTextEditorCommand(`behave-vsc.findStepReferences`, findStepReferencesHandler),
@@ -1016,12 +983,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         // will not only change the set of workspaces we are watching, but also the output channels
         config.logger.syncChannelsToWorkspaceFolders();
 
-        // Phase 9: Clear scan cache on settings change so re-discovery can re-scan
-        const needsRescan = forceFullRefresh || (event && (event.affectsConfiguration('gs-behave-bdd.discoveryDepth') ||
-            event.affectsConfiguration('gs-behave-bdd.discoveryStopOnFirstHit') ||
-            event.affectsConfiguration('gs-behave-bdd.projectPath')));
+        // Phase 19 D-09 / CLEANUP-02: any change to scan-shaping settings invalidates
+        // BOTH the scan-result cache AND the active-project cache. Replaces the v1.4.0
+        // read-time discoveryDepth re-read in src/common.ts (CLEANUP-02 / D-11).
+        const needsRescan = forceFullRefresh || (event && (
+          event.affectsConfiguration('gs-behave-bdd.discoveryDepth') ||
+          event.affectsConfiguration('gs-behave-bdd.discoveryStopOnFirstHit') ||
+          event.affectsConfiguration('gs-behave-bdd.projectPath') ||
+          event.affectsConfiguration('gs-behave-bdd.projectPaths') ||
+          event.affectsConfiguration('gs-behave-bdd.featuresPath') ||
+          event.affectsConfiguration('gs-behave-bdd.featuresPaths')
+        ));
         if (needsRescan) {
           clearScanResultCache();
+          clearActiveProjectCache();
         }
 
         // Phase 9: Re-run BFS scan for undiscovered workspaces when scan-affecting settings change

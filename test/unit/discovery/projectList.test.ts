@@ -13,6 +13,7 @@ import {
   removeProjectByConfigUri,
   addProjectFromScanEntry,
   clearProjectList,
+  clearActiveProjectCache,
   isManualProjectPathMode,
   ProjectEntry,
 } from '../../../src/discovery/projectList';
@@ -340,4 +341,73 @@ suite('ProjectList', () => {
     assert.strictEqual(getActiveProject(wkspUri), undefined);
   });
 
+});
+
+// ─── Phase 19 / CLEANUP-02 / TEST-06 ─────────────────────────────────────────
+// Pins the post-D-11 behavior: activeProjectCache is invalidated proactively by
+// configurationChangedHandler, replacing the v1.4.0 read-time discoveryDepth
+// re-read in src/common.ts. Tests both the helper itself and the structural
+// shape of src/common.ts to lock in that the read-time gate is gone.
+
+import * as fs from 'fs';
+import * as path from 'path';
+
+suite('Phase 19 / CLEANUP-02 — clearActiveProjectCache', () => {
+  const wkspUri2 = vscode.Uri.file('/cleanup-02-workspace');
+  let memento: MockMemento;
+
+  setup(() => {
+    memento = new MockMemento();
+    initProjectListPersistence(memento);
+  });
+  teardown(() => sinon.restore());
+
+  test('TEST-06 7.1(b): after clearActiveProjectCache(), getActiveProject returns undefined', () => {
+    const e1 = makeScanEntry('sub-a', 'behave.ini', 1, 0);
+    rebuildProjectList(wkspUri2, makeScanResult([e1]));
+    assert.ok(getActiveProject(wkspUri2), 'sanity: cache populated by rebuildProjectList');
+
+    clearActiveProjectCache();
+
+    assert.strictEqual(
+      getActiveProject(wkspUri2),
+      undefined,
+      'cleared cache returns undefined — next discovery cycle recomputes',
+    );
+  });
+
+  test('TEST-06 7.2: clearActiveProjectCache is a safe no-op when cache is already empty', () => {
+    // Fresh module state for this assertion: clear once to drain anything from
+    // the previous test, then clear again — must not throw.
+    clearActiveProjectCache();
+    assert.doesNotThrow(() => clearActiveProjectCache());
+  });
+
+  test('TEST-06 7.1(a): src/common.ts no longer reads discoveryDepth in active-project block (D-11)', () => {
+    // Structural source-text assertion (rationale: end-to-end simulation of
+    // the configuration-change event flow is brittle in a unit test and
+    // already covered by Phase 22 TEST-07 integration coverage).
+    // Try both depths — compiled output sits at out/test/test/unit/discovery/
+    // (5 ups to project root) but a future test runner config could shift this.
+    const candidates = [
+      path.resolve(__dirname, '../../../../../src/common.ts'),
+      path.resolve(__dirname, '../../../../src/common.ts'),
+      path.resolve(__dirname, '../../../src/common.ts'),
+    ];
+    const commonPath = candidates.find(p => fs.existsSync(p));
+    assert.ok(commonPath, `could not locate src/common.ts from ${__dirname}`);
+    const src = fs.readFileSync(commonPath, 'utf8');
+    assert.ok(
+      !src.includes('currentDiscoveryDepth'),
+      'currentDiscoveryDepth must be removed from src/common.ts (D-11)',
+    );
+    assert.ok(
+      !/get<number>\("discoveryDepth"\)/.test(src),
+      'src/common.ts must not re-read discoveryDepth at lookup time (D-11)',
+    );
+    assert.ok(
+      src.includes('Phase 19 / CLEANUP-02'),
+      'src/common.ts must carry the CLEANUP-02 closure marker comment',
+    );
+  });
 });
