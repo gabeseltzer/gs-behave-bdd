@@ -176,8 +176,7 @@ export function clearProjectList(wkspUri: vscode.Uri): void {
 
 export function isManualProjectPathMode(wkspUri: vscode.Uri): boolean {
   const wkspConfig = vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri);
-  const legacyConfig = vscode.workspace.getConfiguration("behave-vsc", wkspUri);
-  return hasExplicitSetting(wkspConfig, "projectPath", legacyConfig);
+  return hasExplicitSetting(wkspConfig, "projectPath");
 }
 
 
