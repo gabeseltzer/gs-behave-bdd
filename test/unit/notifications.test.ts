@@ -575,7 +575,9 @@ suite('Phase 15 — extension.ts activation ordering (Pitfall 3)', () => {
       'D-A6.1: migrateLegacySuppressMultiConfig direct call site must be deleted from extension.ts',
     );
     // Ordering invariant: evaluateAllMigrations must still precede updateDiscoveryUX.
-    const evaluatorIdx = src.indexOf('evaluateAllMigrations(wkspUri)');
+    // Phase 21 D-A3.4: the call site now takes a second `hooks` arg, so match the
+    // call prefix `evaluateAllMigrations(wkspUri` rather than the bare-call form.
+    const evaluatorIdx = src.indexOf('evaluateAllMigrations(wkspUri');
     const discoveryCallIdx = src.indexOf('updateDiscoveryUX(getUrisOfWkspFoldersWithFeatures()');
     assert.notStrictEqual(evaluatorIdx, -1, 'evaluateAllMigrations call must exist in extension.ts');
     assert.notStrictEqual(discoveryCallIdx, -1, 'updateDiscoveryUX call must exist in extension.ts');
@@ -889,9 +891,12 @@ suite('Phase 16 — activation order and notification structural tests (D-18, D-
       !src.includes('migrateLegacySuppressMultiConfig(wkspUri)'),
       'D-A6.1: migrateLegacySuppressMultiConfig direct call site must be deleted from extension.ts',
     );
+    // Phase 21 D-A3.4: the activation call now passes a `hooks` arg as the
+    // second parameter, so the substring is `evaluateAllMigrations(wkspUri,` or
+    // (pre-21) `evaluateAllMigrations(wkspUri)`. Match the common prefix.
     assert.ok(
-      src.includes('evaluateAllMigrations(wkspUri)'),
-      'D-A6.1: evaluateAllMigrations(wkspUri) must be the activation-time migration driver',
+      src.includes('evaluateAllMigrations(wkspUri'),
+      'D-A6.1: evaluateAllMigrations(wkspUri...) must be the activation-time migration driver',
     );
   });
 

@@ -40,7 +40,13 @@ import {
 import { buildQuickPickItems, computeStatusBarState, ProjectQuickPickItem } from './discovery/selectProjectHelpers';
 import { JunitWatcher } from './watchers/junitWatcher';
 import { showSuppressibleNotification } from './notifications';
-import { recheckMigrationsCommandHandler, evaluateAllMigrations } from './migrations';
+import {
+  recheckMigrationsCommandHandler,
+  evaluateAllMigrations,
+  runConsentFlow,
+  readMigrationMode,
+  type ConsentHit,
+} from './migrations';
 
 
 const testData = new WeakMap<vscode.TestItem, BehaveTestData>();
@@ -328,19 +334,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     });
 
     // Phase 20 D-A6.1: evaluator drives every registered migration.
-    // Phase 21 will inject a hooks object that wires case 2 / case 3 notifications;
-    // Phase 20 ships without hooks so the evaluator runs case-1 silent finishes.
+    // Phase 21 D-A3.4: hooks collect case 2 / case 3 hits, runConsentFlow shows
+    // non-blocking prompts (fire-and-forget — does not gate activation).
     // B-03: run per-workspace migrations concurrently (parallelism across workspaces).
     // Pitfall 8: reloadSettings is synchronous — do NOT await.
     await Promise.all(
       getUrisOfWkspFoldersWithFeatures().map(async (wkspUri) => {
         try {
-          await evaluateAllMigrations(wkspUri);
+          const hits: ConsentHit[] = [];
+          await evaluateAllMigrations(wkspUri, {
+            onCaseHit: (mcase, entry, scope) => {
+              if (mcase === 2 || mcase === 3) {
+                hits.push({ case: mcase, entry, scope });
+              }
+            },
+          });
           config.reloadSettings(wkspUri);
+          const mode = readMigrationMode(wkspUri);
+          // Fire-and-forget: activation must not block on user prompts (CONSENT-01).
+          // runConsentFlow never throws; the outer try/catch is defense-in-depth.
+          void runConsentFlow(wkspUri, hits, mode);
         } catch (e) {
           // Defense-in-depth: evaluator never throws (Phase 19 D-03), but
           // reloadSettings is not contracted to never throw.
-          config.logger.logInfo(`Phase 20 migration evaluator error: ${e}`, wkspUri);
+          config.logger.logInfo(`Phase 21 migration consent flow error: ${e}`, wkspUri);
         }
       }),
     );
