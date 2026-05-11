@@ -115,20 +115,6 @@ suite('hasExplicitSetting (INTG-02)', () => {
     });
   });
 
-  suite('legacyConfig fallback', () => {
-    test('no new config explicit + legacy workspaceFolderValue -- returns true', () => {
-      const newCfg = makeConfig({});
-      const legacyCfg = makeWkspFolderConfig({ projectPath: 'backend' });
-      assert.strictEqual(hasExplicitSetting(newCfg, 'projectPath', legacyCfg), true);
-    });
-
-    test('no new config + no legacy value -- returns false', () => {
-      const newCfg = makeConfig({});
-      const legacyCfg = makeConfig({});
-      assert.strictEqual(hasExplicitSetting(newCfg, 'projectPath', legacyCfg), false);
-    });
-  });
-
   suite('edge cases', () => {
     test('inspect returns undefined (unregistered key) -- returns false, not throw', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
