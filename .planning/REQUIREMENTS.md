@@ -25,12 +25,12 @@
 
 ### Consent UX & Settings
 
-- [ ] **CONSENT-01**: On activation, the extension scans each unfinished migration × each scope. For any case 2 / case 3 hit, a non-blocking notification is shown.
+- [x] **CONSENT-01**: On activation, the extension scans each unfinished migration × each scope. For any case 2 / case 3 hit, a non-blocking notification is shown.
 - [ ] **CONSENT-02 (case 2 prompt)**: When `migrationMode` is `prompt`, case 2 hits show a notification with three actions: *Migrate and delete legacy*, *Migrate and keep legacy*, *Don't migrate*. Whichever the user picks, the migration is marked Finished at that scope and the prompt does not re-fire.
 - [ ] **CONSENT-03 (case 3 prompt)**: Case 3 hits *always* show a notification (regardless of `migrationMode`) with four actions: *Overwrite canonical with legacy, delete legacy*, *Overwrite canonical with legacy, keep legacy*, *Keep canonical, delete legacy*, *Keep both as-is*. After the chosen action runs, the migration is marked Finished at that scope.
-- [ ] **CONSENT-04**: Dismissing a notification (clicking X / clicking away without picking an action) leaves the migration *unfinished* at that scope so the prompt re-surfaces on the next activation.
+- [x] **CONSENT-04**: Dismissing a notification (clicking X / clicking away without picking an action) leaves the migration *unfinished* at that scope so the prompt re-surfaces on the next activation.
 - [ ] **CONSENT-05**: `gs-behave-bdd.migrationMode` setting registered in package.json as an enum (`prompt` | `migrate-and-delete` | `migrate-and-keep` | `skip`), default `prompt`. Editable per-scope from settings.json or the Settings UI.
-- [ ] **CONSENT-06**: When `migrationMode` is `migrate-and-delete`, `migrate-and-keep`, or `skip`, case 2 hits run silently with no prompt. Case 3 hits still prompt.
+- [x] **CONSENT-06**: When `migrationMode` is `migrate-and-delete`, `migrate-and-keep`, or `skip`, case 2 hits run silently with no prompt. Case 3 hits still prompt.
 - [ ] **CONSENT-07**: `gs-behave-bdd.completedMigrations: string[]` setting registered in package.json (default `[]`). Stores migration IDs that have been finished at each scope.
 - [ ] **CONSENT-08**: Setting descriptions for `migrationMode` and `completedMigrations` clearly explain their semantics in the Settings UI.
 - [ ] **CONSENT-09**: New command *Behave BDD: Recheck Migrations* registered. Running it clears `completedMigrations` for the current workspace folder (and parent scopes the user can write to) and re-runs the migration scan, re-prompting the user as if migrations had never been evaluated.
@@ -41,8 +41,8 @@
 - [x] **MIGRATE-02**: `migrateLegacySuppressMultiConfig` refactored to register as a migration entry in the new registry. No more silent auto-migration on activation; runs through the case 1/2/3 evaluator.
 - [x] **MIGRATE-03**: New `behave-vsc` → `gs-behave-bdd` migration entries registered for every silently-fallback-read key currently in `src/configuration.ts` (`legacyWinConfig` / `legacyWkspConfig`), `src/common.ts:202`, and `src/discovery/projectList.ts:167`. Confirm the exhaustive list at plan time (`featuresPath`, env presets, `runParallel`, `xRay`, `projectPath`, etc.).
 - [ ] **MIGRATE-04**: Migration evaluator: for each unfinished migration × each VS Code scope (Global / Workspace / WorkspaceFolder), inspect both keys at that scope and dispatch to case 1 / 2 / 3 logic.
-- [ ] **MIGRATE-05**: Case 2 actions implemented: *migrate-and-delete* (copy legacy → canonical, clear legacy at the same scope), *migrate-and-keep* (copy only), *don't-migrate* (no-op). All three mark Finished at that scope.
-- [ ] **MIGRATE-06**: Case 3 actions implemented: *overwrite-and-delete* (copy legacy → canonical overwriting, clear legacy), *overwrite-and-keep* (copy overwriting, keep legacy), *keep-canonical-and-delete-legacy* (no copy, clear legacy), *keep-both* (no-op). All four mark Finished at that scope.
+- [x] **MIGRATE-05**: Case 2 actions implemented: *migrate-and-delete* (copy legacy → canonical, clear legacy at the same scope), *migrate-and-keep* (copy only), *don't-migrate* (no-op). All three mark Finished at that scope.
+- [x] **MIGRATE-06**: Case 3 actions implemented: *overwrite-and-delete* (copy legacy → canonical overwriting, clear legacy), *overwrite-and-keep* (copy overwriting, keep legacy), *keep-canonical-and-delete-legacy* (no copy, clear legacy), *keep-both* (no-op). All four mark Finished at that scope.
 - [ ] **MIGRATE-07**: All migrations route through the v1.4.0 `migrateScopedSetting<TSrc, TDest>` primitive. No parallel implementations; same-scope inspect/write/clear semantics preserved.
 - [ ] **MIGRATE-08**: Empty / whitespace legacy values treated as "not set" (case 1), matching v1.4.0's `skip-with-removal` (D-08) semantics.
 - [ ] **MIGRATE-09**: Mark-Finished is per-scope (`completedMigrations` at Global / Workspace / WorkspaceFolder is independent). A new workspace folder starts with empty `completedMigrations` at WorkspaceFolder scope and is automatically scanned on first activation.
@@ -57,7 +57,7 @@
 - [ ] **TEST-01**: Unit tests for the case 2 prompt covering each of the three actions + dismissal (re-surfaces) + `migrationMode` overrides (silent run when not `prompt`).
 - [ ] **TEST-02**: Unit tests for the case 3 prompt covering each of the four actions + dismissal + `migrationMode`-override-doesn't-apply (case 3 always prompts).
 - [ ] **TEST-03**: Unit tests for the migration evaluator covering all three cases × all three VS Code scopes; mark-Finished writes to the right scope.
-- [ ] **TEST-04**: Unit tests for `migrateBehaveVscNamespace` covering each registered legacy key and idempotency (re-running on already-Finished migrations is a no-op).
+- [x] **TEST-04**: Unit tests for `migrateBehaveVscNamespace` covering each registered legacy key and idempotency (re-running on already-Finished migrations is a no-op).
 - [ ] **TEST-05**: Unit tests for the *Recheck Migrations* command (clears `completedMigrations`, re-runs scan, re-prompts).
 - [ ] **TEST-06**: Unit tests for `activeProjectCache` invalidation when `discoveryDepth` changes (regression bar against the v1.4.0 read-time re-read pattern).
 - [ ] **TEST-07**: Integration test in real VS Code covering the consent flow end-to-end via a dedicated `example-projects/migration-consent/` fixture: seeded `behave-vsc.*` settings.json, prompt fires, choice is recorded, migration completes, `completedMigrations` is written.
@@ -90,12 +90,12 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONSENT-01 | Phase 21 | Pending |
-| CONSENT-02 | Phase 21 | Pending |
-| CONSENT-03 | Phase 21 | Pending |
-| CONSENT-04 | Phase 21 | Pending |
+| CONSENT-01 | Phase 21 | Complete |
+| CONSENT-02 | Phase 21 | Complete |
+| CONSENT-03 | Phase 21 | Complete |
+| CONSENT-04 | Phase 21 | Complete |
 | CONSENT-05 | Phase 19 | Pending |
-| CONSENT-06 | Phase 21 | Pending |
+| CONSENT-06 | Phase 21 | Complete |
 | CONSENT-07 | Phase 19 | Pending |
 | CONSENT-08 | Phase 19 | Pending |
 | CONSENT-09 | Phase 19 | Pending |
@@ -103,8 +103,8 @@
 | MIGRATE-02 | Phase 20 | Complete |
 | MIGRATE-03 | Phase 20 | Complete |
 | MIGRATE-04 | Phase 19 | Pending |
-| MIGRATE-05 | Phase 21 | Pending |
-| MIGRATE-06 | Phase 21 | Pending |
+| MIGRATE-05 | Phase 21 | Complete |
+| MIGRATE-06 | Phase 21 | Complete |
 | MIGRATE-07 | Phase 19 | Pending |
 | MIGRATE-08 | Phase 19 | Pending |
 | MIGRATE-09 | Phase 19 | Pending |
@@ -113,7 +113,7 @@
 | TEST-01 | Phase 21 | Pending |
 | TEST-02 | Phase 21 | Pending |
 | TEST-03 | Phase 19 | Pending |
-| TEST-04 | Phase 20 | Pending |
+| TEST-04 | Phase 20 | Complete |
 | TEST-05 | Phase 19 | Pending |
 | TEST-06 | Phase 19 | Pending |
 | TEST-07 | Phase 22 | Pending |
