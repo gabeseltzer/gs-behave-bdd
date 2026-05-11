@@ -109,13 +109,18 @@ export async function showSuppressibleNotification(
 
 /**
  * Result of a migration transform callback.
- * - `write`: write `value` as the new dest value AND remove the source key (both at same scope).
+ * - `write`: write `value` as the new dest value. `removeSource` controls whether
+ *   the source key is removed (both at same scope):
+ *     - `removeSource: true` (or omitted) — remove source (default, current behavior).
+ *     - `removeSource: false` — preserve source (Phase 21 D-A8.3: needed for the
+ *       case-2 "migrate-and-keep" and case-3 "overwrite-and-keep" actions, which
+ *       write the dest but intentionally leave the legacy entry in place).
  * - `skipDest`: do NOT write the dest. `removeSource` controls whether the source key is removed:
  *     - `removeSource: true`  — remove source (Phase 16 D-08: blank legacy value, drop it).
  *     - `removeSource: false` — preserve source (Phase 15: legacyValue !== true is a no-op).
  */
 type TransformResult<T> =
-  | { kind: 'write'; value: T }
+  | { kind: 'write'; value: T; removeSource?: boolean }
   | { kind: 'skipDest'; removeSource: boolean };
 
 /**
@@ -208,18 +213,28 @@ async function migrateScopedSetting<TSrc, TDest>(opts: {
 
   try {
     if (result.kind === 'write') {
+      // D-A8.3 (Phase 21): the optional `removeSource` field on the write
+      // variant gates legacy-key removal. Omitted or `true` → remove (current
+      // behavior, all prior callers). Explicit `false` → preserve the source
+      // entry (needed for case-2 "migrate-and-keep" / case-3 "overwrite-and-keep").
+      const shouldRemoveSource = result.removeSource !== false;
       // W-01: if the dest at this scope is already deep-equal to the proposed
       // value, skip the dest write — it's a no-op that nevertheless triggers a
       // configuration-change event and a full reparse cycle on idempotent
-      // re-activation. Still remove the source to complete the migration.
+      // re-activation. Still honour removeSource for the legacy entry.
       if (destAtScope !== undefined && deepEqualForSettings(destAtScope, result.value)) {
-        await sourceCfg.update(opts.sourceKey, undefined, target);
+        if (shouldRemoveSource) {
+          await sourceCfg.update(opts.sourceKey, undefined, target);
+        }
         return true;
       }
-      // Phase 15 contract: write dest, then remove source. Order matters for the test
-      // assertion that updateSpy.firstCall == dest, secondCall == source removal.
+      // Phase 15 contract: write dest, then (optionally) remove source. Order
+      // matters for the test assertion that updateSpy.firstCall == dest,
+      // secondCall == source removal.
       await destCfg.update(opts.destKey, result.value, target);
-      await sourceCfg.update(opts.sourceKey, undefined, target);
+      if (shouldRemoveSource) {
+        await sourceCfg.update(opts.sourceKey, undefined, target);
+      }
       return true;
     }
     // kind === 'skipDest'
