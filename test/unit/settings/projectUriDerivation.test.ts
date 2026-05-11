@@ -93,7 +93,7 @@ suite('projectUri derivation from config-file discovery', () => {
 
     // projectPath not explicitly set (inspect returns undefined for workspaceValue)
     const cfg = makeConfig({ ...BASE_CFG });
-    const s = new WorkspaceSettings(MOCK_WKSP_URI, cfg, makeWinSettings(), mockLogger(), undefined, entry);
+    const s = new WorkspaceSettings(MOCK_WKSP_URI, cfg, makeWinSettings(), mockLogger(), entry);
 
     assert.ok(
       s.projectUri.fsPath.replace(/\\/g, '/').endsWith('/fake/workspace/autotest'),
@@ -117,7 +117,7 @@ suite('projectUri derivation from config-file discovery', () => {
     };
 
     const cfg = makeConfig({ ...BASE_CFG });
-    const s = new WorkspaceSettings(MOCK_WKSP_URI, cfg, makeWinSettings(), mockLogger(), undefined, entry);
+    const s = new WorkspaceSettings(MOCK_WKSP_URI, cfg, makeWinSettings(), mockLogger(), entry);
 
     assert.ok(
       s.projectUri.fsPath.replace(/\\/g, '/').endsWith('/fake/workspace'),
@@ -141,7 +141,7 @@ suite('projectUri derivation from config-file discovery', () => {
     const cfgValues = { ...BASE_CFG, projectPath: 'other' };
     const cfg = makeConfig(cfgValues, new Set(['projectPath']));
 
-    const s = new WorkspaceSettings(MOCK_WKSP_URI, cfg, makeWinSettings(), mockLogger(), undefined, entry);
+    const s = new WorkspaceSettings(MOCK_WKSP_URI, cfg, makeWinSettings(), mockLogger(), entry);
 
     assert.ok(
       s.projectUri.fsPath.replace(/\\/g, '/').endsWith('/fake/workspace/other'),
@@ -160,7 +160,7 @@ suite('projectUri derivation from config-file discovery', () => {
     };
 
     const cfg = makeConfig({ ...BASE_CFG });
-    const s = new WorkspaceSettings(MOCK_WKSP_URI, cfg, makeWinSettings(), mockLogger(), undefined, entry);
+    const s = new WorkspaceSettings(MOCK_WKSP_URI, cfg, makeWinSettings(), mockLogger(), entry);
 
     assert.ok(
       s.projectUri.fsPath.replace(/\\/g, '/').endsWith('/fake/workspace'),

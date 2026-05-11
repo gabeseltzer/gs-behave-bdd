@@ -45,19 +45,6 @@ suite('verboseLogging setting', () => {
       assert.strictEqual(settings.verboseLogging, true);
     });
 
-    test('legacy fallback uses legacy value when new key is not explicit', () => {
-      const newCfg = makeConfig(WIN_DEFAULTS); // not in explicitKeys
-      const legacyCfg = makeConfig({ verboseLogging: true });
-      const settings = new WindowSettings(newCfg, legacyCfg);
-      assert.strictEqual(settings.verboseLogging, true);
-    });
-
-    test('new explicit value wins over legacy', () => {
-      const newCfg = makeConfig({ ...WIN_DEFAULTS, verboseLogging: false }, ['verboseLogging']);
-      const legacyCfg = makeConfig({ verboseLogging: true });
-      const settings = new WindowSettings(newCfg, legacyCfg);
-      assert.strictEqual(settings.verboseLogging, false);
-    });
   });
 
 

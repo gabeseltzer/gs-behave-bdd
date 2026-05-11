@@ -65,11 +65,9 @@ class ExtensionConfiguration implements Configuration {
       this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri, testConfig, this._windowSettings, this.logger);
     }
     else {
-      const legacyWinConfig = vscode.workspace.getConfiguration("behave-vsc");
-      const legacyWkspConfig = vscode.workspace.getConfiguration("behave-vsc", wkspUri);
-      this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("gs-behave-bdd"), legacyWinConfig);
+      this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("gs-behave-bdd"));
       this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
-        vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri), this._windowSettings, this.logger, legacyWkspConfig);
+        vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri), this._windowSettings, this.logger);
     }
   }
 
@@ -77,8 +75,7 @@ class ExtensionConfiguration implements Configuration {
     return this._windowSettings
       ? this._windowSettings
       : this._windowSettings = new WindowSettings(
-        vscode.workspace.getConfiguration("gs-behave-bdd"),
-        vscode.workspace.getConfiguration("behave-vsc")
+        vscode.workspace.getConfiguration("gs-behave-bdd")
       );
   }
 
@@ -88,8 +85,7 @@ class ExtensionConfiguration implements Configuration {
       if (!this._resourceSettings[wkspUri.path]) {
         try {
           this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
-            vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri), winSettings, this.logger,
-            vscode.workspace.getConfiguration("behave-vsc", wkspUri));
+            vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri), winSettings, this.logger);
         } catch (e) {
           // WorkspaceSettings throws WkspError on fatal config errors (e.g. bad featuresPaths).
           // The error is already logged via the workspace's output channel inside logSettings()
