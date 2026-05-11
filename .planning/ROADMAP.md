@@ -150,7 +150,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 19. Migration Foundation | 0/4 | Not started | - |
-| 20. Migration Registry | 0/5 | Not started | - |
-| 21. Consent UX (Case 2 & Case 3 Prompts) | 0/3 | Not started | - |
+| 19. Migration Foundation | 4/4 | Complete | 2026-05-07 |
+| 20. Migration Registry | 5/5 | Complete | 2026-05-08 |
+| 21. Consent UX (Case 2 & Case 3 Prompts) | 3/3 | Complete | 2026-05-11 |
 | 22. Cleanup, Integration & Docs | 0/0 | Not started | - |

@@ -32,7 +32,7 @@ Last activity: 2026-05-11
 
 ```
 [####] Phase 19  Migration Foundation ✅
-[----] Phase 20  Migration Registry
+[####] Phase 20  Migration Registry ✅
 [####] Phase 21  Consent UX (Case 2 & Case 3 Prompts) ✅
 [----] Phase 22  Cleanup, Integration & Docs
 ```
@@ -161,6 +161,6 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 
 ## Session Continuity
 
-**Last action:** Phase 021 verification gate PASSED � 021-VERIFICATION.md created; REQUIREMENTS.md flipped CONSENT-02/03/TEST-01/02 to complete; ESLint clean; 849 unit tests passing.
+**Last action:** Phase 021 verification gate PASSED � 021-VERIFICATION.md created; REQUIREMENTS.md flipped CONSENT-02/03/TEST-01/02 to complete; ESLint clean; 849 unit tests passing.
 **Next action:** Proceed to Phase 22 (Cleanup, Integration & Docs).
 **Loaded context:** PROJECT.md, REQUIREMENTS.md, MILESTONES.md, config.json.
