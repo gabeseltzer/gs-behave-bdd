@@ -26,8 +26,8 @@
 ### Consent UX & Settings
 
 - [x] **CONSENT-01**: On activation, the extension scans each unfinished migration × each scope. For any case 2 / case 3 hit, a non-blocking notification is shown.
-- [ ] **CONSENT-02 (case 2 prompt)**: When `migrationMode` is `prompt`, case 2 hits show a notification with three actions: *Migrate and delete legacy*, *Migrate and keep legacy*, *Don't migrate*. Whichever the user picks, the migration is marked Finished at that scope and the prompt does not re-fire.
-- [ ] **CONSENT-03 (case 3 prompt)**: Case 3 hits *always* show a notification (regardless of `migrationMode`) with four actions: *Overwrite canonical with legacy, delete legacy*, *Overwrite canonical with legacy, keep legacy*, *Keep canonical, delete legacy*, *Keep both as-is*. After the chosen action runs, the migration is marked Finished at that scope.
+- [x] **CONSENT-02 (case 2 prompt)**: When `migrationMode` is `prompt`, case 2 hits show a notification with three actions: *Migrate and delete legacy*, *Migrate and keep legacy*, *Don't migrate*. Whichever the user picks, the migration is marked Finished at that scope and the prompt does not re-fire.
+- [x] **CONSENT-03 (case 3 prompt)**: Case 3 hits *always* show a notification (regardless of `migrationMode`) with four actions: *Overwrite canonical with legacy, delete legacy*, *Overwrite canonical with legacy, keep legacy*, *Keep canonical, delete legacy*, *Keep both as-is*. After the chosen action runs, the migration is marked Finished at that scope.
 - [x] **CONSENT-04**: Dismissing a notification (clicking X / clicking away without picking an action) leaves the migration *unfinished* at that scope so the prompt re-surfaces on the next activation.
 - [ ] **CONSENT-05**: `gs-behave-bdd.migrationMode` setting registered in package.json as an enum (`prompt` | `migrate-and-delete` | `migrate-and-keep` | `skip`), default `prompt`. Editable per-scope from settings.json or the Settings UI.
 - [x] **CONSENT-06**: When `migrationMode` is `migrate-and-delete`, `migrate-and-keep`, or `skip`, case 2 hits run silently with no prompt. Case 3 hits still prompt.
@@ -54,8 +54,8 @@
 
 ### Tests
 
-- [ ] **TEST-01**: Unit tests for the case 2 prompt covering each of the three actions + dismissal (re-surfaces) + `migrationMode` overrides (silent run when not `prompt`).
-- [ ] **TEST-02**: Unit tests for the case 3 prompt covering each of the four actions + dismissal + `migrationMode`-override-doesn't-apply (case 3 always prompts).
+- [x] **TEST-01**: Unit tests for the case 2 prompt covering each of the three actions + dismissal (re-surfaces) + `migrationMode` overrides (silent run when not `prompt`).
+- [x] **TEST-02**: Unit tests for the case 3 prompt covering each of the four actions + dismissal + `migrationMode`-override-doesn't-apply (case 3 always prompts).
 - [ ] **TEST-03**: Unit tests for the migration evaluator covering all three cases × all three VS Code scopes; mark-Finished writes to the right scope.
 - [x] **TEST-04**: Unit tests for `migrateBehaveVscNamespace` covering each registered legacy key and idempotency (re-running on already-Finished migrations is a no-op).
 - [ ] **TEST-05**: Unit tests for the *Recheck Migrations* command (clears `completedMigrations`, re-runs scan, re-prompts).
@@ -110,8 +110,8 @@
 | MIGRATE-09 | Phase 19 | Pending |
 | CLEANUP-01 | Phase 22 | Pending |
 | CLEANUP-02 | Phase 19 | Pending |
-| TEST-01 | Phase 21 | Pending |
-| TEST-02 | Phase 21 | Pending |
+| TEST-01 | Phase 21 | Complete |
+| TEST-02 | Phase 21 | Complete |
 | TEST-03 | Phase 19 | Pending |
 | TEST-04 | Phase 20 | Complete |
 | TEST-05 | Phase 19 | Pending |
