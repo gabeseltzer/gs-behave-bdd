@@ -92,6 +92,18 @@ export function setActiveProject(wkspUri: vscode.Uri, entry: ProjectEntry): void
 }
 
 
+/**
+ * Phase 19 / CLEANUP-02: drop all cached active-project entries so the next
+ * discovery cycle recomputes them fresh. Called from configurationChangedHandler
+ * when a scan-shaping setting changes (D-09, D-10).
+ *
+ * Replaces the v1.4.0 read-time discoveryDepth re-read in src/common.ts.
+ */
+export function clearActiveProjectCache(): void {
+  activeProjectCache.clear();
+}
+
+
 export function removeProjectByConfigUri(
   wkspUri: vscode.Uri,
   configUri: vscode.Uri

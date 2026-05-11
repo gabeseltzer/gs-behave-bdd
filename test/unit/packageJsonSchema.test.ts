@@ -2,8 +2,17 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 
+type SchemaProp = {
+  type?: string;
+  items?: { type?: string };
+  default?: unknown;
+  enum?: unknown;
+  scope?: string;
+  markdownDescription?: string;
+};
+
 suite('package.json schema — Phase 15 (NOTIF-01)', () => {
-  let pkg: { contributes: { configuration: { properties: Record<string, { type?: string; items?: { type?: string }; default?: unknown }> } } };
+  let pkg: { contributes: { configuration: { properties: Record<string, SchemaProp> } } };
 
   suiteSetup(() => {
     let pkgPath = path.resolve(__dirname, '../../../../package.json');
@@ -41,6 +50,101 @@ suite('package.json schema — Phase 15 (NOTIF-01)', () => {
     assert.ok(
       'gs-behave-bdd.featuresPaths' in props,
       'Plural featuresPaths must remain present in schema',
+    );
+  });
+});
+
+suite('package.json schema — Phase 19 (CONSENT-05/07/08)', () => {
+  let pkg: { contributes: { configuration: { properties: Record<string, SchemaProp> } } };
+
+  suiteSetup(() => {
+    let pkgPath = path.resolve(__dirname, '../../../../package.json');
+    if (!fs.existsSync(pkgPath)) {
+      pkgPath = path.resolve(__dirname, '../../../package.json');
+    }
+    pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  });
+
+  test('migrationMode has correct enum schema shape (CONSENT-05)', () => {
+    const props = pkg.contributes.configuration.properties;
+    const s = props['gs-behave-bdd.migrationMode'];
+    assert.ok(s, 'migrationMode must be present in schema');
+    assert.strictEqual(s.type, 'string', 'type must be "string"');
+    assert.strictEqual(s.scope, 'resource', 'scope must be "resource"');
+    assert.deepStrictEqual(
+      s.enum,
+      ['prompt', 'migrate-and-delete', 'migrate-and-keep', 'skip'],
+      'enum must list all four migration mode values in order',
+    );
+    assert.strictEqual(s.default, 'prompt', 'default must be "prompt"');
+    assert.ok(typeof s.markdownDescription === 'string' && s.markdownDescription.length > 0,
+      'markdownDescription must be a non-empty string');
+    assert.ok(s.markdownDescription!.includes('prompt'),
+      'markdownDescription must mention "prompt" (CONSENT-08)');
+    assert.ok(s.markdownDescription!.includes('migrate'),
+      'markdownDescription must mention "migrate" (CONSENT-08)');
+  });
+
+  test('completedMigrations has correct array schema shape (CONSENT-07)', () => {
+    const props = pkg.contributes.configuration.properties;
+    const s = props['gs-behave-bdd.completedMigrations'];
+    assert.ok(s, 'completedMigrations must be present in schema');
+    assert.strictEqual(s.type, 'array', 'type must be "array"');
+    assert.strictEqual(s.scope, 'resource', 'scope must be "resource"');
+    assert.ok(s.items, 'items must be defined');
+    assert.strictEqual(s.items!.type, 'string', 'items.type must be "string"');
+    assert.deepStrictEqual(s.default, [], 'default must be []');
+    assert.ok(typeof s.markdownDescription === 'string' && s.markdownDescription.length > 0,
+      'markdownDescription must be a non-empty string');
+    assert.ok(s.markdownDescription!.includes('migration'),
+      'markdownDescription must mention "migration" (CONSENT-08)');
+    assert.ok(s.markdownDescription!.includes('Recheck Migrations'),
+      'markdownDescription must mention the *Recheck Migrations* command (CONSENT-08)');
+  });
+});
+
+suite('package.json + extension.ts — Phase 19 Plan 03 (CONSENT-09)', () => {
+  let pkg: { contributes: { commands?: { command: string; title: string }[] } };
+  let pkgPath: string;
+
+  suiteSetup(() => {
+    pkgPath = path.resolve(__dirname, '../../../../package.json');
+    if (!fs.existsSync(pkgPath)) {
+      pkgPath = path.resolve(__dirname, '../../../package.json');
+    }
+    pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  });
+
+  test('5.1: contributes.commands exposes recheckMigrations with the CONSENT-09 title', () => {
+    const cmds = pkg.contributes.commands ?? [];
+    const matches = cmds.filter(c => c.command === 'gs-behave-bdd.recheckMigrations');
+    assert.strictEqual(matches.length, 1, 'exactly one recheckMigrations contribution');
+    assert.strictEqual(
+      matches[0].title,
+      'Behave BDD: Recheck Migrations',
+      'title must match CONSENT-09 wording (palette display string)',
+    );
+  });
+
+  test('5.2: src/extension.ts wires registerCommand for gs-behave-bdd.recheckMigrations', () => {
+    const candidates = [
+      path.resolve(__dirname, '../../../../src/extension.ts'),
+      path.resolve(__dirname, '../../../src/extension.ts'),
+    ];
+    const extPath = candidates.find(p => fs.existsSync(p));
+    assert.ok(extPath, 'could not locate src/extension.ts');
+    const src = fs.readFileSync(extPath, 'utf8');
+    // The literal command id must appear exactly once and be wired through
+    // registerCommand (Phase 15 Plan 05 structural-test pattern).
+    const occurrences = src.split('gs-behave-bdd.recheckMigrations').length - 1;
+    assert.strictEqual(occurrences, 1, 'command id should appear exactly once in extension.ts');
+    const idIdx = src.indexOf("'gs-behave-bdd.recheckMigrations'");
+    assert.ok(idIdx > 0, 'literal command id must be present');
+    // Look back ~80 chars for the registerCommand( token to confirm the wiring.
+    const window = src.slice(Math.max(0, idIdx - 80), idIdx);
+    assert.ok(
+      window.includes('registerCommand('),
+      'recheckMigrations command id must be inside a vscode.commands.registerCommand() call',
     );
   });
 });
