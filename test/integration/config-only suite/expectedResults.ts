@@ -6,7 +6,9 @@ import { TestResult, applyTestConfiguration } from "../suite-shared/expectedResu
 export function getExpectedCounts(wkspUri: vscode.Uri, config: Configuration): WkspParseCounts {
   const testCount = getExpectedResults(wkspUri, config).length;
   return {
-    tests: { nodeCount: 4, testCount: testCount },
+    // 5 nodes = path-group + feature file + 3 scenarios. fileParser.ts:366 creates
+    // the path-group intermediate when entry.source==='config-file' (true here).
+    tests: { nodeCount: 5, testCount: testCount },
     featureFilesExceptEmptyOrCommentedOut: 1, stepFilesExceptEmptyOrCommentedOut: 1,
     stepFileStepsExceptCommentedOut: 6, featureFileStepsExceptCommentedOut: 7, stepMappings: 7
   };
