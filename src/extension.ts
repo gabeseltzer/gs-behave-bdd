@@ -35,7 +35,7 @@ import { scanForBehaveConfig, setCachedScanResult, getCachedScanResult, clearSca
 import { findBehaveConfig } from './parsers/configParser';
 import {
   initProjectListPersistence, rebuildProjectList, getActiveProject, getProjectList,
-  setActiveProject, isManualProjectPathMode, clearActiveProjectCache, recoverActiveProjectFromPersistence
+  setActiveProject, isManualProjectPathMode, clearActiveProjectCache
 } from './discovery/projectList';
 import { buildQuickPickItems, computeStatusBarState, ProjectQuickPickItem } from './discovery/selectProjectHelpers';
 import { JunitWatcher } from './watchers/junitWatcher';
@@ -1014,17 +1014,58 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         if (needsRescan) {
           clearScanResultCache();
           clearActiveProjectCache();
-          // Recover persisted active-project selections before rediscovery —
-          // hasFeaturesFolder relies on getActiveProject for multi-project workspaces
-          // where the root has no config file (e.g. project-switch). Without this,
-          // a forceFullRefresh would lose the user's setActiveProject choice and
-          // either auto-select alphabetically or report the workspace as empty.
-          // projectListCache is NOT cleared by clearActiveProjectCache, so any
-          // already-discovered workspace can restore its active from persistence.
-          const allFoldersForRecovery = vscode.workspace.workspaceFolders ?? [];
-          for (const folder of allFoldersForRecovery) {
-            if (!isManualProjectPathMode(folder.uri)) {
-              recoverActiveProjectFromPersistence(folder.uri);
+        }
+
+        // Phase 9 + 022-02 fix: re-run BFS scan for ALL workspaces when scan-shaping
+        // settings change (or forceFullRefresh). The Phase 19 / CLEANUP-02 design clears
+        // the caches but never repopulated them — so multi-project workspaces with no
+        // root-level config (project-switch, monorepo-scan) lost their active-project
+        // selection on any forceFullRefresh. Mirrors the activation block at L825-L893.
+        if (needsRescan) {
+          const allFolders = vscode.workspace.workspaceFolders;
+          if (allFolders) {
+            for (const folder of allFolders) {
+              if (isManualProjectPathMode(folder.uri)) continue;
+              const wkspCfg = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri);
+              const depth = wkspCfg.get<number>("discoveryDepth") ?? 3;
+              const stopFirst = wkspCfg.get<boolean>("discoveryStopOnFirstHit") ?? false;
+
+              // Look for a root-level config file too — it becomes position-0 in the project list.
+              const rootConfigResult = findBehaveConfig(folder.uri);
+              let rootEntry: ScanResultEntry | undefined;
+              if (rootConfigResult && rootConfigResult.ok) {
+                const configFileName = rootConfigResult.configFileUri.path.split('/').pop() ?? '';
+                const CONFIG_PRIORITY: Record<string, number> = {
+                  'behave.ini': 0, '.behaverc': 1, 'setup.cfg': 2, 'tox.ini': 3, 'pyproject.toml': 4
+                };
+                rootEntry = {
+                  configFileUri: rootConfigResult.configFileUri,
+                  dirUri: folder.uri,
+                  depth: 0,
+                  configPriority: CONFIG_PRIORITY[configFileName] ?? 99,
+                };
+              }
+
+              let scanResult: ScanResult;
+              if (depth > 0) {
+                scanResult = await scanForBehaveConfig(folder.uri, depth, stopFirst);
+                if (scanResult.primary) setCachedScanResult(folder.uri, scanResult);
+              } else {
+                // discoveryDepth=0: no subdir scan. Project list contains only the
+                // root entry (if any). monorepo-scan's "discoveryDepth=0 disables
+                // subdirectory scanning" test relies on this — without it, the
+                // stale projectListCache + persisted active would resurrect a
+                // subdir selection that should no longer be reachable.
+                scanResult = {
+                  primary: undefined, alsoFound: [], scannedDirs: 0,
+                  circuitBreakerFired: false, maxDepthReached: 0,
+                };
+              }
+              // rebuildProjectList calls restoreOrAutoSelectActive — restores the
+              // persisted setActiveProject choice if it's still in the new list,
+              // otherwise auto-selects the first. project-switch's "switch to beta"
+              // test relies on this restoration path.
+              rebuildProjectList(folder.uri, scanResult, rootEntry);
             }
           }
         }

@@ -104,22 +104,6 @@ export function clearActiveProjectCache(): void {
 }
 
 
-/**
- * Phase 22 / 022-02 UAT regression fix: re-populate the in-memory
- * activeProjectCache for `wkspUri` from the persisted Memento. Used after
- * `clearActiveProjectCache()` in `configurationChangedHandler` so a user's
- * `setActiveProject` choice survives a `forceFullRefresh`. Requires a
- * pre-existing projectListCache entry (i.e. discovery must already have
- * run once for this workspace).
- *
- * Returns the recovered ProjectEntry, or undefined if no list is cached
- * or the persisted selection no longer matches a known project.
- */
-export function recoverActiveProjectFromPersistence(wkspUri: vscode.Uri): ProjectEntry | undefined {
-  return restoreOrAutoSelectActive(wkspUri);
-}
-
-
 export function removeProjectByConfigUri(
   wkspUri: vscode.Uri,
   configUri: vscode.Uri
