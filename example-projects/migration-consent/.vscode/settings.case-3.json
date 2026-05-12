@@ -1,0 +1,4 @@
+{
+  "behave-vsc.featuresPath": "features-alt",
+  "gs-behave-bdd.featuresPaths": ["features"]
+}
