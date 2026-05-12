@@ -35,7 +35,7 @@ import { scanForBehaveConfig, setCachedScanResult, getCachedScanResult, clearSca
 import { findBehaveConfig } from './parsers/configParser';
 import {
   initProjectListPersistence, rebuildProjectList, getActiveProject, getProjectList,
-  setActiveProject, isManualProjectPathMode, clearActiveProjectCache
+  setActiveProject, isManualProjectPathMode, clearActiveProjectCache, recoverActiveProjectFromPersistence
 } from './discovery/projectList';
 import { buildQuickPickItems, computeStatusBarState, ProjectQuickPickItem } from './discovery/selectProjectHelpers';
 import { JunitWatcher } from './watchers/junitWatcher';
@@ -1014,6 +1014,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         if (needsRescan) {
           clearScanResultCache();
           clearActiveProjectCache();
+          // Recover persisted active-project selections before rediscovery —
+          // hasFeaturesFolder relies on getActiveProject for multi-project workspaces
+          // where the root has no config file (e.g. project-switch). Without this,
+          // a forceFullRefresh would lose the user's setActiveProject choice and
+          // either auto-select alphabetically or report the workspace as empty.
+          // projectListCache is NOT cleared by clearActiveProjectCache, so any
+          // already-discovered workspace can restore its active from persistence.
+          const allFoldersForRecovery = vscode.workspace.workspaceFolders ?? [];
+          for (const folder of allFoldersForRecovery) {
+            if (!isManualProjectPathMode(folder.uri)) {
+              recoverActiveProjectFromPersistence(folder.uri);
+            }
+          }
         }
 
         // Phase 9: Re-run BFS scan for undiscovered workspaces when scan-affecting settings change
