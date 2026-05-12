@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: Migration Consent & behave-vsc Cleanup
-status: executing
-last_updated: "2026-05-11T19:49:55.939Z"
-last_activity: 2026-05-11 -- Phase 022 execution started
+status: verifying
+last_updated: "2026-05-12T00:00:00.000Z"
+last_activity: 2026-05-12 -- Phase 022 all plans complete, ready for verification
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 15
-  completed_plans: 12
-  percent: 80
+  completed_plans: 15
+  percent: 100
 ---
 
 # Project State
@@ -24,17 +24,17 @@ See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
 
 ## Current Position
 
-Phase: 022 (cleanup-integration-docs) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 022
+Phase: 022 (cleanup-integration-docs) — READY FOR VERIFICATION
+Plan: 3 of 3 complete
+Status: All three plans landed; ready for /gsd-verify-work or gsd-verifier
 Resume file: .planning/phases/022-cleanup-integration-docs/022-CONTEXT.md
-Last activity: 2026-05-11 -- Phase 022 execution started
+Last activity: 2026-05-12 -- 022-02 integration suite landed; phase 022 ready for verification
 
 ```
 [####] Phase 19  Migration Foundation ✅
 [####] Phase 20  Migration Registry ✅
 [####] Phase 21  Consent UX (Case 2 & Case 3 Prompts) ✅
-[----] Phase 22  Cleanup, Integration & Docs
+[####] Phase 22  Cleanup, Integration & Docs ✅ (pending verification)
 ```
 
 ## Performance Metrics
@@ -161,6 +161,6 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 
 ## Session Continuity
 
-**Last action:** Phase 021 verification gate PASSED � 021-VERIFICATION.md created; REQUIREMENTS.md flipped CONSENT-02/03/TEST-01/02 to complete; ESLint clean; 849 unit tests passing.
-**Next action:** Proceed to Phase 22 (Cleanup, Integration & Docs).
+**Last action:** Phase 022 plan 022-02 (integration suite) landed — fixture at example-projects/migration-consent/, suite at test/integration/migration-consent suite/ with Test 0-3 (cleanup-pin, Case 1 silent, Case 2 Migrate & delete, Case 3 Overwrite & delete), registered in runTestSuites.ts. Unit tests 836 passing; ESLint clean; tsc clean. Sandbox blocker on .vscode/*.json writes from prior session was resolved interactively.
+**Next action:** Run /gsd-verify-work on phase 022 (or gsd-verifier), then /gsd-complete-milestone v1.5.0.
 **Loaded context:** PROJECT.md, REQUIREMENTS.md, MILESTONES.md, config.json.
