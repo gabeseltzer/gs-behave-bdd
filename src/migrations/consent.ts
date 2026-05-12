@@ -289,6 +289,16 @@ export async function runConsentFlow(
   for (const group of groups) {
     await processGroup(group, wkspUri, mode);
   }
+
+  // Restore the D-18 contract: WorkspaceSettings cache reflects post-migration
+  // state. The Phase 16 activation flow re-loaded after migrateLegacyFeaturesPath
+  // ran inline. Phase 21 moved migrations to fire-and-forget runConsentFlow, so
+  // the activation-time reloadSettings() now happens BEFORE migrations write to
+  // VS Code config — leaving the cache stale. Reloading here costs one read per
+  // workspace and only runs when there was actually at least one consent hit.
+  if (groups.length > 0) {
+    config.reloadSettings(wkspUri);
+  }
 }
 
 async function processGroup(group: ConsentGroup, wkspUri: vscode.Uri, mode: MigrationMode): Promise<void> {

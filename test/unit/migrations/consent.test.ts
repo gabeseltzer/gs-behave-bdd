@@ -83,6 +83,14 @@ function makePerKeyScopedConfig(
 function stubLogger(): { logInfo: sinon.SinonSpy } {
   const logInfo = sinon.spy();
   sinon.stub(configModule.config, 'logger').value({ logInfo });
+  // Phase 22 / 022-02 UAT regression fix: runConsentFlow now calls
+  // config.reloadSettings(wkspUri) once at the end so the WorkspaceSettings
+  // cache reflects post-migration state (restoring the D-18 contract that
+  // Phase 21's fire-and-forget design accidentally broke). The unit-test
+  // vscode mock doesn't provide all required settings, so reloadSettings
+  // throws on missing 'multiRootRunWorkspacesInParallel' etc. — stub it
+  // to a no-op so these tests stay focused on consent logic.
+  sinon.stub(configModule.config, 'reloadSettings').callsFake(() => undefined);
   return { logInfo };
 }
 
