@@ -210,6 +210,15 @@ async function runTestSuites() {
       launchArgs
     });
 
+    launchArgs = ["example-projects/migration-consent"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './migration-consent suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
     console.log("test run complete");
 
   } catch (err) {
