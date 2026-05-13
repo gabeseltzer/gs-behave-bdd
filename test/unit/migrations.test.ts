@@ -630,35 +630,31 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
     );
   });
 
-  // Phase 22 bugfix regression test. Before the fix, recheckMigrations cleared
-  // completedMigrations and re-ran the evaluator but never invoked runConsentFlow
-  // — case-2 / case-3 hits were classified and dropped, no prompt ever fired.
-  // This test pins the wiring: a real case-2 condition (legacy key set at the
-  // cleared scope, canonical absent) must result in exactly one
-  // showInformationMessage call with the case-2 button set.
-  test('4.10: post-clear — case-2 legacy key triggers consent prompt (regression)', async () => {
+  // 260513-o1k regression test, updated for 260513-oh5: before that fix,
+  // recheckMigrations cleared completedMigrations and re-ran the evaluator
+  // but never invoked runConsentFlow — case-2 / case-3 hits were classified
+  // and dropped. After 260513-oh5, the consent surface is a diagnostic in the
+  // Problems pane plus a single summary toast. We pin both.
+  test('4.10: post-clear — case-2 legacy key publishes diagnostic + summary toast (regression)', async () => {
     sinon.restore();
-    // Re-establish stubs after restore.
     updateSpy = sinon.spy(() => Promise.resolve());
-    const { logInfo: _logInfo } = stubLogger();
+    stubLogger();
     sinon.stub(configModule.config, 'reloadSettings').callsFake(() => undefined);
+    // diagnostics.ts reads files for JSONC range parsing — return empty.
+    sinon.stub(vscode.workspace.fs, 'readFile').resolves(Buffer.from('{}'));
     // 'behave-vsc.justMyCode' set at Global, 'gs-behave-bdd.justMyCode' unset
     // → case 2 hit at Global after the recheck clears completedMigrations.
-    // The makePerKeyScopedConfig stub is namespace-blind (same key returns the
-    // same scope tuple for any namespace), which would conflate source/dest and
-    // mis-classify as case 3. Use a namespace-aware stub here so source has a
-    // globalValue and dest is empty.
+    // The makePerKeyScopedConfig stub is namespace-blind; use a namespace-aware
+    // stub here so source has a globalValue and dest is empty.
     const legacyCfg = makePerKeyScopedConfig(
       { justMyCode: { globalValue: false } },
       updateSpy,
     );
     const canonicalCfg = makePerKeyScopedConfig(
       {
-        completedMigrations: {}, // dest namespace: nothing set anywhere
+        completedMigrations: {},
         // readMigrationMode calls cfg.get('migrationMode', 'prompt'). The stub's
-        // get() ignores the defaultValue argument, so we have to seed it
-        // explicitly — otherwise mode resolves to undefined and processGroup
-        // takes the silent skip path instead of prompting.
+        // get() ignores defaultValue, so seed it explicitly.
         migrationMode: { globalValue: 'prompt' },
       },
       updateSpy,
@@ -672,30 +668,44 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
       Promise.resolve((arr as { label: string }[]).find(i => i.label === 'Global')),
     );
     const showInfoStub = sinon.stub(vscode.window, 'showInformationMessage')
-      // User dismisses — we only care that the prompt was offered.
       .resolves(undefined);
+
+    // Lazy import to avoid suite-level dependency on diagnostics module shape.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    const diag = require('../../src/migrations') as typeof import('../../src/migrations');
+    diag.disposeDiagnosticCollection();
 
     await recheckMigrationsCommandHandler();
 
-    // Filter for the justMyCode prompt — other registry entries are case-1
-    // (silent) under this stub, so showInformationMessage should fire exactly
-    // once and only for justMyCode.
-    const promptCalls = showInfoStub.getCalls();
+    // Summary toast fires exactly once.
     assert.strictEqual(
-      promptCalls.length,
+      showInfoStub.callCount,
       1,
-      `runConsentFlow must surface case-2 prompt after recheck clear (got ${promptCalls.length} calls)`,
+      `summary toast must fire once after recheck clear (got ${showInfoStub.callCount} calls)`,
     );
-    const buttons = promptCalls[0].args.slice(2);
-    assert.deepStrictEqual(
-      buttons,
-      ['Migrate & delete', 'Migrate & keep', "Don't migrate"],
-      'case-2 button set must match',
-    );
-    const message = String(promptCalls[0].args[0]);
+    const summaryMsg = String(showInfoStub.firstCall.args[0]);
     assert.ok(
-      message.includes('behave-vsc.justMyCode'),
-      'prompt message must name the legacy key',
+      /legacy behave-vsc setting/.test(summaryMsg),
+      `summary toast should mention behave-vsc settings; got: ${summaryMsg}`,
     );
+
+    // Diagnostic was published for the justMyCode case-2 hit at Global scope.
+    let foundJustMyCode = false;
+    diag.getDiagnosticCollection().forEach((_uri, diags) => {
+      for (const d of diags) {
+        const decoded = diag.decodeDiagnosticCode(d.code);
+        if (!decoded) continue;
+        if (
+          decoded.entryId === 'justMyCode-from-behavevsc' &&
+          decoded.case === 2 &&
+          decoded.scope === vscode.ConfigurationTarget.Global
+        ) {
+          foundJustMyCode = true;
+        }
+      }
+    });
+    assert.ok(foundJustMyCode, 'expected a Diagnostic with justMyCode-from-behavevsc::2::Global code');
+
+    diag.disposeDiagnosticCollection();
   });
 });

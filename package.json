@@ -374,6 +374,8 @@
 		"webpack-cli": "^4.8.0"
 	},
 	"dependencies": {
+		"jsonc-parser": "^3.3.1",
+		"smol-toml": "^1.6.1",
 		"xml2js": "^0.6.2"
 	}
 }

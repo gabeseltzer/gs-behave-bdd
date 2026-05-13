@@ -99,19 +99,26 @@ export class Selection {
 }
 
 export class DiagnosticCollection {
-  private diagnostics = new Map<string, Diagnostic[]>();
+  // 260513-oh5: keep the original Uri object so consumers iterating via
+  // forEach get a real Uri (not just the string key). Map keys remain strings
+  // for set/get/delete lookup parity with VS Code's behavior.
+  private diagnostics = new Map<string, { uri: Uri; diags: Diagnostic[] }>();
 
   clear() { this.diagnostics.clear(); }
   delete(uri: Uri) { this.diagnostics.delete(uri.toString()); }
   dispose() { this.diagnostics.clear(); }
-  forEach() { /* mock */ }
-  get(uri: Uri): Diagnostic[] { return this.diagnostics.get(uri.toString()) || []; }
+  forEach(callback: (uri: Uri, diagnostics: readonly Diagnostic[]) => void): void {
+    for (const { uri, diags } of this.diagnostics.values()) {
+      callback(uri, diags);
+    }
+  }
+  get(uri: Uri): Diagnostic[] { return this.diagnostics.get(uri.toString())?.diags ?? []; }
   has(uri: Uri): boolean { return this.diagnostics.has(uri.toString()); }
   set(uri: Uri, diagnostics: Diagnostic[] | undefined) {
     if (diagnostics === undefined || diagnostics.length === 0) {
       this.diagnostics.delete(uri.toString());
     } else {
-      this.diagnostics.set(uri.toString(), diagnostics);
+      this.diagnostics.set(uri.toString(), { uri, diags: diagnostics });
     }
   }
 }
@@ -203,8 +210,21 @@ export const languages = {
   registerDocumentSymbolProvider: () => ({ dispose: () => { /* mock */ } }),
   registerReferenceProvider: () => ({ dispose: () => { /* mock */ } }),
   registerDocumentSemanticTokensProvider: (_selector: unknown, _provider: unknown, _legend: unknown) => ({ dispose: () => { /* mock */ } }),
-  registerCodeLensProvider: (_selector: unknown, _provider: unknown) => ({ dispose: () => { /* mock */ } })
+  registerCodeLensProvider: (_selector: unknown, _provider: unknown) => ({ dispose: () => { /* mock */ } }),
+  registerCodeActionsProvider: (_selector: unknown, _provider: unknown, _meta?: unknown) => ({ dispose: () => { /* mock */ } }),
 };
+
+// 260513-oh5: CodeAction surface used by MigrationCodeActionProvider.
+export class CodeAction {
+  public diagnostics?: Diagnostic[];
+  public command?: { command: string; title: string; arguments?: unknown[] };
+  constructor(public title: string, public readonly kind?: CodeActionKind) { }
+}
+
+export class CodeActionKind {
+  static readonly QuickFix = new CodeActionKind('quickfix');
+  constructor(public readonly value: string) { }
+}
 
 export const window = {
   showWarningMessage: () => Promise.resolve(undefined),
