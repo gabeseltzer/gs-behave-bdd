@@ -24,6 +24,7 @@ import * as vscode from 'vscode';
 import { config } from '../configuration';
 import { migrateScopedSetting } from '../notifications';
 import { markMigrationFinishedAtScope } from './completedMigrations';
+import { clearDiagnosticsForEntryAtScope, publishConsentDiagnostics } from './diagnostics';
 import type { MigrationEntry, MigrationScope } from './types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,8 +108,12 @@ export function formatCase3Message(entry: MigrationEntry, scopes: readonly Migra
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Case 2 actions
+//
+// Phase v1.5.0 follow-up (260513-oh5): each handler now also clears the
+// matching diagnostic on success so the Problems pane reflects the new state
+// immediately when the user clicks a quick-fix.
 
-async function runMigrateAndDelete(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
+export async function runMigrateAndDelete(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
   await migrateScopedSetting({
     namespace: entry.sourceNamespace,
     sourceKey: entry.sourceKey,
@@ -122,10 +127,11 @@ async function runMigrateAndDelete(entry: MigrationEntry, scope: MigrationScope,
     },
   });
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
+  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: migrate-and-delete at ${describeScope(scope)} — done.`, wkspUri);
 }
 
-async function runMigrateAndKeep(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
+export async function runMigrateAndKeep(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
   await migrateScopedSetting({
     namespace: entry.sourceNamespace,
     sourceKey: entry.sourceKey,
@@ -139,30 +145,34 @@ async function runMigrateAndKeep(entry: MigrationEntry, scope: MigrationScope, w
     },
   });
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
+  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: migrate-and-keep at ${describeScope(scope)} — done.`, wkspUri);
 }
 
-async function runDontMigrate(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
+export async function runDontMigrate(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
   // No primitive call; pure no-op write semantically. Always marks Finished.
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
+  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: dont-migrate at ${describeScope(scope)} — done.`, wkspUri);
 }
 
 // Case 3 actions
 
-async function runOverwriteAndDelete(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
+export async function runOverwriteAndDelete(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
   await runOverwriteAtScope(entry, scope, wkspUri, /* removeSource */ true);
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
+  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: overwrite-and-delete at ${describeScope(scope)} — done.`, wkspUri);
 }
 
-async function runOverwriteAndKeep(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
+export async function runOverwriteAndKeep(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
   await runOverwriteAtScope(entry, scope, wkspUri, /* removeSource */ false);
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
+  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: overwrite-and-keep at ${describeScope(scope)} — done.`, wkspUri);
 }
 
-async function runKeepCanonicalAndDeleteLegacy(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
+export async function runKeepCanonicalAndDeleteLegacy(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
   await migrateScopedSetting({
     namespace: entry.sourceNamespace,
     sourceKey: entry.sourceKey,
@@ -172,12 +182,14 @@ async function runKeepCanonicalAndDeleteLegacy(entry: MigrationEntry, scope: Mig
     transform: () => ({ kind: 'skipDest', removeSource: true }),
   });
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
+  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: keep-canonical-and-delete-legacy at ${describeScope(scope)} — done.`, wkspUri);
 }
 
-async function runKeepBoth(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
+export async function runKeepBoth(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
   // No primitive call; pure no-op write semantically. Always marks Finished.
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
+  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: keep-both at ${describeScope(scope)} — done.`, wkspUri);
 }
 
@@ -284,94 +296,67 @@ export async function runConsentFlow(
     return a.case - b.case;
   });
 
-  // ── 2. Sequentially process each group ───────────────────────────────────
+  // ── 2. Apply silent migrationMode dispatch for case-2 groups ─────────────
+  // (case 3 always prompts, regardless of mode — D-A4.3)
+  const promptBoundHits: ConsentHit[] = [];
   for (const group of groups) {
-    await processGroup(group, wkspUri, mode);
+    if (group.case === 2 && mode !== 'prompt') {
+      await processCase2Silent(group, wkspUri, mode);
+      continue;
+    }
+    for (const scope of group.scopes) {
+      promptBoundHits.push({ case: group.case, entry: group.entry, scope });
+    }
+  }
+
+  // ── 3. Publish diagnostics + summary toast for prompt-bound hits ─────────
+  // 260513-oh5: replaces the per-(entry,case) showInformationMessage prompts.
+  // The Code Action quick-fixes on each diagnostic invoke the same action
+  // handlers via the gs-behave-bdd.migration.action command.
+  if (promptBoundHits.length > 0) {
+    const published = await publishConsentDiagnostics(wkspUri, promptBoundHits);
+    if (published > 0) {
+      const n = published;
+      const noun = n === 1 ? 'legacy behave-vsc setting needs' : `legacy behave-vsc settings need`;
+      const message = `${n} ${noun} attention. Open the Problems pane and use the quick-fix to choose what to do.`;
+      // Fire-and-forget summary toast — no buttons; the diagnostic carries
+      // the actual decision. We don't await because activation should not
+      // block on UI.
+      void vscode.window.showInformationMessage(message);
+    }
   }
 
   // Restore the D-18 contract: WorkspaceSettings cache reflects post-migration
-  // state. The Phase 16 activation flow re-loaded after migrateLegacyFeaturesPath
-  // ran inline. Phase 21 moved migrations to fire-and-forget runConsentFlow, so
-  // the activation-time reloadSettings() now happens BEFORE migrations write to
-  // VS Code config — leaving the cache stale. Reloading here costs one read per
-  // workspace and only runs when there was actually at least one consent hit.
+  // state. Only reload when there was actually a consent hit (silent or
+  // prompt-bound), to avoid touching the cache on every activation tick.
   if (groups.length > 0) {
     config.reloadSettings(wkspUri);
   }
 }
 
-async function processGroup(group: ConsentGroup, wkspUri: vscode.Uri, mode: MigrationMode): Promise<void> {
+async function processCase2Silent(group: ConsentGroup, wkspUri: vscode.Uri, mode: MigrationMode): Promise<void> {
   const { entry, scopes } = group;
-
-  // ── Case 2 silent paths (D-A4.2 / CONSENT-06) ──────────────────────────
-  if (group.case === 2 && mode !== 'prompt') {
-    if (mode === 'migrate-and-delete') {
-      await dispatchOverScopes(scopes, entry, wkspUri, runMigrateAndDelete);
-      return;
-    }
-    if (mode === 'migrate-and-keep') {
-      await dispatchOverScopes(scopes, entry, wkspUri, runMigrateAndKeep);
-      return;
-    }
-    // mode === 'skip': mark each scope Finished without running any action.
-    for (const scope of scopes) {
-      try {
-        await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
-        config.logger.logInfo(`Migration ${entry.id}: skip at ${describeScope(scope)} — done.`, wkspUri);
-      } catch (e) {
-        config.logger.logInfo(`Migration ${entry.id}: action at ${describeScope(scope)} failed: ${e}`, wkspUri);
-      }
-    }
+  if (mode === 'migrate-and-delete') {
+    await dispatchOverScopes(scopes, entry, wkspUri, runMigrateAndDelete);
     return;
   }
-
-  // ── Case 2 + prompt mode OR Case 3 (any mode, D-A4.3) — show prompt ────
-  const isCase2 = group.case === 2;
-  const message = isCase2 ? formatCase2Message(entry, scopes) : formatCase3Message(entry, scopes);
-  const buttons: string[] = isCase2
-    ? ['Migrate & delete', 'Migrate & keep', "Don't migrate"]
-    : ['Overwrite & delete', 'Overwrite & keep', 'Keep canonical', 'Keep both'];
-
-  const choice = await vscode.window.showInformationMessage(message, { modal: false }, ...buttons);
-
-  if (choice === undefined) {
-    // D-A7.1: dismissal — one audit line, no action, no markFinished.
-    const scopeList = scopes.map(describeScope).join(', ');
-    config.logger.logInfo(
-      `Migration ${entry.id}: dismissed at ${scopeList} — will re-surface next activation.`,
-      wkspUri,
-    );
+  if (mode === 'migrate-and-keep') {
+    await dispatchOverScopes(scopes, entry, wkspUri, runMigrateAndKeep);
     return;
   }
-
-  const handler = handlerForButton(choice);
-  if (!handler) {
-    // Defensive: VS Code returned something we didn't ask for. Treat as dismissal.
-    const scopeList = scopes.map(describeScope).join(', ');
-    config.logger.logInfo(
-      `Migration ${entry.id}: dismissed at ${scopeList} — will re-surface next activation.`,
-      wkspUri,
-    );
-    return;
+  // mode === 'skip': mark each scope Finished without running any action.
+  for (const scope of scopes) {
+    try {
+      await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
+      clearDiagnosticsForEntryAtScope(entry, scope);
+      config.logger.logInfo(`Migration ${entry.id}: skip at ${describeScope(scope)} — done.`, wkspUri);
+    } catch (e) {
+      config.logger.logInfo(`Migration ${entry.id}: action at ${describeScope(scope)} failed: ${e}`, wkspUri);
+    }
   }
-
-  await dispatchOverScopes(scopes, entry, wkspUri, handler);
 }
 
 type ActionHandler = (entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri) => Promise<void>;
-
-function handlerForButton(label: string): ActionHandler | undefined {
-  switch (label) {
-    case 'Migrate & delete': return runMigrateAndDelete;
-    case 'Migrate & keep': return runMigrateAndKeep;
-    case "Don't migrate": return runDontMigrate;
-    case 'Overwrite & delete': return runOverwriteAndDelete;
-    case 'Overwrite & keep': return runOverwriteAndKeep;
-    case 'Keep canonical': return runKeepCanonicalAndDeleteLegacy;
-    case 'Keep both': return runKeepBoth;
-    default: return undefined;
-  }
-}
 
 // D-A5.4: each per-scope handler invocation is wrapped in its own try/catch.
 // A failure is logged and the loop continues; the failing scope is NOT marked

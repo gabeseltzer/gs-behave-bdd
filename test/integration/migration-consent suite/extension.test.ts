@@ -10,6 +10,9 @@ import {
 	runConsentFlow,
 	readMigrationMode,
 	type ConsentHit,
+	dispatchMigrationAction,
+	getDiagnosticCollection,
+	decodeDiagnosticCode,
 } from '../../../src/migrations';
 
 
@@ -145,23 +148,56 @@ suite('migration-consent suite', () => {
 	});
 
 	// Test 2: Case 2 + 'Migrate & delete' — runParallel migration.
-	// Legacy behave-vsc.runParallel = true, canonical unset → prompt fires →
-	// stub returns 'Migrate & delete' → canonical written, legacy cleared,
-	// migration id `runParallel-from-behavevsc` marked Finished.
+	// 260513-oh5 contract: drive() publishes the diagnostic + summary toast,
+	// then we invoke dispatchMigrationAction directly (the same code path the
+	// Code Action quick-fix triggers). Asserts the post-action settings.json
+	// shape is unchanged from the prior toast-driven design.
 	test('Test 2: Case 2 Migrate & delete migrates runParallel', async function () {
 		this.timeout(60000);
 		const stub = vscode.window.showInformationMessage as unknown as sinon.SinonStub;
 		stub.resetHistory();
-		stub.callsFake((async (_msg: string, ..._items: unknown[]) => {
-			const buttons = _items.filter((x): x is string => typeof x === 'string');
-			if (buttons.includes('Migrate & delete')) return 'Migrate & delete';
-			return undefined;
-		}) as unknown as typeof vscode.window.showInformationMessage);
+		// Summary toast has no buttons — return undefined so it's a pure no-op.
+		stub.callsFake((async () => undefined) as unknown as typeof vscode.window.showInformationMessage);
 
 		await clearCompleted();
 		await swapSettings('case-2');
 		await drive();
 		await new Promise(t => setTimeout(t, 2000));
+
+		// (2 — summary toast fired) The single summary toast must have fired,
+		// signaling the user that there's a migration to handle in the Problems
+		// pane.
+		assert.ok(
+			stub.getCalls().length >= 1,
+			`expected summary toast to fire (got ${stub.getCalls().length} calls)`,
+		);
+		const summaryFired = stub.getCalls().some(c => /legacy behave-vsc setting/.test(String(c.args[0])));
+		assert.ok(summaryFired, 'expected at least one summary toast naming the legacy keys');
+
+		// (2 — diagnostic published) Locate the runParallel case-2 diagnostic
+		// at WorkspaceFolder scope, then dispatch the migrate-and-delete action.
+		const diagCollection = getDiagnosticCollection();
+		let runParallelDiag: { code: string; scope: number } | undefined;
+		diagCollection.forEach((_uri, diags) => {
+			for (const d of diags) {
+				const decoded = decodeDiagnosticCode(d.code);
+				if (!decoded) continue;
+				if (decoded.entryId === 'runParallel-from-behavevsc' && decoded.case === 2) {
+					runParallelDiag = { code: String(d.code), scope: decoded.scope };
+				}
+			}
+		});
+		assert.ok(runParallelDiag, 'expected a runParallel-from-behavevsc case-2 diagnostic to be published');
+
+		await dispatchMigrationAction({
+			entryId: 'runParallel-from-behavevsc',
+			case: 2,
+			scope: runParallelDiag.scope as 1 | 2 | 3,
+			action: 'migrate-and-delete',
+			wkspUri: wkspUri.toString(),
+		});
+		// Let VS Code persist the cfg.update() writes to disk.
+		await new Promise(t => setTimeout(t, 500));
 
 		const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
 		assert.strictEqual(
@@ -189,33 +225,50 @@ suite('migration-consent suite', () => {
 	});
 
 	// Test 3: Case 3 + 'Overwrite & delete' — featuresPath migration.
-	// Legacy behave-vsc.featuresPath = "features-alt" AND canonical
-	// gs-behave-bdd.featuresPaths = ["features"] → 4-button prompt fires →
-	// stub returns 'Overwrite & delete' → per consent.ts:185-204
-	// runOverwriteAtScope passes undefined as destAtSameScope, so the
-	// featuresPath transform produces a CLEAN OVERWRITE:
-	// final featuresPaths === ['features-alt'] (prior canonical replaced).
+	// 260513-oh5 contract: drive() publishes a case-3 diagnostic (case-3
+	// always prompts regardless of migrationMode — D-A4.3), then we invoke
+	// dispatchMigrationAction directly to perform the clean overwrite that
+	// runOverwriteAtScope guarantees (per consent.ts: passes undefined as
+	// destAtSameScope so the transform produces the legacy value verbatim).
 	test('Test 3: Case 3 Overwrite & delete cleanly overwrites featuresPaths', async function () {
 		this.timeout(60000);
 		const stub = vscode.window.showInformationMessage as unknown as sinon.SinonStub;
 		stub.resetHistory();
-		stub.callsFake((async (_msg: string, ..._items: unknown[]) => {
-			const buttons = _items.filter((x): x is string => typeof x === 'string');
-			if (buttons.includes('Overwrite & delete')) return 'Overwrite & delete';
-			return undefined;
-		}) as unknown as typeof vscode.window.showInformationMessage);
+		stub.callsFake((async () => undefined) as unknown as typeof vscode.window.showInformationMessage);
 
 		await clearCompleted();
 		await swapSettings('case-3');
 		await drive();
 		await new Promise(t => setTimeout(t, 2000));
 
-		// (3 — prompt fired) The case-3 prompt with the 4-button label set
-		// must have fired at least once.
+		// (3 — summary toast fired) Case 3 still prompts via the summary toast.
 		assert.ok(
-			stub.getCalls().some(c => c.args.some(a => a === 'Overwrite & delete')),
-			'case-3 prompt with "Overwrite & delete" button should have fired',
+			stub.getCalls().some(c => /legacy behave-vsc setting/.test(String(c.args[0]))),
+			'expected summary toast for the case-3 hit',
 		);
+
+		// (3 — case-3 diagnostic for featuresPath published)
+		const diagCollection = getDiagnosticCollection();
+		let featuresPathDiag: { scope: number } | undefined;
+		diagCollection.forEach((_uri, diags) => {
+			for (const d of diags) {
+				const decoded = decodeDiagnosticCode(d.code);
+				if (!decoded) continue;
+				if (decoded.entryId === 'featuresPath-from-behavevsc' && decoded.case === 3) {
+					featuresPathDiag = { scope: decoded.scope };
+				}
+			}
+		});
+		assert.ok(featuresPathDiag, 'expected a featuresPath-from-behavevsc case-3 diagnostic');
+
+		await dispatchMigrationAction({
+			entryId: 'featuresPath-from-behavevsc',
+			case: 3,
+			scope: featuresPathDiag.scope as 1 | 2 | 3,
+			action: 'overwrite-and-delete',
+			wkspUri: wkspUri.toString(),
+		});
+		await new Promise(t => setTimeout(t, 500));
 
 		// (3a — canonical contains overwrite value, exactly)
 		const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
@@ -227,7 +280,7 @@ suite('migration-consent suite', () => {
 		);
 		assert.deepStrictEqual(
 			paths, ['features-alt'],
-			`featuresPaths should be exactly ['features-alt'] (clean overwrite per consent.ts:185-204 runOverwriteAtScope passes undefined as destAtSameScope); got: ${JSON.stringify(paths)}`,
+			`featuresPaths should be exactly ['features-alt'] (clean overwrite — runOverwriteAtScope passes undefined as destAtSameScope); got: ${JSON.stringify(paths)}`,
 		);
 
 		// (3b — legacy key removed from settings.json)

@@ -7,3 +7,21 @@ export { evaluateMigration, evaluateAllMigrations } from './evaluator';
 export { recheckMigrationsCommandHandler } from './recheckCommand';
 export { runConsentFlow, readMigrationMode } from './consent';
 export type { Case2Action, Case3Action, MigrationMode, ConsentHit } from './consent';
+export {
+  MIGRATION_DIAG_SOURCE,
+  getDiagnosticCollection,
+  disposeDiagnosticCollection,
+  publishConsentDiagnostics,
+  clearDiagnosticsForEntryAtScope,
+  resolveAnchorUri,
+  computeRange,
+  buildDiagnosticMessage,
+  encodeDiagnosticCode,
+  decodeDiagnosticCode,
+} from './diagnostics';
+export {
+  MIGRATION_ACTION_COMMAND,
+  MigrationCodeActionProvider,
+  dispatchMigrationAction,
+  type MigrationActionArgs,
+} from './codeActions';
