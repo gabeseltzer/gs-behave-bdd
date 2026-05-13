@@ -485,6 +485,11 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
   setup(() => {
     updateSpy = sinon.spy(() => Promise.resolve());
     stubLogger();
+    // Phase 22 bugfix: handler now invokes runConsentFlow, which calls
+    // config.reloadSettings(wkspUri) when there is at least one consent hit.
+    // The unit-test vscode mock doesn't provide every WorkspaceSettings key, so
+    // reloadSettings would throw — stub to a no-op (mirrors consent.test.ts).
+    sinon.stub(configModule.config, 'reloadSettings').callsFake(() => undefined);
     // Default: cfg.update succeeds. Tests can override via the spy reference.
     sinon.stub(vscode.workspace, 'getConfiguration').returns(
       makePerKeyScopedConfig({}, updateSpy),
@@ -607,20 +612,90 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
     assert.strictEqual(logInfo.called, true, 'failure logged via logInfo');
   });
 
-  test('4.9: post-clear — evaluator runs for every registry entry (all case 1, onCaseHit fires)', async () => {
+  test('4.9: post-clear — evaluator runs for every registry entry (all case 1, finished markers written)', async () => {
     setWorkspace({ workspaceFile: undefined, workspaceFolders: [{ uri: MOCK_URI }] });
     showQuickPickStub.callsFake((arr: { label: string }[]) =>
       Promise.resolve(arr.find(i => i.label === 'Global')),
     );
-    const onCaseHit = sinon.spy();
-    await recheckMigrationsCommandHandler({ onCaseHit });
-    // Phase 20: MIGRATION_REGISTRY now has 11 plain entries; all are case 1 at
-    // every scope (stub returns undefined for all keys), so onCaseHit fires
-    // 11 entries × 3 scopes = 33 times with case: 1.
-    assert.strictEqual(onCaseHit.called, true, 'onCaseHit should fire for case-1 entries');
+    await recheckMigrationsCommandHandler();
+    // Phase 20: MIGRATION_REGISTRY has 11 plain entries; all are case 1 at every
+    // scope (stub returns undefined for all source/dest keys), so each entry
+    // writes its id into completedMigrations at all 3 scopes. The clear write at
+    // the start adds 1 more completedMigrations call. We assert the evaluator
+    // actually ran by counting completedMigrations writes > 1.
+    const finishedWrites = updateSpy.getCalls().filter(c => c.args[0] === 'completedMigrations');
     assert.ok(
-      onCaseHit.getCalls().every(c => c.args[0] === 1),
-      'all hook calls should be case 1 (neither set)',
+      finishedWrites.length > 1,
+      `evaluator must run after clear (expected >1 completedMigrations writes, got ${finishedWrites.length})`,
+    );
+  });
+
+  // Phase 22 bugfix regression test. Before the fix, recheckMigrations cleared
+  // completedMigrations and re-ran the evaluator but never invoked runConsentFlow
+  // — case-2 / case-3 hits were classified and dropped, no prompt ever fired.
+  // This test pins the wiring: a real case-2 condition (legacy key set at the
+  // cleared scope, canonical absent) must result in exactly one
+  // showInformationMessage call with the case-2 button set.
+  test('4.10: post-clear — case-2 legacy key triggers consent prompt (regression)', async () => {
+    sinon.restore();
+    // Re-establish stubs after restore.
+    updateSpy = sinon.spy(() => Promise.resolve());
+    const { logInfo: _logInfo } = stubLogger();
+    sinon.stub(configModule.config, 'reloadSettings').callsFake(() => undefined);
+    // 'behave-vsc.justMyCode' set at Global, 'gs-behave-bdd.justMyCode' unset
+    // → case 2 hit at Global after the recheck clears completedMigrations.
+    // The makePerKeyScopedConfig stub is namespace-blind (same key returns the
+    // same scope tuple for any namespace), which would conflate source/dest and
+    // mis-classify as case 3. Use a namespace-aware stub here so source has a
+    // globalValue and dest is empty.
+    const legacyCfg = makePerKeyScopedConfig(
+      { justMyCode: { globalValue: false } },
+      updateSpy,
+    );
+    const canonicalCfg = makePerKeyScopedConfig(
+      {
+        completedMigrations: {}, // dest namespace: nothing set anywhere
+        // readMigrationMode calls cfg.get('migrationMode', 'prompt'). The stub's
+        // get() ignores the defaultValue argument, so we have to seed it
+        // explicitly — otherwise mode resolves to undefined and processGroup
+        // takes the silent skip path instead of prompting.
+        migrationMode: { globalValue: 'prompt' },
+      },
+      updateSpy,
+    );
+    sinon.stub(vscode.workspace, 'getConfiguration').callsFake(
+      (section?: string) => (section === 'behave-vsc' ? legacyCfg : canonicalCfg),
+    );
+    sinon.stub(vscode.workspace, 'workspaceFile').value(undefined);
+    sinon.stub(vscode.workspace, 'workspaceFolders').value([{ uri: MOCK_URI }]);
+    sinon.stub(vscode.window, 'showQuickPick').callsFake((arr: unknown) =>
+      Promise.resolve((arr as { label: string }[]).find(i => i.label === 'Global')),
+    );
+    const showInfoStub = sinon.stub(vscode.window, 'showInformationMessage')
+      // User dismisses — we only care that the prompt was offered.
+      .resolves(undefined);
+
+    await recheckMigrationsCommandHandler();
+
+    // Filter for the justMyCode prompt — other registry entries are case-1
+    // (silent) under this stub, so showInformationMessage should fire exactly
+    // once and only for justMyCode.
+    const promptCalls = showInfoStub.getCalls();
+    assert.strictEqual(
+      promptCalls.length,
+      1,
+      `runConsentFlow must surface case-2 prompt after recheck clear (got ${promptCalls.length} calls)`,
+    );
+    const buttons = promptCalls[0].args.slice(2);
+    assert.deepStrictEqual(
+      buttons,
+      ['Migrate & delete', 'Migrate & keep', "Don't migrate"],
+      'case-2 button set must match',
+    );
+    const message = String(promptCalls[0].args[0]);
+    assert.ok(
+      message.includes('behave-vsc.justMyCode'),
+      'prompt message must name the legacy key',
     );
   });
 });
