@@ -74,22 +74,21 @@ function joinScopes(scopes: readonly MigrationScope[]): string {
 // Message formatters (D-A6 prompt copy)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// VS Code's showInformationMessage renders plain text only — no Markdown — so
+// we keep the copy terse and let the button labels describe each action. The
+// detailed per-action descriptions from the design doc live in the README /
+// migration docs instead.
 export function formatCase2Message(entry: MigrationEntry, scopes: readonly MigrationScope[]): string {
   return (
-    `\`${entry.sourceNamespace}.${entry.sourceKey}\` is set ${joinScopes(scopes)} but \`${entry.destNamespace}.${entry.destKey}\` is not.\n\n` +
-    `- **Migrate & delete**: copy the legacy value to the canonical setting and clear the legacy entry.\n` +
-    `- **Migrate & keep**: copy the value but leave the legacy entry in place.\n` +
-    `- **Don't migrate**: skip this migration. The extension will stop reading the legacy fallback in a future version.`
+    `${entry.sourceNamespace}.${entry.sourceKey} is set ${joinScopes(scopes)} but ${entry.destNamespace}.${entry.destKey} is not. ` +
+    `Migrate the legacy value to the new setting?`
   );
 }
 
 export function formatCase3Message(entry: MigrationEntry, scopes: readonly MigrationScope[]): string {
   return (
-    `Both \`${entry.sourceNamespace}.${entry.sourceKey}\` and \`${entry.destNamespace}.${entry.destKey}\` are set ${joinScopes(scopes)}.\n\n` +
-    `- **Overwrite & delete**: replace the canonical value with the legacy value and clear the legacy entry.\n` +
-    `- **Overwrite & keep**: replace the canonical value with the legacy value, keep the legacy entry.\n` +
-    `- **Keep canonical**: leave the canonical value, clear the legacy entry.\n` +
-    `- **Keep both**: leave both values untouched.`
+    `Both ${entry.sourceNamespace}.${entry.sourceKey} and ${entry.destNamespace}.${entry.destKey} are set ${joinScopes(scopes)}. ` +
+    `Which value should win?`
   );
 }
 
