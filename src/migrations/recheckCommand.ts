@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { config } from '../configuration';
-import { evaluateAllMigrations, type EvaluatorHooks } from './evaluator';
+import { runConsentFlow, readMigrationMode, type ConsentHit } from './consent';
+import { evaluateAllMigrations } from './evaluator';
 
 type QuickPickScopeId = 'global' | 'workspace' | 'workspaceFolder';
 
@@ -17,8 +18,15 @@ interface ScopePickItem extends vscode.QuickPickItem {
  * Phase 19 ships this against an empty registry (D-05) — no prompts will
  * fire until Phase 20 populates MIGRATION_REGISTRY and Phase 21 wires the
  * onCaseHit hook to notifications.
+ *
+ * Phase 22 bugfix: the handler previously accepted only an optional
+ * `EvaluatorHooks` parameter and never wired `runConsentFlow`. Production
+ * registered the command with no hooks (extension.ts), so case-2 / case-3
+ * hits were classified and dropped — no prompt ever fired after clearing
+ * completedMigrations. The handler now owns the full consent flow itself,
+ * mirroring the activation-time orchestration in extension.ts.
  */
-export async function recheckMigrationsCommandHandler(hooks?: EvaluatorHooks): Promise<void> {
+export async function recheckMigrationsCommandHandler(): Promise<void> {
   try {
     const items: ScopePickItem[] = [];
 
@@ -84,9 +92,23 @@ export async function recheckMigrationsCommandHandler(hooks?: EvaluatorHooks): P
 
     // D-08: reuse the activation-time evaluator path. Loop folders so each
     // workspace folder's WorkspaceFolder-scope state is re-classified.
+    //
+    // Phase 22 bugfix: collect case-2 / case-3 hits and dispatch through
+    // runConsentFlow so the user actually sees the prompt that justified
+    // running the recheck command. Sequential await (not fire-and-forget)
+    // because the user just clicked the menu item — they're waiting on the UI.
     if (folders) {
       for (const folder of folders) {
-        await evaluateAllMigrations(folder.uri, hooks);
+        const hits: ConsentHit[] = [];
+        await evaluateAllMigrations(folder.uri, {
+          onCaseHit: (mcase, entry, scope) => {
+            if (mcase === 2 || mcase === 3) {
+              hits.push({ case: mcase, entry, scope });
+            }
+          },
+        });
+        const mode = readMigrationMode(folder.uri);
+        await runConsentFlow(folder.uri, hits, mode);
       }
     }
   } catch (e) {
