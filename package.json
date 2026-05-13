@@ -114,7 +114,12 @@
 				"gs-behave-bdd.migrationMode": {
 					"scope": "resource",
 					"type": "string",
-					"enum": ["prompt", "migrate-and-delete", "migrate-and-keep", "skip"],
+					"enum": [
+						"prompt",
+						"migrate-and-delete",
+						"migrate-and-keep",
+						"skip"
+					],
 					"markdownDescription": "Default strategy for migrating legacy `behave-vsc.*` settings when only the legacy key is set (case 2): `prompt` (default) asks per scope, `migrate-and-delete` / `migrate-and-keep` apply silently, `skip` finishes without copying. Case 3 (both legacy and canonical set) always prompts regardless; run *Behave BDD: Recheck Migrations* to re-evaluate.",
 					"default": "prompt"
 				},
@@ -285,7 +290,7 @@
 	"name": "gs-behave-bdd",
 	"displayName": "Behave BDD",
 	"description": "Full langague support for Behave feature files. Run and debug tests. Navigate between steps and definitions. Forked from jimasp's behave-vsc",
-	"version": "1.4.1",
+	"version": "1.5.0",
 	"icon": "images/gs-behave-bdd.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",
