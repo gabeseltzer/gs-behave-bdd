@@ -4,6 +4,7 @@ import {
   runTests
 } from '@vscode/test-electron';
 import { getShortPathOnWindows, installMsPythonExtension } from './testRunUtils';
+import { snapshotFixtures, restoreFixtures } from './fixtureSnapshot';
 
 
 // Run the debug integration suite in a clean, standalone VSCode process.
@@ -13,12 +14,14 @@ import { getShortPathOnWindows, installMsPythonExtension } from './testRunUtils'
 // VSCode creates nested DAP sessions and can crash the outer window.
 
 async function runDebugSuite() {
+  const extensionDevelopmentPath = path.resolve(__dirname, '../../../..');
+  const exampleProjectsDir = path.resolve(extensionDevelopmentPath, 'example-projects');
+  const snapshots = snapshotFixtures(exampleProjectsDir);
   try {
     if (!process.argv[2] || !process.argv[2].startsWith('--')) {
       throw new Error(`Expected version arg like --insiders or --stable, got: ${process.argv[2]}`);
     }
     const version = process.argv[2].slice(2);
-    const extensionDevelopmentPath = path.resolve(__dirname, '../../../..');
 
     console.log(`checking for latest ${version} vscode...`);
     const vscodeExecutablePath = await downloadAndUnzipVSCode(version);
@@ -40,7 +43,9 @@ async function runDebugSuite() {
 
   } catch (err) {
     console.error('Failed to run debug suite, ', err);
-    process.exit(1);
+    process.exitCode = 1;
+  } finally {
+    restoreFixtures(snapshots);
   }
 }
 

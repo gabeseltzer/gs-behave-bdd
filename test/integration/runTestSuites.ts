@@ -4,6 +4,7 @@ import {
   runTests
 } from '@vscode/test-electron';
 import { getShortPathOnWindows, installMsPythonExtension } from './testRunUtils';
+import { snapshotFixtures, restoreFixtures } from './fixtureSnapshot';
 
 
 // this code handles `npm run test` or `npm run testinsiders`
@@ -13,9 +14,13 @@ import { getShortPathOnWindows, installMsPythonExtension } from './testRunUtils'
 
 
 async function runTestSuites() {
+  const extensionDevelopmentPath = path.resolve(__dirname, '../../../..');
+  const exampleProjectsDir = path.resolve(extensionDevelopmentPath, 'example-projects');
+  // Snapshot fixture settings.json / .code-workspace files so migration
+  // writes during the run don't pollute the worktree.
+  const snapshots = snapshotFixtures(exampleProjectsDir);
   try {
     const version = process.argv[2].slice(2);
-    const extensionDevelopmentPath = path.resolve(__dirname, '../../../..');
 
     // console.log("running pip...");
     // const result = cp.spawnSync("pip", ["install", "-r", path.resolve(extensionDevelopmentPath + "/requirements.txt")], {
@@ -223,7 +228,9 @@ async function runTestSuites() {
 
   } catch (err) {
     console.error('Failed to run tests, ', err);
-    process.exit(1);
+    process.exitCode = 1;
+  } finally {
+    restoreFixtures(snapshots);
   }
 }
 
