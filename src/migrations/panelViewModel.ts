@@ -21,6 +21,30 @@ import { readMigrationMode, type Case2Action, type Case3Action, type MigrationMo
 import { evaluateAllMigrations } from './evaluator';
 import type { MigrationEntry, MigrationScope } from './types';
 
+// Re-export `MigrationMode` so `panel.ts` and consumers can pull the enum type
+// from a single barrel without reaching into `consent.ts` directly. 023-03.
+export type { MigrationMode } from './consent';
+
+
+// 023-03 Task 1: surface mode metadata for the panel's Migration Mode picker.
+// Order is fixed (matches the spec's enum order) so the rendered buttons are
+// stable across reloads. Labels and descriptions are user-facing; tooltips on
+// the buttons in `panelHtml.ts` use the description string.
+export const MIGRATION_MODE_OPTIONS: readonly {
+  value: MigrationMode;
+  label: string;
+  description: string;
+}[] = [
+  { value: 'prompt',             label: 'Prompt',           description: 'Ask per scope (default)' },
+  { value: 'migrate-and-delete', label: 'Migrate & delete', description: 'Silently move legacy values and remove the legacy key' },
+  { value: 'migrate-and-keep',   label: 'Migrate & keep',   description: 'Silently copy legacy values and leave the legacy key' },
+  { value: 'skip',               label: 'Skip',             description: 'Finish without copying' },
+];
+
+// String-set form for fast membership checks during webview input validation.
+export const MIGRATION_MODE_VALUES: readonly MigrationMode[] =
+  MIGRATION_MODE_OPTIONS.map(o => o.value);
+
 
 export const CASE_2_BUTTONS: readonly { label: string; action: Case2Action }[] = [
   { label: 'Migrate & delete', action: 'migrate-and-delete' },
