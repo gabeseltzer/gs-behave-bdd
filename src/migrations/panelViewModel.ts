@@ -74,6 +74,10 @@ export interface PanelRow {
   case: 2 | 3;
   scope: MigrationScope;
   scopeLabel: string;
+  // Human-readable description of the case, value-aware so case 3 with
+  // matching values reads differently from case 3 with a real conflict.
+  // Computed in TS rather than the webview script so it can be unit-tested.
+  caseDescription: string;
   sourceKey: string;
   destKey: string;
   wkspUri: string;
@@ -109,6 +113,21 @@ export function describeScope(scope: MigrationScope): string {
     case vscode.ConfigurationTarget.Workspace: return 'Workspace';
     case vscode.ConfigurationTarget.WorkspaceFolder: return 'Workspace Folder';
   }
+}
+
+/**
+ * Maps (case, equalValues) → the human-readable row description the panel
+ * shows beneath the source → dest title. Exposed for unit tests; the webview
+ * script reads `row.caseDescription` directly.
+ */
+export function describeRowCase(rowCase: 2 | 3, equalValues: boolean): string {
+  if (rowCase === 2) {
+    return 'Legacy key is set; the canonical key is not yet set';
+  }
+  if (equalValues) {
+    return 'Both keys are set to the same value';
+  }
+  return 'Both keys are set, but to different values';
 }
 
 
@@ -202,6 +221,7 @@ function buildRow(
     case: mcase,
     scope,
     scopeLabel: describeScope(scope),
+    caseDescription: describeRowCase(mcase, equalValues),
     sourceKey: `${entry.sourceNamespace}.${entry.sourceKey}`,
     destKey: `${entry.destNamespace}.${entry.destKey}`,
     wkspUri: folder.uri.toString(),
