@@ -219,6 +219,32 @@ export function renderHtml(webview: vscode.Webview): string {
       color: var(--vscode-descriptionForeground);
       font-style: italic;
     }
+    .preview-popover .preview-desc {
+      font-family: var(--vscode-font-family);
+      color: var(--vscode-foreground);
+      font-size: 12px;
+      margin-bottom: 8px;
+      white-space: normal;
+      line-height: 1.4;
+      max-width: 480px;
+    }
+    /* Optimistic dismissal — applied on click before the host's stateUpdate
+       arrives. Disables further input, dims, and slides up so the user sees
+       immediate feedback instead of a perceptible pause. The render() call
+       triggered by the host's stateUpdate replaces innerHTML, so the
+       animation tears down naturally. */
+    .section.dismissing {
+      opacity: 0.4;
+      pointer-events: none;
+      transition: opacity 120ms ease-out;
+    }
+    .section.dismissing button {
+      cursor: default;
+    }
+    button[data-busy="true"] {
+      opacity: 0.7;
+      cursor: progress;
+    }
   </style>
 </head>
 <body>
@@ -266,6 +292,9 @@ export function renderHtml(webview: vscode.Webview): string {
       if (!(t instanceof HTMLButtonElement)) return;
 
       if (t.dataset.recheck === 'true') {
+        // Recheck takes a few hundred ms in the worst case (clears + re-evaluates
+        // every entry). Mark the button busy so the user sees something happened.
+        t.dataset.busy = 'true';
         vscode.postMessage({ kind: 'recheck' });
         return;
       }
@@ -276,6 +305,14 @@ export function renderHtml(webview: vscode.Webview): string {
       }
 
       if (typeof t.dataset.action === 'string' && t.dataset.action.length > 0) {
+        // Optimistic dismissal: hide the popover and dim/disable the row before
+        // posting the message. The host writes settings, recomputes the view
+        // model, and posts stateUpdate, which then replaces the entire row list
+        // via render(). If the dispatch is rejected (validation fails host-side),
+        // the next stateUpdate simply re-renders the row, so this is safe.
+        hidePreview();
+        const section = t.closest('.section');
+        if (section) section.classList.add('dismissing');
         vscode.postMessage({
           kind: 'dispatchAction',
           args: {
@@ -315,17 +352,23 @@ export function renderHtml(webview: vscode.Webview): string {
     }
 
     function showPreview(buttonEl, row, action) {
+      const desc = describeAction(row, action);
       const lines = buildPreviewLines(row, action);
+      const descHtml = desc
+        ? '<div class="preview-desc">' + escape(desc) + '</div>'
+        : '';
       if (lines.length === 0) {
         previewEl.innerHTML =
-          '<div class="preview-label">Effect</div>'
+          descHtml
+          + '<div class="preview-label">Effect</div>'
           + '<div class="preview-nochange">No changes to settings.json</div>';
       } else {
         const inner = lines.map(function (l) {
           return '<span class="' + l.cls + '">' + escape(l.text) + '</span>';
         }).join('\\n');
         previewEl.innerHTML =
-          '<div class="preview-label">Effect on ' + escape(row.scopeLabel) + ' settings.json</div>'
+          descHtml
+          + '<div class="preview-label">Effect on ' + escape(row.scopeLabel) + ' settings.json</div>'
           + inner;
       }
       // Position above the button. If it would go off the top of the viewport,
@@ -510,14 +553,16 @@ export function renderHtml(webview: vscode.Webview): string {
       ROW_DATA.set(rowKey, row);
 
       const buttons = row.buttons.map(function (b) {
+        // No title= attribute — the rich hover popover carries both the
+        // description and the diff, so a native browser tooltip on top would
+        // double up. Screen readers still announce the visible button label.
         return '<button type="button"'
           + ' data-action="' + escape(b.action) + '"'
           + ' data-entry-id="' + escape(row.entryId) + '"'
           + ' data-case="' + row.case + '"'
           + ' data-scope="' + row.scope + '"'
           + ' data-wksp-uri="' + escape(row.wkspUri) + '"'
-          + ' data-row-key="' + escape(rowKey) + '"'
-          + ' title="' + escape(describeAction(row, b.action)) + '">'
+          + ' data-row-key="' + escape(rowKey) + '">'
           + escape(b.label)
           + '</button>';
       }).join('');
