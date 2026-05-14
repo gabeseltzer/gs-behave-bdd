@@ -278,8 +278,12 @@ export const commands = {
 // 260514-djs: diagnostics.ts userDataFolderName() reads vscode.env.appName to
 // pick the right user-data folder for Global-scope anchors. Default to stable
 // VS Code; tests stub appName to exercise Insiders / VSCodium variants.
-export const env = {
+// 260514-dvt: remoteName tells us we're on a VS Code Server (devcontainer,
+// WSL, SSH-remote, etc.). Default undefined (local); tests stub to exercise
+// the server-data-dir path.
+export const env: { appName: string; remoteName: string | undefined } = {
   appName: 'Visual Studio Code',
+  remoteName: undefined,
 };
 
 export enum FileType {
