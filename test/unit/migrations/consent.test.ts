@@ -358,4 +358,155 @@ suite('consent.ts — runConsentFlow (023-04 panel-toast contract)', () => {
     const panelOpenCalls = execStub.getCalls().filter(c => c.args[0] === 'gs-behave-bdd.openMigrationsPanel');
     assert.strictEqual(panelOpenCalls.length, 0, 'dismissed toast must not open the panel');
   });
+
+  // ─── Single-folder dedupe (notification count + dispatch) ────────────────
+
+  suite('single-folder workspace dedupe', () => {
+    // Override the suite-level multi-root stub so these tests exercise the
+    // single-folder branch of runConsentFlow.
+    setup(() => {
+      sinon.restore();
+      updateSpy = sinon.spy(() => Promise.resolve());
+      ({ logInfo } = stubLogger());
+      showStub = sinon.stub(vscode.window, 'showInformationMessage').resolves(undefined);
+      sinon.stub(vscode.workspace, 'workspaceFile').value(undefined);
+    });
+
+    test('single-folder: WorkspaceFolder hit that duplicates Workspace is dropped from the count', async () => {
+      const entry = makeEntry('dedupePair');
+      sinon.stub(vscode.workspace, 'getConfiguration').returns(
+        makePerKeyScopedConfig({}, updateSpy),
+      );
+      await runConsentFlow(
+        MOCK_URI,
+        [
+          { case: 2, entry, scope: vscode.ConfigurationTarget.Workspace },
+          { case: 2, entry, scope: vscode.ConfigurationTarget.WorkspaceFolder },
+        ],
+        'prompt',
+      );
+      assert.strictEqual(showStub.callCount, 1, 'still exactly one toast');
+      const msg = String(showStub.firstCall.args[0]);
+      assert.ok(
+        msg.startsWith('1 setting '),
+        `expected singular form after dedupe; got: ${msg}`,
+      );
+    });
+
+    test('single-folder: lone WorkspaceFolder hit is dropped entirely (no toast, no dispatch)', async () => {
+      const entry = makeEntry('dedupeLoneWF');
+      sinon.stub(vscode.workspace, 'getConfiguration').returns(
+        makePerKeyScopedConfig({}, updateSpy),
+      );
+      await runConsentFlow(
+        MOCK_URI,
+        [{ case: 2, entry, scope: vscode.ConfigurationTarget.WorkspaceFolder }],
+        'prompt',
+      );
+      assert.strictEqual(showStub.callCount, 0, 'no toast when the only hit is a single-folder phantom');
+      const reload = configModule.config.reloadSettings as unknown as sinon.SinonStub;
+      assert.strictEqual(reload.callCount, 0, 'reloadSettings should not fire when effective hits are empty');
+    });
+
+    test('single-folder: Global-scope hits pass through unaffected', async () => {
+      const entry = makeEntry('dedupeGlobalUntouched');
+      sinon.stub(vscode.workspace, 'getConfiguration').returns(
+        makePerKeyScopedConfig({}, updateSpy),
+      );
+      await runConsentFlow(
+        MOCK_URI,
+        [{ case: 2, entry, scope: vscode.ConfigurationTarget.Global }],
+        'prompt',
+      );
+      assert.strictEqual(showStub.callCount, 1);
+    });
+
+    test('single-folder + silent mode: WorkspaceFolder phantom does NOT cause double-write', async () => {
+      const entry = makeEntry('dedupeSilent');
+      sinon.stub(vscode.workspace, 'getConfiguration').returns(
+        makePerKeyScopedConfig(
+          {
+            [entry.sourceKey]: { workspaceValue: 'v', workspaceFolderValue: 'v' },
+            [entry.destKey]: {},
+            completedMigrations: {},
+          },
+          updateSpy,
+        ),
+      );
+      await runConsentFlow(
+        MOCK_URI,
+        [
+          { case: 2, entry, scope: vscode.ConfigurationTarget.Workspace },
+          { case: 2, entry, scope: vscode.ConfigurationTarget.WorkspaceFolder },
+        ],
+        'migrate-and-delete',
+      );
+      // Without the dedupe, the migrate primitive would be invoked twice and
+      // write the canonical key twice. With dedupe, it runs once — exactly one
+      // dest write lands. (The primitive itself picks the most-specific scope
+      // for the write, so we count across all scopes.)
+      const destWrites = updateSpy.getCalls().filter(c => c.args[0] === entry.destKey);
+      assert.strictEqual(destWrites.length, 1, 'dest must be written exactly once after dedupe');
+    });
+  });
+
+  // ─── Output-channel summary logging ───────────────────────────────────────
+
+  suite('logHitsSummary output channel logging', () => {
+
+    test('emits a roll-up plus one indented line per pending migration', async () => {
+      const a = makeEntry('logA');
+      const b = makeEntry('logB');
+      sinon.stub(vscode.workspace, 'getConfiguration').returns(
+        makePerKeyScopedConfig({}, updateSpy),
+      );
+      await runConsentFlow(
+        MOCK_URI,
+        [
+          { case: 2, entry: a, scope: vscode.ConfigurationTarget.Workspace },
+          { case: 3, entry: b, scope: vscode.ConfigurationTarget.WorkspaceFolder },
+        ],
+        'prompt',
+      );
+
+      const rollup = logInfo.getCalls().find(c => /^Pending migrations: 2 \(case 2: 1, case 3: 1\)/.test(String(c.args[0])));
+      assert.ok(rollup, 'roll-up line must include total and per-case counts');
+
+      const perHitLines = logInfo.getCalls().filter(c => /^  • /.test(String(c.args[0])));
+      assert.strictEqual(perHitLines.length, 2, 'one indented line per hit');
+      const allPerHit = perHitLines.map(c => String(c.args[0])).join('\n');
+      assert.ok(allPerHit.includes('logA'));
+      assert.ok(allPerHit.includes('logB'));
+      assert.ok(allPerHit.includes('behave-vsc.logA__src → gs-behave-bdd.logA__dest'));
+    });
+
+    test('empty hits produces NO summary line', async () => {
+      await runConsentFlow(MOCK_URI, [], 'prompt');
+      const summary = logInfo.getCalls().find(c => /^Pending migrations:/.test(String(c.args[0])));
+      assert.strictEqual(summary, undefined, 'no summary line when there were no hits');
+    });
+
+    test('single-folder dedupe is reflected in the roll-up (drops phantom WorkspaceFolder)', async () => {
+      sinon.restore();
+      updateSpy = sinon.spy(() => Promise.resolve());
+      ({ logInfo } = stubLogger());
+      showStub = sinon.stub(vscode.window, 'showInformationMessage').resolves(undefined);
+      sinon.stub(vscode.workspace, 'workspaceFile').value(undefined);
+      const entry = makeEntry('rollupDedupe');
+      sinon.stub(vscode.workspace, 'getConfiguration').returns(
+        makePerKeyScopedConfig({}, updateSpy),
+      );
+      await runConsentFlow(
+        MOCK_URI,
+        [
+          { case: 2, entry, scope: vscode.ConfigurationTarget.Workspace },
+          { case: 2, entry, scope: vscode.ConfigurationTarget.WorkspaceFolder },
+        ],
+        'prompt',
+      );
+      const rollup = logInfo.getCalls().find(c => /^Pending migrations:/.test(String(c.args[0])));
+      assert.ok(rollup, 'roll-up line still present');
+      assert.match(String(rollup!.args[0]), /Pending migrations: 1 \(case 2: 1, case 3: 0\)/);
+    });
+  });
 });

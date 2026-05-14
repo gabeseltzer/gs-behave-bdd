@@ -14,7 +14,7 @@ import * as assert from 'assert';
 import * as sinon from 'sinon';
 import * as configModule from '../../../src/configuration';
 import * as evaluatorModule from '../../../src/migrations/evaluator';
-import { buildViewModel } from '../../../src/migrations/panelViewModel';
+import { buildViewModel, describeRowCase } from '../../../src/migrations/panelViewModel';
 import type { MigrationEntry } from '../../../src/migrations';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -151,6 +151,68 @@ suite('buildViewModel — single-folder de-duplication (260514-mur)', () => {
 
     assert.strictEqual(vm.rows.length, 1);
     assert.strictEqual(vm.rows[0].buttons.length, 4);
+  });
+
+  // ── Row description text (caseDescription) ─────────────────────────────
+
+  test('describeRowCase: case 2 reads as legacy-only', () => {
+    assert.strictEqual(
+      describeRowCase(2, /*equalValues*/ false),
+      'Legacy key is set; the canonical key is not yet set',
+    );
+    // equalValues is meaningless for case 2 — same output regardless.
+    assert.strictEqual(
+      describeRowCase(2, true),
+      'Legacy key is set; the canonical key is not yet set',
+    );
+  });
+
+  test('describeRowCase: case 3 with matching values', () => {
+    assert.strictEqual(
+      describeRowCase(3, true),
+      'Both keys are set to the same value',
+    );
+  });
+
+  test('describeRowCase: case 3 with differing values', () => {
+    assert.strictEqual(
+      describeRowCase(3, false),
+      'Both keys are set, but to different values',
+    );
+  });
+
+  test('buildRow attaches caseDescription matching describeRowCase for case 2', async () => {
+    sinon.stub(vscode.workspace, 'workspaceFile').value(undefined);
+    sinon.stub(evaluatorModule, 'evaluateAllMigrations').callsFake(async (_uri, hooks) => {
+      hooks?.onCaseHit?.(2, TEST_ENTRY, vscode.ConfigurationTarget.Workspace, { sourceValue: 'v' });
+      return [];
+    });
+    const vm = await buildViewModel();
+    assert.strictEqual(vm.rows[0].caseDescription, 'Legacy key is set; the canonical key is not yet set');
+  });
+
+  test('buildRow attaches caseDescription matching describeRowCase for case 3 matching', async () => {
+    sinon.stub(vscode.workspace, 'workspaceFile').value(undefined);
+    sinon.stub(evaluatorModule, 'evaluateAllMigrations').callsFake(async (_uri, hooks) => {
+      hooks?.onCaseHit?.(3, TEST_ENTRY, vscode.ConfigurationTarget.Workspace, {
+        sourceValue: 'x', destValue: 'x', equalValues: true,
+      });
+      return [];
+    });
+    const vm = await buildViewModel();
+    assert.strictEqual(vm.rows[0].caseDescription, 'Both keys are set to the same value');
+  });
+
+  test('buildRow attaches caseDescription matching describeRowCase for case 3 differing', async () => {
+    sinon.stub(vscode.workspace, 'workspaceFile').value(undefined);
+    sinon.stub(evaluatorModule, 'evaluateAllMigrations').callsFake(async (_uri, hooks) => {
+      hooks?.onCaseHit?.(3, TEST_ENTRY, vscode.ConfigurationTarget.Workspace, {
+        sourceValue: 'a', destValue: 'b', equalValues: false,
+      });
+      return [];
+    });
+    const vm = await buildViewModel();
+    assert.strictEqual(vm.rows[0].caseDescription, 'Both keys are set, but to different values');
   });
 
   test('single-folder mode: Global-scope hit is unaffected by the WorkspaceFolder suppression', async () => {
