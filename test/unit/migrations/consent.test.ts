@@ -112,6 +112,11 @@ suite('consent.ts — runConsentFlow (023-04 panel-toast contract)', () => {
     updateSpy = sinon.spy(() => Promise.resolve());
     ({ logInfo } = stubLogger());
     showStub = sinon.stub(vscode.window, 'showInformationMessage').resolves(undefined);
+    // Treat the suite as a multi-root workspace by default so per-scope hits
+    // (Workspace, WorkspaceFolder) survive the single-folder dedupe added in
+    // runConsentFlow. Individual tests can re-stub to single-folder to assert
+    // the dedupe directly.
+    sinon.stub(vscode.workspace, 'workspaceFile').value(vscode.Uri.file('/fake.code-workspace'));
   });
 
   teardown(() => {

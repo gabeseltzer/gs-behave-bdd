@@ -610,9 +610,18 @@ export function renderHtml(webview: vscode.Webview): string {
           + '</button>';
       }).join('');
 
-      const caseLabel = row.case === 2
-        ? 'Legacy key set; canonical key is not'
-        : 'Both legacy and canonical keys are set';
+      // case-3 matching rows surface the collapsed 2-button set (see
+      // CASE_3_MATCHING_BUTTONS) — use that as the signal to render a
+      // value-aware label instead of the generic "both set" one.
+      const isCase3Matching = row.case === 3 && row.buttons.length === 2;
+      let caseLabel;
+      if (row.case === 2) {
+        caseLabel = 'Legacy key is set; the canonical key is not yet set';
+      } else if (isCase3Matching) {
+        caseLabel = 'Both keys are set to the same value';
+      } else {
+        caseLabel = 'Both keys are set, but to different values';
+      }
 
       return '<div class="section">'
         + '<p class="setting-title"><code>' + escape(row.sourceKey) + '</code> &rarr; <code>' + escape(row.destKey) + '</code></p>'
