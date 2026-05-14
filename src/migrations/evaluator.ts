@@ -14,7 +14,16 @@ import {
 } from './types';
 
 export interface EvaluatorHooks {
-  onCaseHit?: (mcase: MigrationCase, entry: MigrationEntry, scope: MigrationScope) => void;
+  onCaseHit?: (
+    mcase: MigrationCase,
+    entry: MigrationEntry,
+    scope: MigrationScope,
+    // Optional metadata. Currently only populated for case 3 (both keys set)
+    // where `equalValues` reports whether the legacy and canonical values at
+    // this scope are equivalent — used by the panel to collapse the action
+    // button set when there is no value conflict to resolve.
+    meta?: { equalValues?: boolean },
+  ) => void;
 }
 
 export interface EvaluationResult {
@@ -123,8 +132,12 @@ export async function evaluateMigration(
         continue;
       }
 
-      // Case 3: both set.
-      hooks?.onCaseHit?.(3, entry, scope);
+      // Case 3: both set. Pass `equalValues` so callers can collapse the action
+      // set when there is no conflict to resolve (legacy and canonical agree).
+      // JSON-stringify equality is sufficient for VS Code settings (JSON values
+      // by definition) and avoids pulling in a deep-equal dependency.
+      const equalValues = jsonEqual(sourceVal, destVal);
+      hooks?.onCaseHit?.(3, entry, scope, { equalValues });
       results.push({ scope, case: 3, action: 'pending-user-choice' });
     } catch (e) {
       try {
@@ -167,5 +180,15 @@ function readScopeValue<T>(
     case vscode.ConfigurationTarget.WorkspaceFolder: return insp.workspaceFolderValue;
     case vscode.ConfigurationTarget.Workspace: return insp.workspaceValue;
     case vscode.ConfigurationTarget.Global: return insp.globalValue;
+  }
+}
+
+function jsonEqual(a: unknown, b: unknown): boolean {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    // Unserializable values (cycles, BigInt) can't be VS Code settings, but
+    // be defensive — treat as not-equal so the user sees the full button set.
+    return false;
   }
 }
