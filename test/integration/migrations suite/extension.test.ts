@@ -81,12 +81,15 @@ suite('migrations suite', () => {
 	// Test 2 — D-09 inspect() per-scope assertions.
 	// migration-stale is launched as a single-folder workspace
 	// (test/integration/runTestSuites.ts: launchArgs = ["example-projects/migration-stale"]).
-	// In single-folder mode VS Code surfaces .vscode/settings.json as
-	// `workspaceValue` (not `workspaceFolderValue` — that scope only exists in
-	// multi-root .code-workspace contexts). The migration helper preserves the
-	// source scope, so canonical keys land in `workspaceValue` here. Use a small
-	// helper that returns the most-specific user scope value to keep the test
-	// resilient to single-folder vs multi-root launch modes.
+	// In single-folder mode .vscode/settings.json is the single source for both
+	// Workspace and WorkspaceFolder scopes; VS Code's inspect() populates BOTH
+	// `workspaceValue` AND `workspaceFolderValue` from the same file when passed
+	// a folder URI. The migration helper preserves the source scope, so canonical
+	// keys land at whichever scope the legacy value was read from. The
+	// `userScopeValue` helper below intentionally collapses workspaceFolderValue
+	// → workspaceValue → globalValue so this test is resilient to both launch
+	// modes (single-folder and multi-root .code-workspace) and to either landing
+	// scope in single-folder mode.
 	test('post-activation cfg.inspect(): canonical keys at user scope, legacy at no scope', () => {
 		const cfgGs = vscode.workspace.getConfiguration('gs-behave-bdd', wkspUri);
 		const cfgVsc = vscode.workspace.getConfiguration('behave-vsc', wkspUri);
