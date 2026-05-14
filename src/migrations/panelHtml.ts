@@ -245,11 +245,47 @@ export function renderHtml(webview: vscode.Webview): string {
       opacity: 0.7;
       cursor: progress;
     }
+    /* Recheck progress banner — shown while a recheck command is in flight
+       (between Recheck-click and the stateUpdate that completes the round
+       trip). A simple CSS-only spinner; the host's _refresh() guarantees a
+       stateUpdate fires even when the user cancels the picker, so the banner
+       is naturally torn down by the next render() call. */
+    .recheck-progress {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      margin: 0 0 16px;
+      background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+      border: 1px solid var(--vscode-panel-border);
+      border-left: 3px solid var(--vscode-progressBar-background, var(--vscode-button-background));
+      color: var(--vscode-foreground);
+      font-size: 13px;
+    }
+    .recheck-progress[hidden] {
+      display: none;
+    }
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--vscode-panel-border);
+      border-top-color: var(--vscode-progressBar-background, var(--vscode-button-background));
+      border-radius: 50%;
+      animation: spin 800ms linear infinite;
+      flex: 0 0 auto;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
   <h1>Behave BDD: Migrations</h1>
   <p class="page-desc">Review and apply pending settings migrations. The actions you choose below write to your VS Code settings.json the same way the Settings UI does.</p>
+  <div id="recheck-progress" class="recheck-progress" hidden>
+    <span class="spinner" aria-hidden="true"></span>
+    <span>Rechecking migrations across every workspace folder…</span>
+  </div>
   <div id="mode-root"></div>
   <div id="pending-root"><p class="empty">Loading…</p></div>
   <div id="preview" class="preview-popover" style="display:none"></div>
@@ -260,6 +296,7 @@ export function renderHtml(webview: vscode.Webview): string {
     const root = document.getElementById('pending-root');
     const modeRoot = document.getElementById('mode-root');
     const previewEl = document.getElementById('preview');
+    const recheckProgressEl = document.getElementById('recheck-progress');
 
     // Host-embedded constant — see renderHtml(). Values are alphanumeric +
     // dashes (registry-controlled); safe to interpolate via escape() into
@@ -293,8 +330,12 @@ export function renderHtml(webview: vscode.Webview): string {
 
       if (t.dataset.recheck === 'true') {
         // Recheck takes a few hundred ms in the worst case (clears + re-evaluates
-        // every entry). Mark the button busy so the user sees something happened.
+        // every entry). Mark the button busy and show the progress banner so the
+        // user has continuous visual feedback through the QuickPick + clear +
+        // evaluator round trip. The next stateUpdate from the host's _refresh()
+        // tears the banner down (see render()).
         t.dataset.busy = 'true';
+        recheckProgressEl.hidden = false;
         vscode.postMessage({ kind: 'recheck' });
         return;
       }
@@ -454,6 +495,8 @@ export function renderHtml(webview: vscode.Webview): string {
     function render(vm) {
       ROW_DATA.clear();
       hidePreview();
+      // The host has reached a fresh state — clear any in-flight recheck UI.
+      recheckProgressEl.hidden = true;
       if (!vm) {
         modeRoot.innerHTML = '';
         root.innerHTML = '<p class="empty">Loading…</p>';
