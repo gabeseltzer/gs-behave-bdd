@@ -60,15 +60,16 @@ export function resolveAnchorUri(scope: MigrationScope, wkspUri: vscode.Uri): vs
   switch (scope) {
     case vscode.ConfigurationTarget.Global: {
       const home = os.homedir();
+      const folder = userDataFolderName();
       let p: string;
       if (process.platform === 'win32') {
         const appData = process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming');
-        p = path.join(appData, 'Code', 'User', 'settings.json');
+        p = path.join(appData, folder, 'User', 'settings.json');
       } else if (process.platform === 'darwin') {
-        p = path.join(home, 'Library', 'Application Support', 'Code', 'User', 'settings.json');
+        p = path.join(home, 'Library', 'Application Support', folder, 'User', 'settings.json');
       } else {
         const xdg = process.env.XDG_CONFIG_HOME ?? path.join(home, '.config');
-        p = path.join(xdg, 'Code', 'User', 'settings.json');
+        p = path.join(xdg, folder, 'User', 'settings.json');
       }
       return vscode.Uri.file(p);
     }
@@ -76,6 +77,30 @@ export function resolveAnchorUri(scope: MigrationScope, wkspUri: vscode.Uri): vs
       return vscode.workspace.workspaceFile;
     case vscode.ConfigurationTarget.WorkspaceFolder:
       return vscode.Uri.joinPath(wkspUri, '.vscode', 'settings.json');
+  }
+}
+
+/**
+ * Map `vscode.env.appName` to the on-disk user-data folder name. VS Code's
+ * Microsoft builds prefix the folder with "Code"; non-Microsoft variants
+ * (VSCodium, Code-OSS) use their own app name verbatim. The earlier hardcoded
+ * "Code" broke on Insiders / VSCodium — the diagnostic anchored at a path
+ * that didn't exist, so clicking it in the Problems pane raised
+ * "editor could not be opened because the file was not found" (260513-oh5
+ * user-testing report).
+ *
+ * This still doesn't catch portable mode or `--user-data-dir` overrides; for
+ * those the file simply won't be found and the diagnostic's "Open Settings"
+ * quick-fix path falls back to the `workbench.action.openSettingsJson`
+ * command (260514-djs).
+ */
+function userDataFolderName(): string {
+  const name = vscode.env.appName ?? 'Visual Studio Code';
+  switch (name) {
+    case 'Visual Studio Code': return 'Code';
+    case 'Visual Studio Code - Insiders': return 'Code - Insiders';
+    case 'Visual Studio Code - Exploration': return 'Code - Exploration';
+    default: return name; // VSCodium, Code-OSS, etc. use the appName as the folder.
   }
 }
 
@@ -155,22 +180,13 @@ function offsetToPosition(text: string, offset: number): vscode.Position {
  * text only — VS Code does not render Markdown in diagnostic messages either
  * (same constraint as toasts).
  */
-export function buildDiagnosticMessage(entry: MigrationEntry, mcase: 2 | 3, scope: MigrationScope): string {
-  const scopeName = describeScope(scope);
+export function buildDiagnosticMessage(entry: MigrationEntry, mcase: 2 | 3, _scope: MigrationScope): string {
   const legacy = `${entry.sourceNamespace}.${entry.sourceKey}`;
   const canonical = `${entry.destNamespace}.${entry.destKey}`;
   if (mcase === 2) {
-    return `${legacy} is set (${scopeName}) but ${canonical} is not. Use the quick-fix to migrate or dismiss.`;
+    return `${legacy} can be migrated for use with Behave BDD. Use quick-fix to migrate or dismiss.`;
   }
-  return `Both ${legacy} and ${canonical} are set (${scopeName}). Use the quick-fix to choose which value wins.`;
-}
-
-function describeScope(scope: MigrationScope): string {
-  switch (scope) {
-    case vscode.ConfigurationTarget.Global: return 'Global';
-    case vscode.ConfigurationTarget.Workspace: return 'Workspace';
-    case vscode.ConfigurationTarget.WorkspaceFolder: return 'Workspace Folder';
-  }
+  return `${legacy} and ${canonical} are both set. Use quick-fix to choose which value to keep.`;
 }
 
 /**

@@ -24,7 +24,7 @@ import * as vscode from 'vscode';
 import { config } from '../configuration';
 import { migrateScopedSetting } from '../notifications';
 import { markMigrationFinishedAtScope } from './completedMigrations';
-import { clearDiagnosticsForEntryAtScope, publishConsentDiagnostics } from './diagnostics';
+import { clearDiagnosticsForEntryAtScope, computeRange, publishConsentDiagnostics, resolveAnchorUri } from './diagnostics';
 import type { MigrationEntry, MigrationScope } from './types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -317,12 +317,15 @@ export async function runConsentFlow(
     const published = await publishConsentDiagnostics(wkspUri, promptBoundHits);
     if (published > 0) {
       const n = published;
-      const noun = n === 1 ? 'legacy behave-vsc setting needs' : `legacy behave-vsc settings need`;
-      const message = `${n} ${noun} attention. Open the Problems pane and use the quick-fix to choose what to do.`;
-      // Fire-and-forget summary toast — no buttons; the diagnostic carries
-      // the actual decision. We don't await because activation should not
-      // block on UI.
-      void vscode.window.showInformationMessage(message);
+      const message = `${n} ${n === 1 ? 'setting' : 'settings'} can be migrated for Behave BDD`;
+      // Two-button summary toast: 'Open Problems' jumps to the Problems pane;
+      // 'Open Settings' opens the first hit's settings.json file at the
+      // legacy-key line. Non-blocking — we don't await; activation must not
+      // hang on user input (260514-djs).
+      const firstHit = promptBoundHits[0];
+      void vscode.window
+        .showInformationMessage(message, 'Open Problems', 'Open Settings')
+        .then(choice => handleSummaryToastChoice(choice, firstHit, wkspUri));
     }
   }
 
@@ -375,5 +378,50 @@ async function dispatchOverScopes(
       config.logger.logInfo(`Migration ${entry.id}: action at ${describeScope(scope)} failed: ${e}`, wkspUri);
       // continue with remaining scopes (D-A5.4)
     }
+  }
+}
+
+/**
+ * 260514-djs: dispatch the summary-toast button choice.
+ *
+ *   'Open Problems' → workbench.actions.view.problems
+ *   'Open Settings' → open the first hit's anchor file at the legacy-key line,
+ *                     falling back to workbench.action.openSettingsJson if the
+ *                     anchor URI doesn't resolve or the file can't be opened.
+ *   undefined       → user dismissed the toast — diagnostic persists, no-op.
+ *
+ * Never throws; failures are logged so a misclick can't surface a stack trace
+ * via the unhandled-rejection handler.
+ */
+async function handleSummaryToastChoice(
+  choice: string | undefined,
+  firstHit: ConsentHit,
+  wkspUri: vscode.Uri,
+): Promise<void> {
+  if (choice === undefined) return;
+  try {
+    if (choice === 'Open Problems') {
+      await vscode.commands.executeCommand('workbench.actions.view.problems');
+      return;
+    }
+    if (choice === 'Open Settings') {
+      const uri = resolveAnchorUri(firstHit.scope, wkspUri);
+      if (!uri) {
+        await vscode.commands.executeCommand('workbench.action.openSettingsJson');
+        return;
+      }
+      try {
+        const doc = await vscode.workspace.openTextDocument(uri);
+        const range = await computeRange(uri, firstHit.entry, firstHit.scope);
+        await vscode.window.showTextDocument(doc, { selection: range });
+      } catch {
+        // The anchor URI didn't resolve to a real file (Insiders user-data-dir
+        // override, portable mode, etc.) — fall through to the canonical
+        // "open user settings.json" command.
+        await vscode.commands.executeCommand('workbench.action.openSettingsJson');
+      }
+    }
+  } catch (e) {
+    config.logger.logInfo(`Summary toast action "${choice}" failed: ${e}`, wkspUri);
   }
 }

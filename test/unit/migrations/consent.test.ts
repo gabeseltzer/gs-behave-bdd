@@ -171,9 +171,10 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
     );
     assert.strictEqual(showStub.callCount, 1, 'exactly one summary toast');
     const msg = String(showStub.firstCall.args[0]);
-    assert.ok(/legacy behave-vsc setting/.test(msg), `summary message should mention behave-vsc settings; got: ${msg}`);
-    // Summary toast has no buttons (the diagnostic carries the actions).
-    assert.deepStrictEqual(showStub.firstCall.args.slice(1), [], 'summary toast must not have buttons');
+    assert.ok(/can be migrated for Behave BDD/.test(msg), `summary message should mention "can be migrated for Behave BDD"; got: ${msg}`);
+    // 260514-djs: summary toast now carries two action buttons.
+    const buttons = showStub.firstCall.args.slice(1);
+    assert.deepStrictEqual(buttons, ['Open Problems', 'Open Settings'], 'summary toast must offer Open Problems + Open Settings buttons');
   });
 
   test('single case-3 hit (any mode) → 1 diagnostic, 1 summary toast (D-A4.3)', async () => {
@@ -243,8 +244,8 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
       'prompt',
     );
     const msg = String(showStub.firstCall.args[0]);
-    assert.ok(msg.startsWith('2 '), `should start with the count; got: ${msg}`);
-    assert.ok(/settings need/.test(msg), `plural form expected; got: ${msg}`);
+    assert.ok(/^\d+ settings? can be migrated for Behave BDD/.test(msg), `summary should match new copy; got: ${msg}`);
+    assert.ok(msg.startsWith('2 settings'), `expected plural form starting with "2 settings"; got: ${msg}`);
   });
 
   // ─── Case 2 silent migrationMode paths (no toast, no diagnostic) ─────────
@@ -334,5 +335,72 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
     );
     const reload = configModule.config.reloadSettings as unknown as sinon.SinonStub;
     assert.strictEqual(reload.callCount, 1, 'reloadSettings must fire once when there was a hit');
+  });
+
+  // ─── 260514-djs: summary-toast button dispatch ───────────────────────────
+
+  test("'Open Problems' button executes workbench.actions.view.problems", async () => {
+    const entry = makeEntry('toastOpenProblems');
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makePerKeyScopedConfig({}, updateSpy),
+    );
+    const execStub = sinon.stub(vscode.commands, 'executeCommand').resolves(undefined);
+    showStub.resolves('Open Problems');
+
+    await runConsentFlow(
+      MOCK_URI,
+      [{ case: 2, entry, scope: vscode.ConfigurationTarget.WorkspaceFolder }],
+      'prompt',
+    );
+    // Toast .then() chain is fire-and-forget — yield to the microtask queue.
+    await new Promise(resolve => setImmediate(resolve));
+
+    const matchingCall = execStub.getCalls().find(c => c.args[0] === 'workbench.actions.view.problems');
+    assert.ok(matchingCall, `expected workbench.actions.view.problems; got ${JSON.stringify(execStub.getCalls().map(c => c.args[0]))}`);
+  });
+
+  test("'Open Settings' button opens the first hit's anchor URI at its range", async () => {
+    const entry = makeEntry('toastOpenSettings');
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makePerKeyScopedConfig({}, updateSpy),
+    );
+    const openDocStub = sinon.stub(vscode.workspace, 'openTextDocument').resolves({} as never);
+    const showDocStub = sinon.stub(vscode.window, 'showTextDocument').resolves({} as never);
+    showStub.resolves('Open Settings');
+
+    await runConsentFlow(
+      MOCK_URI,
+      [{ case: 2, entry, scope: vscode.ConfigurationTarget.WorkspaceFolder }],
+      'prompt',
+    );
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.strictEqual(openDocStub.callCount, 1, 'openTextDocument should be called once for the first hit');
+    const openedUri = openDocStub.firstCall.args[0] as { fsPath: string };
+    assert.ok(
+      String(openedUri.fsPath).includes('.vscode'),
+      `expected WorkspaceFolder anchor (.vscode/settings.json); got: ${openedUri.fsPath}`,
+    );
+    assert.strictEqual(showDocStub.callCount, 1, 'showTextDocument should follow openTextDocument');
+  });
+
+  test("'Open Settings' falls back to openSettingsJson when the anchor file can't be opened", async () => {
+    const entry = makeEntry('toastFallback');
+    sinon.stub(vscode.workspace, 'getConfiguration').returns(
+      makePerKeyScopedConfig({}, updateSpy),
+    );
+    sinon.stub(vscode.workspace, 'openTextDocument').rejects(new Error('ENOENT'));
+    const execStub = sinon.stub(vscode.commands, 'executeCommand').resolves(undefined);
+    showStub.resolves('Open Settings');
+
+    await runConsentFlow(
+      MOCK_URI,
+      [{ case: 2, entry, scope: vscode.ConfigurationTarget.WorkspaceFolder }],
+      'prompt',
+    );
+    await new Promise(resolve => setImmediate(resolve));
+
+    const fallback = execStub.getCalls().find(c => c.args[0] === 'workbench.action.openSettingsJson');
+    assert.ok(fallback, 'expected fallback to workbench.action.openSettingsJson when the anchor file is unreadable');
   });
 });
