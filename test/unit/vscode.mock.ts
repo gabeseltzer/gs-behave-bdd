@@ -51,6 +51,16 @@ export class Uri {
     return Uri.file(joined);
   }
 
+  // 260514-ean: diagnostics.ts uses vscode.Uri.from for the internal
+  // `vscode-userdata:` scheme. Minimal stand-in — keeps scheme + path
+  // verbatim so tests can assert on them.
+  static from(components: { scheme: string; path: string }): Uri {
+    const u = new Uri(components.scheme, components.path);
+    u.scheme = components.scheme;
+    u.path = components.path;
+    return u;
+  }
+
   toString(): string {
     // Normalize path for consistent comparison
     // Windows: C:\path -> file:///c:/path

@@ -103,17 +103,16 @@ suite('260513-oh5 — diagnostics.ts', () => {
 
   // ── resolveAnchorUri ─────────────────────────────────────────────────────
 
-  test('resolveAnchorUri returns a path containing settings.json for Global', () => {
+  // 260514-ean: Global-scope anchor switched to the internal
+  // `vscode-userdata:` URI scheme so it resolves correctly across local /
+  // remote / devcontainer / Codespaces / web / portable / profiles. The
+  // extension has no host-side filesystem path to settings.json — VS Code
+  // core resolves the scheme on the window side.
+  test('resolveAnchorUri(Global) returns a vscode-userdata URI for User settings.json', () => {
     const uri = resolveAnchorUri(vscode.ConfigurationTarget.Global, MOCK_WKSP);
     assert.ok(uri, 'expected a Uri');
-    assert.ok(
-      uri.fsPath.endsWith('settings.json'),
-      `expected a settings.json path; got ${uri.fsPath}`,
-    );
-    assert.ok(
-      uri.fsPath.includes('Code'),
-      `expected a Code/User path; got ${uri.fsPath}`,
-    );
+    assert.strictEqual(uri.scheme, 'vscode-userdata', `expected vscode-userdata scheme; got: ${uri.scheme}`);
+    assert.strictEqual(uri.path, '/User/settings.json', `expected /User/settings.json path; got: ${uri.path}`);
   });
 
   test('resolveAnchorUri returns workspaceFile for Workspace scope', () => {
@@ -216,56 +215,6 @@ suite('260513-oh5 — diagnostics.ts', () => {
     assert.ok(msg.startsWith('behave-vsc.justMyCode'), `expected to start with the legacy key; got: ${msg}`);
     assert.ok(msg.includes('gs-behave-bdd.justMyCode'), `expected canonical key; got: ${msg}`);
     assert.ok(/both set/.test(msg), `expected "both set" framing; got: ${msg}`);
-  });
-
-  // 260514-djs: resolveAnchorUri must honor vscode.env.appName so Insiders
-  // (and other variants) anchor at the right user-data folder. Hardcoding
-  // "Code" broke clickable navigation from the Problems pane on Insiders
-  // (user-testing report).
-  test('resolveAnchorUri(Global) folds vscode.env.appName into the path', () => {
-    sinon.stub(vscode.env, 'appName').value('Visual Studio Code - Insiders');
-    const uri = resolveAnchorUri(vscode.ConfigurationTarget.Global, MOCK_WKSP);
-    assert.ok(uri);
-    assert.ok(
-      uri.fsPath.includes('Code - Insiders'),
-      `expected "Code - Insiders" in path on Insiders; got: ${uri.fsPath}`,
-    );
-  });
-
-  test('resolveAnchorUri(Global) uses non-Microsoft appName verbatim (VSCodium)', () => {
-    sinon.stub(vscode.env, 'appName').value('VSCodium');
-    const uri = resolveAnchorUri(vscode.ConfigurationTarget.Global, MOCK_WKSP);
-    assert.ok(uri);
-    assert.ok(
-      uri.fsPath.includes('VSCodium'),
-      `expected "VSCodium" folder for VSCodium; got: ${uri.fsPath}`,
-    );
-  });
-
-  // 260514-dvt: remote-host detection. Extension running in a VS Code Server
-  // (devcontainer / WSL / SSH-remote / Codespaces / attached-container) must
-  // anchor at the server data dir, not the local-install path.
-  test('resolveAnchorUri(Global) returns the server data dir when remoteName is set (devcontainer)', () => {
-    sinon.stub(vscode.env, 'remoteName').value('dev-container');
-    const uri = resolveAnchorUri(vscode.ConfigurationTarget.Global, MOCK_WKSP);
-    assert.ok(uri);
-    const fp = uri.fsPath.replace(/\\/g, '/');
-    assert.ok(
-      fp.includes('.vscode-server/data/User/settings.json'),
-      `expected .vscode-server/data/User/settings.json; got: ${fp}`,
-    );
-  });
-
-  test('resolveAnchorUri(Global) uses server-insiders folder on Insiders + remote', () => {
-    sinon.stub(vscode.env, 'remoteName').value('wsl');
-    sinon.stub(vscode.env, 'appName').value('Visual Studio Code - Insiders');
-    const uri = resolveAnchorUri(vscode.ConfigurationTarget.Global, MOCK_WKSP);
-    assert.ok(uri);
-    const fp = uri.fsPath.replace(/\\/g, '/');
-    assert.ok(
-      fp.includes('.vscode-server-insiders/data/User/settings.json'),
-      `expected .vscode-server-insiders/data/User/settings.json; got: ${fp}`,
-    );
   });
 
   // ── publishConsentDiagnostics ────────────────────────────────────────────

@@ -11,8 +11,6 @@
  */
 
 import * as vscode from 'vscode';
-import * as os from 'os';
-import * as path from 'path';
 import { parseTree, findNodeAtLocation, type Node } from 'jsonc-parser';
 import type { ConsentHit } from './consent';
 import type { MigrationEntry, MigrationScope } from './types';
@@ -49,90 +47,41 @@ export function disposeDiagnosticCollection(): void {
  * fake URI just to hold a Problems entry).
  *
  * Paths:
- *   Global          → user settings.json (platform default; portable / Insiders
- *                     / custom --user-data-dir installs fall back here too —
- *                     range degrades to [0,0] if the key isn't found at that
- *                     path, which is the right behavior).
+ *   Global          → vscode-userdata:/User/settings.json (see 260514-ean note).
  *   Workspace       → vscode.workspace.workspaceFile (the .code-workspace).
  *   WorkspaceFolder → <wkspUri>/.vscode/settings.json.
  */
 export function resolveAnchorUri(scope: MigrationScope, wkspUri: vscode.Uri): vscode.Uri | undefined {
   switch (scope) {
-    case vscode.ConfigurationTarget.Global: {
-      const home = os.homedir();
-
-      // 260514-dvt: when the extension runs on a VS Code Server (devcontainer,
-      // WSL, SSH-remote, attached-container, Codespaces), Global user
-      // settings.json lives under `$HOME/.vscode-server/...`, NOT the
-      // local-install path. `os.homedir()` returns the container/remote home,
-      // and `vscode.env.remoteName` is the canonical signal that we're in a
-      // remote host context.
-      if (vscode.env.remoteName) {
-        return vscode.Uri.file(
-          path.join(home, serverDataFolderName(), 'data', 'User', 'settings.json'),
-        );
-      }
-
-      const folder = userDataFolderName();
-      let p: string;
-      if (process.platform === 'win32') {
-        const appData = process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming');
-        p = path.join(appData, folder, 'User', 'settings.json');
-      } else if (process.platform === 'darwin') {
-        p = path.join(home, 'Library', 'Application Support', folder, 'User', 'settings.json');
-      } else {
-        const xdg = process.env.XDG_CONFIG_HOME ?? path.join(home, '.config');
-        p = path.join(xdg, folder, 'User', 'settings.json');
-      }
-      return vscode.Uri.file(p);
-    }
+    case vscode.ConfigurationTarget.Global:
+      // 260514-ean: use VS Code's internal `vscode-userdata:` URI scheme — the
+      // same one its built-in Settings UI uses to open User Settings (JSON).
+      //
+      // Rationale: prior attempts (260514-djs: appName → folder mapping;
+      // 260514-dvt: .vscode-server when remoteName set) computed a local
+      // filesystem path. None of them work in a remote-host setup like
+      // Windows-host + Linux-devcontainer, because the *window* (where
+      // settings.json lives) and the *extension host* (where this code runs)
+      // are on different filesystems with no public API bridging them —
+      // see https://code.visualstudio.com/api/advanced-topics/remote-extensions.
+      //
+      // The `vscode-userdata:` scheme is resolved on the VS Code window side,
+      // so it transparently handles local / remote / web / portable / profile
+      // contexts. It is NOT part of the public extension API — there's an open
+      // VS Code issue (microsoft/vscode#174971) showing the team treats it as
+      // an internal implementation detail and has changed the resolution
+      // behavior once.
+      //
+      // Risk floor: if VS Code changes the scheme behavior or removes it,
+      // clicking the diagnostic in the Problems pane will silently fail to
+      // open. The safety net is the summary toast's `Open Settings` button,
+      // which invokes the supported `workbench.action.openSettingsJson`
+      // command and stays correct regardless.
+      return vscode.Uri.from({ scheme: 'vscode-userdata', path: '/User/settings.json' });
     case vscode.ConfigurationTarget.Workspace:
       return vscode.workspace.workspaceFile;
     case vscode.ConfigurationTarget.WorkspaceFolder:
       return vscode.Uri.joinPath(wkspUri, '.vscode', 'settings.json');
-  }
-}
-
-/**
- * Map `vscode.env.appName` to the on-disk user-data folder name. VS Code's
- * Microsoft builds prefix the folder with "Code"; non-Microsoft variants
- * (VSCodium, Code-OSS) use their own app name verbatim. The earlier hardcoded
- * "Code" broke on Insiders / VSCodium — the diagnostic anchored at a path
- * that didn't exist, so clicking it in the Problems pane raised
- * "editor could not be opened because the file was not found" (260513-oh5
- * user-testing report).
- *
- * This still doesn't catch portable mode or `--user-data-dir` overrides; for
- * those the file simply won't be found and the diagnostic's "Open Settings"
- * quick-fix path falls back to the `workbench.action.openSettingsJson`
- * command (260514-djs).
- */
-function userDataFolderName(): string {
-  const name = vscode.env.appName ?? 'Visual Studio Code';
-  switch (name) {
-    case 'Visual Studio Code': return 'Code';
-    case 'Visual Studio Code - Insiders': return 'Code - Insiders';
-    case 'Visual Studio Code - Exploration': return 'Code - Exploration';
-    default: return name; // VSCodium, Code-OSS, etc. use the appName as the folder.
-  }
-}
-
-/**
- * 260514-dvt: counterpart to userDataFolderName for the remote/server case.
- * VS Code Server stores user-data under `$HOME/.vscode-server/...` (stable)
- * with a per-variant suffix for Insiders / Exploration. VSCodium-server and
- * other forks don't follow a widely-published convention; fall back to the
- * stable folder name — worst case the diagnostic anchors at a non-existent
- * path and the toast's `Open Settings` button (which uses the
- * `workbench.action.openSettingsJson` command) remains the safety net.
- */
-function serverDataFolderName(): string {
-  const name = vscode.env.appName ?? 'Visual Studio Code';
-  switch (name) {
-    case 'Visual Studio Code': return '.vscode-server';
-    case 'Visual Studio Code - Insiders': return '.vscode-server-insiders';
-    case 'Visual Studio Code - Exploration': return '.vscode-server-exploration';
-    default: return '.vscode-server';
   }
 }
 
