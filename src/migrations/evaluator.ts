@@ -18,11 +18,12 @@ export interface EvaluatorHooks {
     mcase: MigrationCase,
     entry: MigrationEntry,
     scope: MigrationScope,
-    // Optional metadata. Currently only populated for case 3 (both keys set)
-    // where `equalValues` reports whether the legacy and canonical values at
-    // this scope are equivalent — used by the panel to collapse the action
-    // button set when there is no value conflict to resolve.
-    meta?: { equalValues?: boolean },
+    // Optional metadata. Populated for case 2 and case 3 with the legacy/canonical
+    // values at the firing scope so the panel can render an accurate hover preview
+    // of what each action will write. `equalValues` is set for case 3 only and
+    // tells the panel to collapse the action button set when there is no value
+    // conflict to resolve.
+    meta?: { sourceValue?: unknown; destValue?: unknown; equalValues?: boolean },
   ) => void;
 }
 
@@ -127,7 +128,7 @@ export async function evaluateMigration(
 
       if (sourceVal !== undefined && destVal === undefined) {
         // Case 2: legacy set, canonical absent. Phase 21 owns the prompt.
-        hooks?.onCaseHit?.(2, entry, scope);
+        hooks?.onCaseHit?.(2, entry, scope, { sourceValue: sourceVal });
         results.push({ scope, case: 2, action: 'pending-user-choice' });
         continue;
       }
@@ -137,7 +138,7 @@ export async function evaluateMigration(
       // JSON-stringify equality is sufficient for VS Code settings (JSON values
       // by definition) and avoids pulling in a deep-equal dependency.
       const equalValues = jsonEqual(sourceVal, destVal);
-      hooks?.onCaseHit?.(3, entry, scope, { equalValues });
+      hooks?.onCaseHit?.(3, entry, scope, { sourceValue: sourceVal, destValue: destVal, equalValues });
       results.push({ scope, case: 3, action: 'pending-user-choice' });
     } catch (e) {
       try {

@@ -78,9 +78,17 @@ export interface PanelRow {
   destKey: string;
   wkspUri: string;
   folderName: string;
-  // The action button set is case-correct (3 for case 2, 4 for case 3) and
-  // typed with the narrowed action union — not `string` — so a round-trip
-  // through `postMessage` lands on `Case2Action | Case3Action` at the host.
+  // Current values at the firing scope. Used by the panel to render an accurate
+  // hover preview of each action's effect on the underlying settings files.
+  // `destValue` is undefined for case 2 (canonical absent). Serialized through
+  // postMessage as JSON, so values are restricted to JSON-representable types
+  // (which is the VS Code settings contract anyway).
+  sourceValue: unknown;
+  destValue: unknown;
+  // The action button set is case-correct (3 for case 2, 4 for case 3 differing,
+  // 2 for case 3 matching) and typed with the narrowed action union — not
+  // `string` — so a round-trip through `postMessage` lands on
+  // `Case2Action | Case3Action` at the host.
   buttons: readonly { label: string; action: Case2Action | Case3Action }[];
 }
 
@@ -143,7 +151,15 @@ export async function buildViewModel(): Promise<PanelViewModel> {
             seen.add(key);
           }
 
-          rows.push(buildRow(entry, mcase, scope, folder, meta?.equalValues === true));
+          rows.push(buildRow(
+            entry,
+            mcase,
+            scope,
+            folder,
+            meta?.equalValues === true,
+            meta?.sourceValue,
+            meta?.destValue,
+          ));
         },
       });
     } catch (e) {
@@ -175,6 +191,8 @@ function buildRow(
   scope: MigrationScope,
   folder: vscode.WorkspaceFolder,
   equalValues: boolean,
+  sourceValue: unknown,
+  destValue: unknown,
 ): PanelRow {
   const buttons = mcase === 2
     ? CASE_2_BUTTONS
@@ -188,6 +206,8 @@ function buildRow(
     destKey: `${entry.destNamespace}.${entry.destKey}`,
     wkspUri: folder.uri.toString(),
     folderName: folder.name,
+    sourceValue,
+    destValue,
     buttons,
   };
 }
