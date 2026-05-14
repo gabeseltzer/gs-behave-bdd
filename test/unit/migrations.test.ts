@@ -630,18 +630,19 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
     );
   });
 
-  // 260513-o1k regression test, updated for 260513-oh5: before that fix,
-  // recheckMigrations cleared completedMigrations and re-ran the evaluator
-  // but never invoked runConsentFlow — case-2 / case-3 hits were classified
-  // and dropped. After 260513-oh5, the consent surface is a diagnostic in the
-  // Problems pane plus a single summary toast. We pin both.
-  test('4.10: post-clear — case-2 legacy key publishes diagnostic + summary toast (regression)', async () => {
+  // 260513-o1k regression test, updated for 023-04: recheckMigrations clears
+  // completedMigrations and re-runs the evaluator; for any case-2 / case-3 hit
+  // that survives migrationMode silent-dispatch, the consent surface is a
+  // single summary toast whose only action button opens the Migrations Panel.
+  // This test pins both:
+  //   - The toast fires once with the 'Open Migrations Panel' button.
+  //   - Selecting that button executes the gs-behave-bdd.openMigrationsPanel
+  //     command (the panel-open signal — formerly a published Diagnostic).
+  test('4.10: post-clear — case-2 legacy key surfaces summary toast that opens the Migrations Panel (regression)', async () => {
     sinon.restore();
     updateSpy = sinon.spy(() => Promise.resolve());
     stubLogger();
     sinon.stub(configModule.config, 'reloadSettings').callsFake(() => undefined);
-    // diagnostics.ts reads files for JSONC range parsing — return empty.
-    sinon.stub(vscode.workspace.fs, 'readFile').resolves(Buffer.from('{}'));
     // 'behave-vsc.justMyCode' set at Global, 'gs-behave-bdd.justMyCode' unset
     // → case 2 hit at Global after the recheck clears completedMigrations.
     // The makePerKeyScopedConfig stub is namespace-blind; use a namespace-aware
@@ -667,24 +668,15 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
     sinon.stub(vscode.window, 'showQuickPick').callsFake((arr: unknown) =>
       Promise.resolve((arr as { label: string }[]).find(i => i.label === 'Global')),
     );
+    // Stub the toast to resolve 'Open Migrations Panel' so the .then() chain
+    // in consent.ts dispatches the panel-open command.
     const showInfoStub = sinon.stub(vscode.window, 'showInformationMessage')
-      .resolves(undefined);
-
-    // 023-04: diagnostics module was deleted. These shims keep the file
-    // compiling; 023-05 reshapes the assertions below around the panel
-    // signal. Until then this test is expected to fail at runtime.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const diag: any = {
-      disposeDiagnosticCollection: () => undefined,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      getDiagnosticCollection: () => ({ forEach: (_cb: (uri: any, diags: any[]) => void) => undefined }),
-      decodeDiagnosticCode: (_code: unknown) => undefined,
-    };
-    diag.disposeDiagnosticCollection();
+      .resolves('Open Migrations Panel' as unknown as undefined);
+    const execStub = sinon.stub(vscode.commands, 'executeCommand').resolves(undefined);
 
     await recheckMigrationsCommandHandler();
 
-    // Summary toast fires exactly once.
+    // Summary toast fires exactly once with the single Open Migrations Panel button.
     assert.strictEqual(
       showInfoStub.callCount,
       1,
@@ -695,25 +687,22 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
       /can be migrated for Behave BDD/.test(summaryMsg),
       `summary toast should match new copy; got: ${summaryMsg}`,
     );
+    const buttons = showInfoStub.firstCall.args.slice(1);
+    assert.deepStrictEqual(
+      buttons,
+      ['Open Migrations Panel'],
+      `summary toast must offer a single Open Migrations Panel button; got ${JSON.stringify(buttons)}`,
+    );
 
-    // Diagnostic was published for the justMyCode case-2 hit at Global scope.
-    let foundJustMyCode = false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    diag.getDiagnosticCollection().forEach((_uri: any, diags: any[]) => {
-      for (const d of diags) {
-        const decoded = diag.decodeDiagnosticCode(d.code);
-        if (!decoded) continue;
-        if (
-          decoded.entryId === 'justMyCode-from-behavevsc' &&
-          decoded.case === 2 &&
-          decoded.scope === vscode.ConfigurationTarget.Global
-        ) {
-          foundJustMyCode = true;
-        }
-      }
-    });
-    assert.ok(foundJustMyCode, 'expected a Diagnostic with justMyCode-from-behavevsc::2::Global code');
+    // The toast .then() chain is fire-and-forget — yield to the microtask queue
+    // before asserting on the dispatched command.
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
 
-    diag.disposeDiagnosticCollection();
+    const panelOpenCall = execStub.getCalls().find(c => c.args[0] === 'gs-behave-bdd.openMigrationsPanel');
+    assert.ok(
+      panelOpenCall,
+      `expected executeCommand('gs-behave-bdd.openMigrationsPanel'); got ${JSON.stringify(execStub.getCalls().map(c => c.args[0]))}`,
+    );
   });
 });
