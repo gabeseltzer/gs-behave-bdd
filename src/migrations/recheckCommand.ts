@@ -3,11 +3,13 @@ import { config } from '../configuration';
 import { runConsentFlow, readMigrationMode, type ConsentHit } from './consent';
 import { evaluateAllMigrations } from './evaluator';
 
-type QuickPickScopeId = 'global' | 'workspace' | 'workspaceFolder';
+type QuickPickScopeId = 'all' | 'global' | 'workspace' | 'workspaceFolder';
 
 interface ScopePickItem extends vscode.QuickPickItem {
   readonly scopeId: QuickPickScopeId;
-  readonly target: vscode.ConfigurationTarget;
+  // Concrete target to write to. For scopeId='all' this is unused — the
+  // handler iterates every applicable target instead.
+  readonly target?: vscode.ConfigurationTarget;
 }
 
 /**
@@ -29,6 +31,15 @@ interface ScopePickItem extends vscode.QuickPickItem {
 export async function recheckMigrationsCommandHandler(): Promise<void> {
   try {
     const items: ScopePickItem[] = [];
+
+    // First option: clear at every applicable scope and re-evaluate. The
+    // common case — most users want a full sweep, not a per-scope surgical
+    // recheck. Picked first so a single Enter on the QuickPick accepts it.
+    items.push({
+      label: 'Recheck all',
+      description: 'Clear completed migrations at every applicable scope and re-evaluate',
+      scopeId: 'all',
+    });
 
     // Global is always writeable.
     items.push({
@@ -66,16 +77,35 @@ export async function recheckMigrationsCommandHandler(): Promise<void> {
     });
     if (!pick) return;
 
-    // D-08: clear at the chosen scope, then run the standard evaluator path.
+    // D-08: clear at the chosen scope(s), then run the standard evaluator path.
     // The wkspUri passed to getConfiguration is just a binding handle for the
     // VS Code config API; the per-scope ConfigurationTarget controls the
     // actual write location. Use the first folder when present, undefined
     // otherwise (Global-only environments).
     const targetWkspUri = folders && folders.length > 0 ? folders[0].uri : undefined;
 
+    // Build the set of scopes to clear. For 'all', this mirrors the writeability
+    // filtering done while assembling the QuickPick items above so the two
+    // paths stay symmetric (e.g. Workspace is only cleared when a .code-workspace
+    // is open). For a specific scope, it's a one-element list.
+    const targets: vscode.ConfigurationTarget[] = [];
+    if (pick.scopeId === 'all') {
+      targets.push(vscode.ConfigurationTarget.Global);
+      if (vscode.workspace.workspaceFile !== undefined) {
+        targets.push(vscode.ConfigurationTarget.Workspace);
+      }
+      if (folders && folders.length > 0) {
+        targets.push(vscode.ConfigurationTarget.WorkspaceFolder);
+      }
+    } else if (pick.target !== undefined) {
+      targets.push(pick.target);
+    }
+
     try {
       const cfg = vscode.workspace.getConfiguration('gs-behave-bdd', targetWkspUri);
-      await cfg.update('completedMigrations', [], pick.target);
+      for (const target of targets) {
+        await cfg.update('completedMigrations', [], target);
+      }
     } catch (e) {
       try {
         const msg = `recheckMigrations: clear at ${pick.scopeId} failed: ${e}`;
