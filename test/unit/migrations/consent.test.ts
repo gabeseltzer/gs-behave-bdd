@@ -1,20 +1,21 @@
 /**
  * consent.ts orchestrator unit tests.
  *
- * Phase 21 originally drove the consent UX through per-(entry,case) toast
- * prompts. 260513-oh5 swapped that for Problems-pane diagnostics + Code
- * Actions; this file now pins the new contract:
+ * Phase 23 (Migrations Panel Webview) replaced the diagnostics + Code Action
+ * surface with a single 'Open Migrations Panel' toast button that opens a
+ * Webview panel. This file pins the resulting contract:
  *
  *   - case-2 silent migrationMode paths (migrate-and-delete / migrate-and-keep
  *     / skip) still dispatch handlers directly without UI surface.
- *   - case-2 with mode === 'prompt' OR any case-3 publishes a Diagnostic per
- *     (entry, case, scope) hit and fires a SINGLE summary toast.
+ *   - case-2 with mode === 'prompt' OR any case-3 fires a SINGLE summary toast
+ *     whose ONLY action button is 'Open Migrations Panel'; clicking it
+ *     dispatches the `gs-behave-bdd.openMigrationsPanel` command.
  *   - reloadSettings runs exactly when there was at least one consent hit
  *     (silent or prompt-bound). Preserves the D-18 cache-coherence contract.
  *
- * The handler-level action tests (Migrate & delete writes dest, etc.) and the
- * Code Action dispatch tests now live in test/unit/migrations/diagnostics.test.ts
- * since the prompt-button click path is gone.
+ * Handler-level action tests (Migrate & delete writes dest, etc.) live in the
+ * registry / migrations.test.ts suites; this file only covers the orchestrator
+ * + the toast surface.
  */
 
 import * as assert from 'assert';
@@ -24,18 +25,6 @@ import {
   runConsentFlow,
   type MigrationEntry,
 } from '../../../src/migrations';
-
-// 023-04: the diagnostics surface (publishConsentDiagnostics /
-// clearDiagnosticsForEntryAtScope / getDiagnosticCollection /
-// disposeDiagnosticCollection) was deleted along with the Problems-pane UI.
-// These local shims keep this file compiling so the rest of the unit suite
-// can run; assertions that depend on diagnostic state are now expected to
-// fail until 023-05 reshapes them around the panel signal.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getDiagnosticCollection(): { forEach(cb: (uri: any, diags: any[]) => void): void } {
-  return { forEach: () => undefined };
-}
-function disposeDiagnosticCollection(): void { /* no-op shim — 023-05 cleans this up */ }
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const vscode = require('vscode');
@@ -111,26 +100,9 @@ function countLogInfoMatching(logInfo: sinon.SinonSpy, pattern: RegExp): number 
   return logInfo.getCalls().filter(c => pattern.test(String(c.args[0]))).length;
 }
 
-interface DiagSummary {
-  total: number;
-  byCode: Map<string, number>;
-}
-
-function summarizeDiagnostics(): DiagSummary {
-  const out: DiagSummary = { total: 0, byCode: new Map() };
-  getDiagnosticCollection().forEach((_uri, diags) => {
-    for (const d of diags) {
-      out.total++;
-      const code = String(d.code);
-      out.byCode.set(code, (out.byCode.get(code) ?? 0) + 1);
-    }
-  });
-  return out;
-}
-
 // ─── Suite ─────────────────────────────────────────────────────────────────
 
-suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
+suite('consent.ts — runConsentFlow (023-04 panel-toast contract)', () => {
 
   let updateSpy: sinon.SinonSpy;
   let showStub: sinon.SinonStub;
@@ -140,29 +112,24 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
     updateSpy = sinon.spy(() => Promise.resolve());
     ({ logInfo } = stubLogger());
     showStub = sinon.stub(vscode.window, 'showInformationMessage').resolves(undefined);
-    // diagnostics.ts reads files for JSONC range parsing. We don't care
-    // about ranges here; return empty content so it falls back to [0,0].
-    sinon.stub(vscode.workspace.fs, 'readFile').resolves(Buffer.from('{}'));
   });
 
   teardown(() => {
-    disposeDiagnosticCollection();
     sinon.restore();
   });
 
   // ─── No-hit short-circuit ────────────────────────────────────────────────
 
-  test('empty hits → no toast, no diagnostics, no reloadSettings call', async () => {
+  test('empty hits → no toast, no reloadSettings call', async () => {
     await runConsentFlow(MOCK_URI, [], 'prompt');
     assert.strictEqual(showStub.callCount, 0);
-    assert.strictEqual(summarizeDiagnostics().total, 0);
     const reload = configModule.config.reloadSettings as unknown as sinon.SinonStub;
     assert.strictEqual(reload.callCount, 0, 'reloadSettings should not fire when there are no hits');
   });
 
-  // ─── Diagnostic + summary toast (the new prompt surface) ─────────────────
+  // ─── Summary toast surface (single Open Migrations Panel button) ─────────
 
-  test('single case-2 hit (mode=prompt) → 1 diagnostic, 1 summary toast', async () => {
+  test('single case-2 hit (mode=prompt) → 1 summary toast offering Open Migrations Panel', async () => {
     const entry = makeEntry('case2single');
     sinon.stub(vscode.workspace, 'getConfiguration').returns(
       makePerKeyScopedConfig({}, updateSpy),
@@ -173,21 +140,21 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
       'prompt',
     );
 
-    const summary = summarizeDiagnostics();
-    assert.strictEqual(summary.total, 1);
-    assert.ok(
-      summary.byCode.has(`${entry.id}::2::${vscode.ConfigurationTarget.WorkspaceFolder}`),
-      'expected the diagnostic to be encoded for case 2 at WorkspaceFolder scope',
-    );
     assert.strictEqual(showStub.callCount, 1, 'exactly one summary toast');
     const msg = String(showStub.firstCall.args[0]);
-    assert.ok(/can be migrated for Behave BDD/.test(msg), `summary message should mention "can be migrated for Behave BDD"; got: ${msg}`);
-    // 260514-djs: summary toast now carries two action buttons.
+    assert.ok(
+      /can be migrated for Behave BDD/.test(msg),
+      `summary message should mention "can be migrated for Behave BDD"; got: ${msg}`,
+    );
     const buttons = showStub.firstCall.args.slice(1);
-    assert.deepStrictEqual(buttons, ['Open Problems', 'Open Settings'], 'summary toast must offer Open Problems + Open Settings buttons');
+    assert.deepStrictEqual(
+      buttons,
+      ['Open Migrations Panel'],
+      'summary toast must offer a single Open Migrations Panel button',
+    );
   });
 
-  test('single case-3 hit (any mode) → 1 diagnostic, 1 summary toast (D-A4.3)', async () => {
+  test('single case-3 hit (any mode) → 1 summary toast (D-A4.3)', async () => {
     const entry = makeEntry('case3single');
     sinon.stub(vscode.workspace, 'getConfiguration').returns(
       makePerKeyScopedConfig({}, updateSpy),
@@ -198,12 +165,12 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
       [{ case: 3, entry, scope: vscode.ConfigurationTarget.WorkspaceFolder }],
       'skip',
     );
-    const summary = summarizeDiagnostics();
-    assert.strictEqual(summary.total, 1);
     assert.strictEqual(showStub.callCount, 1);
+    const buttons = showStub.firstCall.args.slice(1);
+    assert.deepStrictEqual(buttons, ['Open Migrations Panel']);
   });
 
-  test('one entry hitting 2 scopes (same case) → 2 diagnostics, still 1 summary toast', async () => {
+  test('one entry hitting 2 scopes (same case) → still 1 summary toast', async () => {
     const entry = makeEntry('case2multiscope');
     sinon.stub(vscode.workspace, 'getConfiguration').returns(
       makePerKeyScopedConfig({}, updateSpy),
@@ -216,11 +183,10 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
       ],
       'prompt',
     );
-    assert.strictEqual(summarizeDiagnostics().total, 2);
     assert.strictEqual(showStub.callCount, 1);
   });
 
-  test('mixed case-2 + case-3 for one entry → 2 diagnostics (different codes), 1 summary toast', async () => {
+  test('mixed case-2 + case-3 for one entry → still 1 summary toast', async () => {
     const entry = makeEntry('mixed');
     sinon.stub(vscode.workspace, 'getConfiguration').returns(
       makePerKeyScopedConfig({}, updateSpy),
@@ -233,10 +199,6 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
       ],
       'prompt',
     );
-    const summary = summarizeDiagnostics();
-    assert.strictEqual(summary.total, 2);
-    assert.ok(summary.byCode.has(`${entry.id}::2::${vscode.ConfigurationTarget.Global}`));
-    assert.ok(summary.byCode.has(`${entry.id}::3::${vscode.ConfigurationTarget.WorkspaceFolder}`));
     assert.strictEqual(showStub.callCount, 1);
   });
 
@@ -254,13 +216,16 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
       'prompt',
     );
     const msg = String(showStub.firstCall.args[0]);
-    assert.ok(/^\d+ settings? can be migrated for Behave BDD/.test(msg), `summary should match new copy; got: ${msg}`);
+    assert.ok(
+      /^\d+ settings? can be migrated for Behave BDD/.test(msg),
+      `summary should match new copy; got: ${msg}`,
+    );
     assert.ok(msg.startsWith('2 settings'), `expected plural form starting with "2 settings"; got: ${msg}`);
   });
 
-  // ─── Case 2 silent migrationMode paths (no toast, no diagnostic) ─────────
+  // ─── Case 2 silent migrationMode paths (no toast) ────────────────────────
 
-  test('mode=migrate-and-delete: case-2 dispatches silently, no toast, no diagnostic', async () => {
+  test('mode=migrate-and-delete: case-2 dispatches silently, no toast', async () => {
     const entry = makeEntry('silentMD');
     sinon.stub(vscode.workspace, 'getConfiguration').returns(
       makePerKeyScopedConfig(
@@ -285,7 +250,6 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
 
     // No UI surface.
     assert.strictEqual(showStub.callCount, 0);
-    assert.strictEqual(summarizeDiagnostics().total, 0);
 
     // Audit log line still fires.
     assert.strictEqual(countLogInfoMatching(logInfo, /migrate-and-delete at Workspace.*done\./), 1);
@@ -311,7 +275,6 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
     assert.strictEqual(callsFor(updateSpy, entry.destKey, vscode.ConfigurationTarget.Global).length, 1);
     assert.strictEqual(callsFor(updateSpy, entry.sourceKey, vscode.ConfigurationTarget.Global).length, 0, 'source must NOT be cleared');
     assert.strictEqual(showStub.callCount, 0);
-    assert.strictEqual(summarizeDiagnostics().total, 0);
     assert.strictEqual(countLogInfoMatching(logInfo, /migrate-and-keep at Global.*done\./), 1);
   });
 
@@ -327,7 +290,6 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
     );
     assert.strictEqual(callsFor(updateSpy, 'completedMigrations', vscode.ConfigurationTarget.Workspace).length, 1);
     assert.strictEqual(showStub.callCount, 0);
-    assert.strictEqual(summarizeDiagnostics().total, 0);
     assert.strictEqual(countLogInfoMatching(logInfo, /skip at Workspace.*done\./), 1);
   });
 
@@ -347,15 +309,15 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
     assert.strictEqual(reload.callCount, 1, 'reloadSettings must fire once when there was a hit');
   });
 
-  // ─── 260514-djs: summary-toast button dispatch ───────────────────────────
+  // ─── 023-04: summary-toast button dispatch (single Open Migrations Panel) ─
 
-  test("'Open Problems' button executes workbench.actions.view.problems", async () => {
-    const entry = makeEntry('toastOpenProblems');
+  test("'Open Migrations Panel' button executes gs-behave-bdd.openMigrationsPanel", async () => {
+    const entry = makeEntry('toastOpenPanel');
     sinon.stub(vscode.workspace, 'getConfiguration').returns(
       makePerKeyScopedConfig({}, updateSpy),
     );
     const execStub = sinon.stub(vscode.commands, 'executeCommand').resolves(undefined);
-    showStub.resolves('Open Problems');
+    showStub.resolves('Open Migrations Panel');
 
     await runConsentFlow(
       MOCK_URI,
@@ -364,44 +326,22 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
     );
     // Toast .then() chain is fire-and-forget — yield to the microtask queue.
     await new Promise(resolve => setImmediate(resolve));
-
-    const matchingCall = execStub.getCalls().find(c => c.args[0] === 'workbench.actions.view.problems');
-    assert.ok(matchingCall, `expected workbench.actions.view.problems; got ${JSON.stringify(execStub.getCalls().map(c => c.args[0]))}`);
-  });
-
-  test("'Open Settings' button opens the first hit's anchor URI at its range", async () => {
-    const entry = makeEntry('toastOpenSettings');
-    sinon.stub(vscode.workspace, 'getConfiguration').returns(
-      makePerKeyScopedConfig({}, updateSpy),
-    );
-    const openDocStub = sinon.stub(vscode.workspace, 'openTextDocument').resolves({} as never);
-    const showDocStub = sinon.stub(vscode.window, 'showTextDocument').resolves({} as never);
-    showStub.resolves('Open Settings');
-
-    await runConsentFlow(
-      MOCK_URI,
-      [{ case: 2, entry, scope: vscode.ConfigurationTarget.WorkspaceFolder }],
-      'prompt',
-    );
     await new Promise(resolve => setImmediate(resolve));
 
-    assert.strictEqual(openDocStub.callCount, 1, 'openTextDocument should be called once for the first hit');
-    const openedUri = openDocStub.firstCall.args[0] as { fsPath: string };
+    const matchingCall = execStub.getCalls().find(c => c.args[0] === 'gs-behave-bdd.openMigrationsPanel');
     assert.ok(
-      String(openedUri.fsPath).includes('.vscode'),
-      `expected WorkspaceFolder anchor (.vscode/settings.json); got: ${openedUri.fsPath}`,
+      matchingCall,
+      `expected gs-behave-bdd.openMigrationsPanel; got ${JSON.stringify(execStub.getCalls().map(c => c.args[0]))}`,
     );
-    assert.strictEqual(showDocStub.callCount, 1, 'showTextDocument should follow openTextDocument');
   });
 
-  test("'Open Settings' falls back to openSettingsJson when the anchor file can't be opened", async () => {
-    const entry = makeEntry('toastFallback');
+  test('dismissed summary toast (choice=undefined) is a no-op (no commands fired)', async () => {
+    const entry = makeEntry('toastDismissed');
     sinon.stub(vscode.workspace, 'getConfiguration').returns(
       makePerKeyScopedConfig({}, updateSpy),
     );
-    sinon.stub(vscode.workspace, 'openTextDocument').rejects(new Error('ENOENT'));
     const execStub = sinon.stub(vscode.commands, 'executeCommand').resolves(undefined);
-    showStub.resolves('Open Settings');
+    showStub.resolves(undefined);
 
     await runConsentFlow(
       MOCK_URI,
@@ -410,7 +350,7 @@ suite('consent.ts — runConsentFlow (260513-oh5 contract)', () => {
     );
     await new Promise(resolve => setImmediate(resolve));
 
-    const fallback = execStub.getCalls().find(c => c.args[0] === 'workbench.action.openSettingsJson');
-    assert.ok(fallback, 'expected fallback to workbench.action.openSettingsJson when the anchor file is unreadable');
+    const panelOpenCalls = execStub.getCalls().filter(c => c.args[0] === 'gs-behave-bdd.openMigrationsPanel');
+    assert.strictEqual(panelOpenCalls.length, 0, 'dismissed toast must not open the panel');
   });
 });
