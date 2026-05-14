@@ -67,15 +67,23 @@ Staying:
 | Diagnostic survival | Drop all migration diagnostics — panel owns the whole surface |
 | Milestone | Phase 023 of v1.5.0 |
 
+## Planner-settled decisions (2026-05-14, /gsd-plan-phase)
+
+| ID | Choice | Pick | Where |
+|---|---|---|---|
+| A | Multi-root scope | Single panel; group rows by folder when `folders.length > 1` | 023-02 |
+| B | Auto-reopen on activation | No — summary toast is the canonical re-entry | 023-01 |
+| C | Config-change listener granularity | Filter to `gs-behave-bdd.*` + `behave-vsc.*` namespaces (over-refresh benign) | 023-02 |
+| D | Migration Mode write target | Global scope (user preference) | 023-03 |
+| E | Empty-state lifecycle | Stay open with Recheck + Close (single-instance; user closes when done) | 023-01 (reserved); 023-02 (markup) |
+
 ## Plans (skeleton)
 
-To be detailed in `/gsd-plan-phase`. Rough decomposition:
-
-- **023-01** — Webview shell: lifecycle (single-instance create / reveal / dispose), command registration, CSP-safe HTML scaffold, theme integration via CSS custom properties.
-- **023-02** — Migrations list: build a view-model from current hits by re-running the evaluator in collect-only mode; render case-2 (3 buttons) and case-3 (4 buttons) per row; message-passing wiring to `dispatchMigrationAction`.
-- **023-03** — Migration Mode section: read current value, render UI for the 4 enum values, write on selection, re-render.
-- **023-04** — Replace the surfaces: toast button → opens panel; add `gs-behave-bdd.openMigrationsPanel` to command palette; *delete* the diagnostics surface (`publishConsentDiagnostics`, `clearDiagnosticsForEntryAtScope`, `MigrationCodeActionProvider`, the dispatch command, related tests).
-- **023-05** — Tests: Webview rendering, message handler routing, Migration Mode write path, empty-state, recheck integration. Update test 4.10 (recheck-consent-flow regression) to assert panel-opening signal instead of diagnostic-publishing.
+- **023-01** — `023-01-webview-shell-PLAN.md` — Webview shell: lifecycle (single-instance create / reveal / dispose), command registration, CSP-safe HTML scaffold, theme integration via CSS custom properties. Settles Decision B + reserves E.
+- **023-02** — `023-02-migrations-list-PLAN.md` — Migrations list: build a view-model from current hits by re-running the evaluator in collect-only mode; render case-2 (3 buttons) and case-3 (4 buttons) per row; message-passing wiring to `dispatchMigrationAction`; configuration-change re-render; empty-state markup. Settles Decisions A + C.
+- **023-03** — `023-03-migration-mode-PLAN.md` — Migration Mode section: read current value, render UI for the 4 enum values, write at Global scope on selection, re-render. Settles Decision D.
+- **023-04** — `023-04-surface-swap-PLAN.md` — Replace the surfaces: toast button → opens panel; delete the diagnostics surface (`publishConsentDiagnostics`, `clearDiagnosticsForEntryAtScope`, `MigrationCodeActionProvider`, the `vscode-userdata:` anchor hack, `getDiagnosticCollection`, `diagnostics.ts` entirely); trim `dispatchMigrationAction`'s `clearDiagnosticsForEntryAtScope` call; delete `diagnostics.test.ts`. Deliberately leaves `consent.test.ts` + `migrations.test.ts` test 4.10 in a known-failing state for 023-05.
+- **023-05** — `023-05-tests-PLAN.md` — Tests: new `panel.test.ts` covering lifecycle, HTML pins, message routing, dispose, config re-render, Migration Mode write, empty state. Reshape `consent.test.ts` toast assertions + audit `summarizeDiagnostics`. Reshape `migrations.test.ts` test 4.10 to assert panel-opening signal. Audit `vscode.mock.ts` for now-dead surface.
 
 ## Non-goals
 
