@@ -24,7 +24,6 @@ import * as vscode from 'vscode';
 import { config } from '../configuration';
 import { migrateScopedSetting } from '../notifications';
 import { markMigrationFinishedAtScope } from './completedMigrations';
-import { clearDiagnosticsForEntryAtScope, computeRange, publishConsentDiagnostics, resolveAnchorUri } from './diagnostics';
 import type { MigrationEntry, MigrationScope } from './types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -127,7 +126,6 @@ export async function runMigrateAndDelete(entry: MigrationEntry, scope: Migratio
     },
   });
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
-  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: migrate-and-delete at ${describeScope(scope)} — done.`, wkspUri);
 }
 
@@ -145,14 +143,12 @@ export async function runMigrateAndKeep(entry: MigrationEntry, scope: MigrationS
     },
   });
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
-  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: migrate-and-keep at ${describeScope(scope)} — done.`, wkspUri);
 }
 
 export async function runDontMigrate(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
   // No primitive call; pure no-op write semantically. Always marks Finished.
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
-  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: dont-migrate at ${describeScope(scope)} — done.`, wkspUri);
 }
 
@@ -161,14 +157,12 @@ export async function runDontMigrate(entry: MigrationEntry, scope: MigrationScop
 export async function runOverwriteAndDelete(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
   await runOverwriteAtScope(entry, scope, wkspUri, /* removeSource */ true);
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
-  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: overwrite-and-delete at ${describeScope(scope)} — done.`, wkspUri);
 }
 
 export async function runOverwriteAndKeep(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
   await runOverwriteAtScope(entry, scope, wkspUri, /* removeSource */ false);
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
-  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: overwrite-and-keep at ${describeScope(scope)} — done.`, wkspUri);
 }
 
@@ -182,14 +176,12 @@ export async function runKeepCanonicalAndDeleteLegacy(entry: MigrationEntry, sco
     transform: () => ({ kind: 'skipDest', removeSource: true }),
   });
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
-  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: keep-canonical-and-delete-legacy at ${describeScope(scope)} — done.`, wkspUri);
 }
 
 export async function runKeepBoth(entry: MigrationEntry, scope: MigrationScope, wkspUri: vscode.Uri): Promise<void> {
   // No primitive call; pure no-op write semantically. Always marks Finished.
   await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
-  clearDiagnosticsForEntryAtScope(entry, scope);
   config.logger.logInfo(`Migration ${entry.id}: keep-both at ${describeScope(scope)} — done.`, wkspUri);
 }
 
@@ -309,24 +301,17 @@ export async function runConsentFlow(
     }
   }
 
-  // ── 3. Publish diagnostics + summary toast for prompt-bound hits ─────────
-  // 260513-oh5: replaces the per-(entry,case) showInformationMessage prompts.
-  // The Code Action quick-fixes on each diagnostic invoke the same action
-  // handlers via the gs-behave-bdd.migration.action command.
+  // ── 3. Summary toast → Migrations Panel for prompt-bound hits ───────────
+  // 023-04: replaces the diagnostics-publishing + two-button toast with a
+  // single-button toast that opens the Migrations Panel (Webview). The panel
+  // re-evaluates from scratch when it opens, so we don't need to thread any
+  // hit through to the click handler.
   if (promptBoundHits.length > 0) {
-    const published = await publishConsentDiagnostics(wkspUri, promptBoundHits);
-    if (published > 0) {
-      const n = published;
-      const message = `${n} ${n === 1 ? 'setting' : 'settings'} can be migrated for Behave BDD`;
-      // Two-button summary toast: 'Open Problems' jumps to the Problems pane;
-      // 'Open Settings' opens the first hit's settings.json file at the
-      // legacy-key line. Non-blocking — we don't await; activation must not
-      // hang on user input (260514-djs).
-      const firstHit = promptBoundHits[0];
-      void vscode.window
-        .showInformationMessage(message, 'Open Problems', 'Open Settings')
-        .then(choice => handleSummaryToastChoice(choice, firstHit, wkspUri));
-    }
+    const n = promptBoundHits.length;
+    const message = `${n} ${n === 1 ? 'setting' : 'settings'} can be migrated for Behave BDD`;
+    void vscode.window
+      .showInformationMessage(message, 'Open Migrations Panel')
+      .then(choice => handleSummaryToastChoice(choice, wkspUri));
   }
 
   // Restore the D-18 contract: WorkspaceSettings cache reflects post-migration
@@ -351,7 +336,6 @@ async function processCase2Silent(group: ConsentGroup, wkspUri: vscode.Uri, mode
   for (const scope of scopes) {
     try {
       await markMigrationFinishedAtScope(entry.id, scope, wkspUri);
-      clearDiagnosticsForEntryAtScope(entry, scope);
       config.logger.logInfo(`Migration ${entry.id}: skip at ${describeScope(scope)} — done.`, wkspUri);
     } catch (e) {
       config.logger.logInfo(`Migration ${entry.id}: action at ${describeScope(scope)} failed: ${e}`, wkspUri);
@@ -382,44 +366,21 @@ async function dispatchOverScopes(
 }
 
 /**
- * 260514-djs: dispatch the summary-toast button choice.
+ * 023-04: dispatch the summary-toast button choice.
  *
- *   'Open Problems' → workbench.actions.view.problems
- *   'Open Settings' → open the first hit's anchor file at the legacy-key line,
- *                     falling back to workbench.action.openSettingsJson if the
- *                     anchor URI doesn't resolve or the file can't be opened.
- *   undefined       → user dismissed the toast — diagnostic persists, no-op.
+ *   'Open Migrations Panel' → executes the gs-behave-bdd.openMigrationsPanel
+ *                             command (Webview registered in extension.ts).
+ *   undefined               → user dismissed the toast — no-op; the next
+ *                             activation will re-surface the toast.
  *
  * Never throws; failures are logged so a misclick can't surface a stack trace
  * via the unhandled-rejection handler.
  */
-async function handleSummaryToastChoice(
-  choice: string | undefined,
-  firstHit: ConsentHit,
-  wkspUri: vscode.Uri,
-): Promise<void> {
+async function handleSummaryToastChoice(choice: string | undefined, wkspUri: vscode.Uri): Promise<void> {
   if (choice === undefined) return;
   try {
-    if (choice === 'Open Problems') {
-      await vscode.commands.executeCommand('workbench.actions.view.problems');
-      return;
-    }
-    if (choice === 'Open Settings') {
-      const uri = resolveAnchorUri(firstHit.scope, wkspUri);
-      if (!uri) {
-        await vscode.commands.executeCommand('workbench.action.openSettingsJson');
-        return;
-      }
-      try {
-        const doc = await vscode.workspace.openTextDocument(uri);
-        const range = await computeRange(uri, firstHit.entry, firstHit.scope);
-        await vscode.window.showTextDocument(doc, { selection: range });
-      } catch {
-        // The anchor URI didn't resolve to a real file (Insiders user-data-dir
-        // override, portable mode, etc.) — fall through to the canonical
-        // "open user settings.json" command.
-        await vscode.commands.executeCommand('workbench.action.openSettingsJson');
-      }
+    if (choice === 'Open Migrations Panel') {
+      await vscode.commands.executeCommand('gs-behave-bdd.openMigrationsPanel');
     }
   } catch (e) {
     config.logger.logInfo(`Summary toast action "${choice}" failed: ${e}`, wkspUri);
