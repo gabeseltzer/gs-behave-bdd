@@ -76,7 +76,23 @@ export function renderHtml(webview: vscode.Webview): string {
     .page-desc {
       color: var(--vscode-descriptionForeground);
       font-size: 13px;
-      margin: 0 0 28px;
+      margin: 0;
+    }
+    .page-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .page-header > div {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .recheck-primary {
+      flex: 0 0 auto;
+      margin-top: 4px;
+      padding: 6px 16px;
     }
     h2 {
       font-size: 13px;
@@ -222,8 +238,13 @@ export function renderHtml(webview: vscode.Webview): string {
   </style>
 </head>
 <body>
-  <h1>Behave BDD: Migrations</h1>
-  <p class="page-desc">Review and apply pending settings migrations. The actions you choose below write to your VS Code settings.json the same way the Settings UI does.</p>
+  <div class="page-header">
+    <div>
+      <h1>Behave BDD: Migrations</h1>
+      <p class="page-desc">Review and apply pending settings migrations. The actions you choose below write to your VS Code settings.json the same way the Settings UI does.</p>
+    </div>
+    <button type="button" class="recheck-primary" data-recheck="true" title="Re-evaluate every workspace folder and refresh this list">Recheck Migrations</button>
+  </div>
   <div id="mode-root"></div>
   <div id="pending-root"><p class="empty">Loading…</p></div>
   <div id="preview" class="preview-popover" style="display:none"></div>
