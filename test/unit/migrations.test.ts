@@ -534,20 +534,21 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
     sinon.stub(vscode.workspace, 'workspaceFolders').value(opts.workspaceFolders);
   }
 
-  test('4.1: no .code-workspace + 1 folder — quick-pick has Global + Workspace Folder only', async () => {
+  test('4.1: no .code-workspace + 1 folder — quick-pick has Recheck all + Global + Workspace Folder', async () => {
     setWorkspace({ workspaceFile: undefined, workspaceFolders: [{ uri: MOCK_URI }] });
     showQuickPickStub.resolves(undefined); // user dismisses
     await recheckMigrationsCommandHandler();
     assert.strictEqual(showQuickPickStub.callCount, 1);
     const items = showQuickPickStub.firstCall.args[0];
-    assert.strictEqual(items.length, 2, 'Workspace scope filtered out per D-07');
+    assert.strictEqual(items.length, 3, 'Recheck all + Global + Workspace Folder (Workspace filtered per D-07)');
     const labels = items.map((i: { label: string }) => i.label);
+    assert.strictEqual(labels[0], 'Recheck all', 'Recheck all must be the first option (default Enter target)');
     assert.ok(labels.includes('Global'));
     assert.ok(labels.includes('Workspace Folder'));
     assert.ok(!labels.includes('Workspace'));
   });
 
-  test('4.2: .code-workspace open + folder — all 3 scopes shown', async () => {
+  test('4.2: .code-workspace open + folder — Recheck all + all 3 scopes shown', async () => {
     setWorkspace({
       workspaceFile: vscode.Uri.file('/fake.code-workspace'),
       workspaceFolders: [{ uri: MOCK_URI }],
@@ -555,27 +556,25 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
     showQuickPickStub.resolves(undefined);
     await recheckMigrationsCommandHandler();
     const items = showQuickPickStub.firstCall.args[0];
-    assert.strictEqual(items.length, 3);
+    assert.strictEqual(items.length, 4);
     const labels = items.map((i: { label: string }) => i.label);
-    assert.ok(labels.includes('Global'));
-    assert.ok(labels.includes('Workspace'));
-    assert.ok(labels.includes('Workspace Folder'));
+    assert.deepStrictEqual(labels, ['Recheck all', 'Global', 'Workspace', 'Workspace Folder']);
   });
 
-  test('4.3: no folders — only Global is shown; pick Global short-circuits without evaluator', async () => {
+  test('4.3: no folders — Recheck all + Global shown; picking Recheck all clears Global only', async () => {
     setWorkspace({ workspaceFile: undefined, workspaceFolders: undefined });
     const items: { label: string; target: unknown }[] = [];
     showQuickPickStub.callsFake((arr: unknown[]) => {
-      // capture for assertion
       (arr as { label: string; target: unknown }[]).forEach(i => items.push(i));
-      return Promise.resolve(arr[0]);
+      return Promise.resolve(arr[0]); // pick the default — Recheck all
     });
     await recheckMigrationsCommandHandler();
-    assert.strictEqual(items.length, 1);
-    assert.strictEqual(items[0].label, 'Global');
-    // cfg.update was called for the clear, but evaluateAllMigrations was NOT invoked
-    // (no folders to iterate). updateSpy should be exactly 1 call (the clear write).
+    assert.strictEqual(items.length, 2);
+    assert.strictEqual(items[0].label, 'Recheck all');
+    assert.strictEqual(items[1].label, 'Global');
+    // With no folders, the only applicable target for Recheck all is Global → 1 clear write.
     assert.strictEqual(updateSpy.callCount, 1);
+    assert.strictEqual(updateSpy.firstCall.args[2], vscode.ConfigurationTarget.Global);
   });
 
   test('4.4: user cancels (showQuickPick → undefined) — no update, no evaluator', async () => {
@@ -621,6 +620,46 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
     const clearCall = updateSpy.getCalls().find(c => c.args[0] === 'completedMigrations');
     assert.ok(clearCall);
     assert.strictEqual(clearCall!.args[2], vscode.ConfigurationTarget.Workspace);
+  });
+
+  test('4.7a: pick Recheck all with .code-workspace + folder — clears at Global, Workspace, AND WorkspaceFolder', async () => {
+    setWorkspace({
+      workspaceFile: vscode.Uri.file('/fake.code-workspace'),
+      workspaceFolders: [{ uri: MOCK_URI }],
+    });
+    showQuickPickStub.callsFake((arr: { label: string }[]) =>
+      Promise.resolve(arr.find(i => i.label === 'Recheck all')),
+    );
+    await recheckMigrationsCommandHandler();
+    const clearTargets = updateSpy.getCalls()
+      .filter(c => c.args[0] === 'completedMigrations'
+        && Array.isArray(c.args[1])
+        && (c.args[1] as unknown[]).length === 0)
+      .map(c => c.args[2])
+      .slice(0, 3); // first 3 calls are the clears; subsequent calls are evaluator marks.
+    assert.deepStrictEqual(clearTargets, [
+      vscode.ConfigurationTarget.Global,
+      vscode.ConfigurationTarget.Workspace,
+      vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
+  });
+
+  test('4.7b: pick Recheck all without .code-workspace — clears Global + WorkspaceFolder only (Workspace filtered per D-07)', async () => {
+    setWorkspace({ workspaceFile: undefined, workspaceFolders: [{ uri: MOCK_URI }] });
+    showQuickPickStub.callsFake((arr: { label: string }[]) =>
+      Promise.resolve(arr.find(i => i.label === 'Recheck all')),
+    );
+    await recheckMigrationsCommandHandler();
+    const clearTargets = updateSpy.getCalls()
+      .filter(c => c.args[0] === 'completedMigrations'
+        && Array.isArray(c.args[1])
+        && (c.args[1] as unknown[]).length === 0)
+      .map(c => c.args[2])
+      .slice(0, 2);
+    assert.deepStrictEqual(clearTargets, [
+      vscode.ConfigurationTarget.Global,
+      vscode.ConfigurationTarget.WorkspaceFolder,
+    ]);
   });
 
   test('4.8: cfg.update rejection — logs and bails (no evaluator pass)', async () => {
