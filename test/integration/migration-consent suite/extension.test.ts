@@ -13,19 +13,6 @@ import {
 	dispatchMigrationAction,
 } from '../../../src/migrations';
 
-// 023-04: getDiagnosticCollection / decodeDiagnosticCode were deleted along
-// with the Problems-pane surface. These local shims keep this file compiling;
-// 023-05 will reshape the (already surface-agnostic, per CONTEXT.md) assertions
-// below around the panel signal. Tests using these will fail at runtime in the
-// interim — expected and documented in 023-04 SUMMARY.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getDiagnosticCollection(): { forEach(cb: (uri: any, diags: any[]) => void): void } {
-	return { forEach: () => undefined };
-}
-function decodeDiagnosticCode(_code: unknown): { entryId: string; case: 2 | 3; scope: number } | undefined {
-	return undefined;
-}
-
 
 let instances: TestSupport;
 
@@ -159,15 +146,17 @@ suite('migration-consent suite', () => {
 	});
 
 	// Test 2: Case 2 + 'Migrate & delete' — runParallel migration.
-	// 260513-oh5 contract: drive() publishes the diagnostic + summary toast,
-	// then we invoke dispatchMigrationAction directly (the same code path the
-	// Code Action quick-fix triggers). Asserts the post-action settings.json
-	// shape is unchanged from the prior toast-driven design.
+	// 023-04 contract: drive() fires the summary toast (single 'Open Migrations
+	// Panel' button), then we invoke dispatchMigrationAction directly with the
+	// known WorkspaceFolder scope (the case-2 fixture seeds the legacy key in
+	// the folder-level .vscode/settings.json). The post-action settings.json
+	// shape assertions below are the load-bearing surface; the toast fire is a
+	// smoke check that the panel-open signal still flows.
 	test('Test 2: Case 2 Migrate & delete migrates runParallel', async function () {
 		this.timeout(60000);
 		const stub = vscode.window.showInformationMessage as unknown as sinon.SinonStub;
 		stub.resetHistory();
-		// Summary toast has no buttons — return undefined so it's a pure no-op.
+		// Summary toast — dismiss so the panel-open command doesn't fire here.
 		stub.callsFake((async () => undefined) as unknown as typeof vscode.window.showInformationMessage);
 
 		await clearCompleted();
@@ -175,35 +164,20 @@ suite('migration-consent suite', () => {
 		await drive();
 		await new Promise(t => setTimeout(t, 2000));
 
-		// (2 — summary toast fired) The single summary toast must have fired,
-		// signaling the user that there's a migration to handle in the Problems
-		// pane.
+		// (2 — summary toast fired) The single summary toast must have fired.
 		assert.ok(
 			stub.getCalls().length >= 1,
 			`expected summary toast to fire (got ${stub.getCalls().length} calls)`,
 		);
-		const summaryFired = stub.getCalls().some(c => /legacy behave-vsc setting/.test(String(c.args[0])));
-		assert.ok(summaryFired, 'expected at least one summary toast naming the legacy keys');
+		const summaryFired = stub.getCalls().some(c => /can be migrated for Behave BDD/.test(String(c.args[0])));
+		assert.ok(summaryFired, 'expected at least one summary toast matching the 023-04 copy');
 
-		// (2 — diagnostic published) Locate the runParallel case-2 diagnostic
-		// at WorkspaceFolder scope, then dispatch the migrate-and-delete action.
-		const diagCollection = getDiagnosticCollection();
-		let runParallelDiag: { code: string; scope: number } | undefined;
-		diagCollection.forEach((_uri, diags) => {
-			for (const d of diags) {
-				const decoded = decodeDiagnosticCode(d.code);
-				if (!decoded) continue;
-				if (decoded.entryId === 'runParallel-from-behavevsc' && decoded.case === 2) {
-					runParallelDiag = { code: String(d.code), scope: decoded.scope };
-				}
-			}
-		});
-		assert.ok(runParallelDiag, 'expected a runParallel-from-behavevsc case-2 diagnostic to be published');
-
+		// (2 — dispatch the action) The case-2 fixture writes the legacy key
+		// into .vscode/settings.json (folder scope = WorkspaceFolder).
 		await dispatchMigrationAction({
 			entryId: 'runParallel-from-behavevsc',
 			case: 2,
-			scope: runParallelDiag.scope as 1 | 2 | 3,
+			scope: vscode.ConfigurationTarget.WorkspaceFolder,
 			action: 'migrate-and-delete',
 			wkspUri: wkspUri.toString(),
 		});
@@ -236,11 +210,12 @@ suite('migration-consent suite', () => {
 	});
 
 	// Test 3: Case 3 + 'Overwrite & delete' — featuresPath migration.
-	// 260513-oh5 contract: drive() publishes a case-3 diagnostic (case-3
-	// always prompts regardless of migrationMode — D-A4.3), then we invoke
-	// dispatchMigrationAction directly to perform the clean overwrite that
-	// runOverwriteAtScope guarantees (per consent.ts: passes undefined as
-	// destAtSameScope so the transform produces the legacy value verbatim).
+	// 023-04 contract: drive() fires the summary toast (case-3 always prompts
+	// regardless of migrationMode — D-A4.3), then we invoke
+	// dispatchMigrationAction directly at the known WorkspaceFolder scope to
+	// perform the clean overwrite that runOverwriteAtScope guarantees (per
+	// consent.ts: passes undefined as destAtSameScope so the transform produces
+	// the legacy value verbatim).
 	test('Test 3: Case 3 Overwrite & delete cleanly overwrites featuresPaths', async function () {
 		this.timeout(60000);
 		const stub = vscode.window.showInformationMessage as unknown as sinon.SinonStub;
@@ -254,28 +229,14 @@ suite('migration-consent suite', () => {
 
 		// (3 — summary toast fired) Case 3 still prompts via the summary toast.
 		assert.ok(
-			stub.getCalls().some(c => /legacy behave-vsc setting/.test(String(c.args[0]))),
+			stub.getCalls().some(c => /can be migrated for Behave BDD/.test(String(c.args[0]))),
 			'expected summary toast for the case-3 hit',
 		);
-
-		// (3 — case-3 diagnostic for featuresPath published)
-		const diagCollection = getDiagnosticCollection();
-		let featuresPathDiag: { scope: number } | undefined;
-		diagCollection.forEach((_uri, diags) => {
-			for (const d of diags) {
-				const decoded = decodeDiagnosticCode(d.code);
-				if (!decoded) continue;
-				if (decoded.entryId === 'featuresPath-from-behavevsc' && decoded.case === 3) {
-					featuresPathDiag = { scope: decoded.scope };
-				}
-			}
-		});
-		assert.ok(featuresPathDiag, 'expected a featuresPath-from-behavevsc case-3 diagnostic');
 
 		await dispatchMigrationAction({
 			entryId: 'featuresPath-from-behavevsc',
 			case: 3,
-			scope: featuresPathDiag.scope as 1 | 2 | 3,
+			scope: vscode.ConfigurationTarget.WorkspaceFolder,
 			action: 'overwrite-and-delete',
 			wkspUri: wkspUri.toString(),
 		});
