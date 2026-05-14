@@ -51,9 +51,9 @@ export class Uri {
     return Uri.file(joined);
   }
 
-  // 260514-ean: diagnostics.ts uses vscode.Uri.from for the internal
-  // `vscode-userdata:` scheme. Minimal stand-in — keeps scheme + path
-  // verbatim so tests can assert on them.
+  // Generic Uri.from for any code path that builds a non-file URI (e.g.
+  // `vscode-userdata:`). Keeps scheme + path verbatim so tests can assert
+  // on them.
   static from(components: { scheme: string; path: string }): Uri {
     const u = new Uri(components.scheme, components.path);
     u.scheme = components.scheme;
@@ -199,8 +199,8 @@ export const workspace = {
     if (typeof pathOrUri === 'string') return pathOrUri;
     return pathOrUri.fsPath || pathOrUri.path || String(pathOrUri);
   },
-  // 260514-djs: summary-toast "Open Settings" path calls openTextDocument(uri)
-  // then window.showTextDocument(doc, { selection }). Tests stub these per-case.
+  // openTextDocument: used by various features (settings.json open paths,
+  // language services). Tests stub these per-case.
   openTextDocument: (uri: Uri): Promise<{ uri: Uri }> => Promise.resolve({ uri }),
   onDidChangeConfiguration: (cb: (e: { affectsConfiguration: (s: string) => boolean }) => void) => {
     _onDidChangeConfigurationCallbacks.push(cb);
@@ -227,20 +227,7 @@ export const languages = {
   registerReferenceProvider: () => ({ dispose: () => { /* mock */ } }),
   registerDocumentSemanticTokensProvider: (_selector: unknown, _provider: unknown, _legend: unknown) => ({ dispose: () => { /* mock */ } }),
   registerCodeLensProvider: (_selector: unknown, _provider: unknown) => ({ dispose: () => { /* mock */ } }),
-  registerCodeActionsProvider: (_selector: unknown, _provider: unknown, _meta?: unknown) => ({ dispose: () => { /* mock */ } }),
 };
-
-// 260513-oh5: CodeAction surface used by MigrationCodeActionProvider.
-export class CodeAction {
-  public diagnostics?: Diagnostic[];
-  public command?: { command: string; title: string; arguments?: unknown[] };
-  constructor(public title: string, public readonly kind?: CodeActionKind) { }
-}
-
-export class CodeActionKind {
-  static readonly QuickFix = new CodeActionKind('quickfix');
-  constructor(public readonly value: string) { }
-}
 
 // Phase 023 Plan 01: minimal createWebviewPanel mock surface. Tests assert on
 // captured panel state and on messages posted to/from the host. The mock
@@ -323,8 +310,8 @@ export const window = {
   // Phase 19 Plan 03: recheckCommand uses showQuickPick for the scope picker
   // (D-06). Default returns undefined (user dismissed); stubs override via Sinon.
   showQuickPick: (_items?: unknown, _options?: unknown): Promise<unknown> => Promise.resolve(undefined),
-  // 260514-djs: paired with workspace.openTextDocument for the "Open Settings"
-  // summary-toast action. Returns a stub editor; tests stub for assertions.
+  // Paired with workspace.openTextDocument for any test that opens a document.
+  // Returns a stub editor; tests stub for assertions.
   showTextDocument: (_doc: unknown, _options?: unknown): Promise<unknown> => Promise.resolve({}),
   // Phase 023 Plan 01: minimal Webview panel mock. Tests drive it via the
   // exported _fireWebviewMessage / _disposeWebview helpers above.
