@@ -1,22 +1,20 @@
 /**
- * Code Action provider + command dispatcher for migration consent quick-fixes.
+ * Command dispatcher for migration actions.
  *
- * Pairs with diagnostics.ts: every Diagnostic with source 'gs-behave-bdd' and
- * a decodable `code` exposes the 3 (case 2) or 4 (case 3) action buttons as
- * quick-fixes in the Problems pane and the lightbulb menu in settings.json.
+ * Phase 023 (Migrations Panel Webview): the CodeAction provider and the
+ * diagnostics surface it depended on are gone. The Webview panel from
+ * `src/migrations/panel.ts` now sends a `dispatchMigrationAction` message
+ * over `postMessage`, which is routed through the same
+ * `MIGRATION_ACTION_COMMAND` entry point this module registers.
  *
- * Clicking a quick-fix invokes the `gs-behave-bdd.migration.action` command
- * with the encoded payload; the command resolves entryId → MigrationEntry and
- * dispatches to the matching handler exported from consent.ts.
+ * Per 023-04 Task 2: `MIGRATION_ACTION_COMMAND` registration in extension.ts
+ * stays even though the only in-process caller is the panel — the command
+ * boundary is kept callable so external callers (or future surfaces) can
+ * invoke via `vscode.commands.executeCommand` with hand-encoded args.
  */
 
 import * as vscode from 'vscode';
 import { config } from '../configuration';
-import {
-  MIGRATION_DIAG_SOURCE,
-  clearDiagnosticsForEntryAtScope,
-  decodeDiagnosticCode,
-} from './diagnostics';
 import {
   runMigrateAndDelete,
   runMigrateAndKeep,
@@ -34,8 +32,9 @@ import type { MigrationEntry, MigrationScope } from './types';
 export const MIGRATION_ACTION_COMMAND = 'gs-behave-bdd.migration.action';
 
 /**
- * Action payload encoded into the Command arguments. Keep this serializable —
- * VS Code persists Code Action commands across reloads in some surfaces.
+ * Action payload encoded into the command arguments. Keep this serializable —
+ * VS Code persists command arguments across reloads in some surfaces, and the
+ * Webview posts these as JSON.
  */
 export interface MigrationActionArgs {
   entryId: string;
@@ -45,88 +44,14 @@ export interface MigrationActionArgs {
   wkspUri: string;
 }
 
-// 023-02 Task 4: label maps moved to panelViewModel.ts so the Webview's
-// view-model builder owns them. Re-export here (under the legacy names) so the
-// CodeActionProvider — which 023-04 deletes — keeps compiling in the interim.
-// The re-export must preserve the pinned `Case2Action` / `Case3Action` action
-// types; if it degrades to `string`, dispatch-site narrowing regresses.
-export {
-  CASE_2_BUTTONS as CASE_2_LABELS,
-  CASE_3_BUTTONS as CASE_3_LABELS,
-} from './panelViewModel';
-import { CASE_2_BUTTONS, CASE_3_BUTTONS } from './panelViewModel';
-
-export class MigrationCodeActionProvider implements vscode.CodeActionProvider {
-  public static readonly providedCodeActionKinds = [vscode.CodeActionKind.QuickFix];
-
-  provideCodeActions(
-    document: vscode.TextDocument,
-    _range: vscode.Range | vscode.Selection,
-    context: vscode.CodeActionContext,
-  ): vscode.CodeAction[] {
-    const out: vscode.CodeAction[] = [];
-    for (const diagnostic of context.diagnostics) {
-      if (diagnostic.source !== MIGRATION_DIAG_SOURCE) continue;
-      const decoded = decodeDiagnosticCode(diagnostic.code);
-      if (!decoded) continue;
-
-      const wkspUri = resolveWkspUriForDispatch(document, decoded.scope);
-      if (!wkspUri) continue;
-
-      const labels = decoded.case === 2 ? CASE_2_BUTTONS : CASE_3_BUTTONS;
-      for (const { label, action } of labels) {
-        const ca = new vscode.CodeAction(label, vscode.CodeActionKind.QuickFix);
-        ca.diagnostics = [diagnostic];
-        const args: MigrationActionArgs = {
-          entryId: decoded.entryId,
-          case: decoded.case,
-          scope: decoded.scope,
-          action: action as Case2Action | Case3Action,
-          wkspUri: wkspUri.toString(),
-        };
-        ca.command = {
-          command: MIGRATION_ACTION_COMMAND,
-          title: label,
-          arguments: [args],
-        };
-        out.push(ca);
-      }
-    }
-    return out;
-  }
-}
-
 /**
- * Pick a workspace folder URI suitable for `getConfiguration(..., wkspUri)`
- * calls inside the action handler. The actual scope where the write lands is
- * encoded in `scope`; wkspUri is just a binding handle for the VS Code API.
+ * Command handler. Resolves entryId → MigrationEntry via MIGRATION_REGISTRY
+ * and dispatches to the matching consent.ts handler. The panel re-renders on
+ * the configuration change that follows a successful dispatch, so this module
+ * no longer needs to clear any diagnostic surface on success.
  *
- *   - WorkspaceFolder scope → the folder that contains the anchor settings.json
- *     (walk up via `vscode.workspace.getWorkspaceFolder`).
- *   - Global / Workspace scope → the first workspace folder is fine; if no
- *     folders are open we return undefined and skip dispatch (the action is
- *     meaningless without at least one binding).
- */
-function resolveWkspUriForDispatch(
-  document: vscode.TextDocument,
-  scope: MigrationScope,
-): vscode.Uri | undefined {
-  if (scope === vscode.ConfigurationTarget.WorkspaceFolder) {
-    const folder = vscode.workspace.getWorkspaceFolder(document.uri);
-    if (folder) return folder.uri;
-  }
-  const first = vscode.workspace.workspaceFolders?.[0];
-  return first?.uri;
-}
-
-/**
- * Command handler. Resolves entryId → MigrationEntry via MIGRATION_REGISTRY,
- * dispatches to the matching consent.ts handler, then clears the diagnostic
- * for that (entry, scope) tuple on success.
- *
- * Never throws — failures are logged and the diagnostic stays so the user
- * sees the action didn't take. Mirrors the per-scope failure recovery in
- * consent.ts runConsentFlow.
+ * Never throws — failures are logged. Mirrors the per-scope failure recovery
+ * in consent.ts runConsentFlow.
  */
 export async function dispatchMigrationAction(args: MigrationActionArgs): Promise<void> {
   const entry = MIGRATION_REGISTRY.find(e => e.id === args.entryId);
@@ -143,13 +68,12 @@ export async function dispatchMigrationAction(args: MigrationActionArgs): Promis
   }
   try {
     await runActionHandler(entry, args, wkspUri);
-    clearDiagnosticsForEntryAtScope(entry, args.scope);
   } catch (e) {
     safeLog(`Migration ${entry.id}: action ${args.action} failed: ${e}`, wkspUri);
   }
 }
 
-async function runActionHandler(
+export async function runActionHandler(
   entry: MigrationEntry,
   args: MigrationActionArgs,
   wkspUri: vscode.Uri,
@@ -170,7 +94,7 @@ async function runActionHandler(
   }
 }
 
-function safeLog(message: string, wkspUri: vscode.Uri | undefined): void {
+export function safeLog(message: string, wkspUri: vscode.Uri | undefined): void {
   try {
     if (wkspUri) {
       config.logger.logInfo(message, wkspUri);
