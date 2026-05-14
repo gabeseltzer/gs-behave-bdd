@@ -45,18 +45,16 @@ export interface MigrationActionArgs {
   wkspUri: string;
 }
 
-const CASE_2_LABELS: { label: string; action: Case2Action }[] = [
-  { label: 'Migrate & delete', action: 'migrate-and-delete' },
-  { label: 'Migrate & keep', action: 'migrate-and-keep' },
-  { label: "Don't migrate", action: 'dont-migrate' },
-];
-
-const CASE_3_LABELS: { label: string; action: Case3Action }[] = [
-  { label: 'Overwrite & delete', action: 'overwrite-and-delete' },
-  { label: 'Overwrite & keep', action: 'overwrite-and-keep' },
-  { label: 'Keep canonical', action: 'keep-canonical-and-delete-legacy' },
-  { label: 'Keep both', action: 'keep-both' },
-];
+// 023-02 Task 4: label maps moved to panelViewModel.ts so the Webview's
+// view-model builder owns them. Re-export here (under the legacy names) so the
+// CodeActionProvider — which 023-04 deletes — keeps compiling in the interim.
+// The re-export must preserve the pinned `Case2Action` / `Case3Action` action
+// types; if it degrades to `string`, dispatch-site narrowing regresses.
+export {
+  CASE_2_BUTTONS as CASE_2_LABELS,
+  CASE_3_BUTTONS as CASE_3_LABELS,
+} from './panelViewModel';
+import { CASE_2_BUTTONS, CASE_3_BUTTONS } from './panelViewModel';
 
 export class MigrationCodeActionProvider implements vscode.CodeActionProvider {
   public static readonly providedCodeActionKinds = [vscode.CodeActionKind.QuickFix];
@@ -75,7 +73,7 @@ export class MigrationCodeActionProvider implements vscode.CodeActionProvider {
       const wkspUri = resolveWkspUriForDispatch(document, decoded.scope);
       if (!wkspUri) continue;
 
-      const labels = decoded.case === 2 ? CASE_2_LABELS : CASE_3_LABELS;
+      const labels = decoded.case === 2 ? CASE_2_BUTTONS : CASE_3_BUTTONS;
       for (const { label, action } of labels) {
         const ca = new vscode.CodeAction(label, vscode.CodeActionKind.QuickFix);
         ca.diagnostics = [diagnostic];
