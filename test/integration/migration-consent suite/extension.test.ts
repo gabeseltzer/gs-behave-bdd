@@ -11,9 +11,20 @@ import {
 	readMigrationMode,
 	type ConsentHit,
 	dispatchMigrationAction,
-	getDiagnosticCollection,
-	decodeDiagnosticCode,
 } from '../../../src/migrations';
+
+// 023-04: getDiagnosticCollection / decodeDiagnosticCode were deleted along
+// with the Problems-pane surface. These local shims keep this file compiling;
+// 023-05 will reshape the (already surface-agnostic, per CONTEXT.md) assertions
+// below around the panel signal. Tests using these will fail at runtime in the
+// interim — expected and documented in 023-04 SUMMARY.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getDiagnosticCollection(): { forEach(cb: (uri: any, diags: any[]) => void): void } {
+	return { forEach: () => undefined };
+}
+function decodeDiagnosticCode(_code: unknown): { entryId: string; case: 2 | 3; scope: number } | undefined {
+	return undefined;
+}
 
 
 let instances: TestSupport;

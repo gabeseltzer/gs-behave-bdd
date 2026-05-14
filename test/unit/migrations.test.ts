@@ -670,9 +670,16 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
     const showInfoStub = sinon.stub(vscode.window, 'showInformationMessage')
       .resolves(undefined);
 
-    // Lazy import to avoid suite-level dependency on diagnostics module shape.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-    const diag = require('../../src/migrations') as typeof import('../../src/migrations');
+    // 023-04: diagnostics module was deleted. These shims keep the file
+    // compiling; 023-05 reshapes the assertions below around the panel
+    // signal. Until then this test is expected to fail at runtime.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const diag: any = {
+      disposeDiagnosticCollection: () => undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getDiagnosticCollection: () => ({ forEach: (_cb: (uri: any, diags: any[]) => void) => undefined }),
+      decodeDiagnosticCode: (_code: unknown) => undefined,
+    };
     diag.disposeDiagnosticCollection();
 
     await recheckMigrationsCommandHandler();
@@ -691,7 +698,8 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
 
     // Diagnostic was published for the justMyCode case-2 hit at Global scope.
     let foundJustMyCode = false;
-    diag.getDiagnosticCollection().forEach((_uri, diags) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    diag.getDiagnosticCollection().forEach((_uri: any, diags: any[]) => {
       for (const d of diags) {
         const decoded = diag.decodeDiagnosticCode(d.code);
         if (!decoded) continue;
