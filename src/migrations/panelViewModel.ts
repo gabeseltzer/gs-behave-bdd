@@ -59,6 +59,15 @@ export const CASE_3_BUTTONS: readonly { label: string; action: Case3Action }[] =
   { label: 'Keep both', action: 'keep-both' },
 ];
 
+// Used when case 3 fires but the legacy and canonical values are equivalent —
+// there is no real conflict to resolve, only legacy-key cleanup to offer.
+// `keep-canonical-and-delete-legacy` drops the legacy entry; `keep-both` is the
+// existing no-op-but-mark-Finished action that lets the user keep both lines.
+export const CASE_3_MATCHING_BUTTONS: readonly { label: string; action: Case3Action }[] = [
+  { label: 'Delete old value', action: 'keep-canonical-and-delete-legacy' },
+  { label: 'Skip', action: 'keep-both' },
+];
+
 
 export interface PanelRow {
   entryId: string;
@@ -119,7 +128,7 @@ export async function buildViewModel(): Promise<PanelViewModel> {
   for (const folder of folders) {
     try {
       await evaluateAllMigrations(folder.uri, {
-        onCaseHit: (mcase, entry, scope) => {
+        onCaseHit: (mcase, entry, scope, meta) => {
           if (mcase !== 2 && mcase !== 3) return;
 
           if (isSingleFolderWorkspace
@@ -134,7 +143,7 @@ export async function buildViewModel(): Promise<PanelViewModel> {
             seen.add(key);
           }
 
-          rows.push(buildRow(entry, mcase, scope, folder));
+          rows.push(buildRow(entry, mcase, scope, folder, meta?.equalValues === true));
         },
       });
     } catch (e) {
@@ -165,7 +174,11 @@ function buildRow(
   mcase: 2 | 3,
   scope: MigrationScope,
   folder: vscode.WorkspaceFolder,
+  equalValues: boolean,
 ): PanelRow {
+  const buttons = mcase === 2
+    ? CASE_2_BUTTONS
+    : equalValues ? CASE_3_MATCHING_BUTTONS : CASE_3_BUTTONS;
   return {
     entryId: entry.id,
     case: mcase,
@@ -175,6 +188,6 @@ function buildRow(
     destKey: `${entry.destNamespace}.${entry.destKey}`,
     wkspUri: folder.uri.toString(),
     folderName: folder.name,
-    buttons: mcase === 2 ? CASE_2_BUTTONS : CASE_3_BUTTONS,
+    buttons,
   };
 }

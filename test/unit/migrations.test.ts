@@ -368,6 +368,34 @@ suite('Phase 19 — evaluateMigration: case 3 (both set)', () => {
     const wf = r.find(x => x.scope === vscode.ConfigurationTarget.WorkspaceFolder)!;
     assert.strictEqual(wf.case, 3);
   });
+
+  test('3.9a: case 3 passes equalValues=true when source and dest match at the same scope', async () => {
+    setupConfigStub({
+      legacyKey: { workspaceValue: false },
+      canonicalKey: { workspaceValue: false },
+      completedMigrations: {},
+    }, updateSpy);
+    const onCaseHit = sinon.spy();
+    await evaluateMigration(TEST_ENTRY, MOCK_URI, { onCaseHit });
+    const wsHit = onCaseHit.getCalls().find(
+      c => c.args[0] === 3 && c.args[2] === vscode.ConfigurationTarget.Workspace,
+    )!;
+    assert.deepStrictEqual(wsHit.args[3], { equalValues: true });
+  });
+
+  test('3.9b: case 3 passes equalValues=false when source and dest differ at the same scope', async () => {
+    setupConfigStub({
+      legacyKey: { workspaceValue: 'a' },
+      canonicalKey: { workspaceValue: 'b' },
+      completedMigrations: {},
+    }, updateSpy);
+    const onCaseHit = sinon.spy();
+    await evaluateMigration(TEST_ENTRY, MOCK_URI, { onCaseHit });
+    const wsHit = onCaseHit.getCalls().find(
+      c => c.args[0] === 3 && c.args[2] === vscode.ConfigurationTarget.Workspace,
+    )!;
+    assert.deepStrictEqual(wsHit.args[3], { equalValues: false });
+  });
 });
 
 suite('Phase 19 — evaluateMigration: MIGRATE-08 empty/whitespace sub-case', () => {

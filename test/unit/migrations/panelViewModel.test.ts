@@ -97,6 +97,62 @@ suite('buildViewModel — single-folder de-duplication (260514-mur)', () => {
     assert.strictEqual(vm.empty, true);
   });
 
+  test('case 3 with equal values collapses to 2 buttons (Delete old value / Skip)', async () => {
+    sinon.stub(vscode.workspace, 'workspaceFile').value(undefined);
+
+    sinon.stub(evaluatorModule, 'evaluateAllMigrations').callsFake(async (_uri, hooks) => {
+      hooks?.onCaseHit?.(3, TEST_ENTRY, vscode.ConfigurationTarget.Workspace, { equalValues: true });
+      return [];
+    });
+
+    const vm = await buildViewModel();
+
+    assert.strictEqual(vm.rows.length, 1);
+    assert.strictEqual(vm.rows[0].buttons.length, 2);
+    assert.deepStrictEqual(
+      vm.rows[0].buttons.map(b => b.action),
+      ['keep-canonical-and-delete-legacy', 'keep-both'],
+    );
+    assert.deepStrictEqual(
+      vm.rows[0].buttons.map(b => b.label),
+      ['Delete old value', 'Skip'],
+    );
+  });
+
+  test('case 3 with differing values keeps the full 4-button set', async () => {
+    sinon.stub(vscode.workspace, 'workspaceFile').value(undefined);
+
+    sinon.stub(evaluatorModule, 'evaluateAllMigrations').callsFake(async (_uri, hooks) => {
+      hooks?.onCaseHit?.(3, TEST_ENTRY, vscode.ConfigurationTarget.Workspace, { equalValues: false });
+      return [];
+    });
+
+    const vm = await buildViewModel();
+
+    assert.strictEqual(vm.rows.length, 1);
+    assert.strictEqual(vm.rows[0].buttons.length, 4);
+    assert.deepStrictEqual(
+      vm.rows[0].buttons.map(b => b.action),
+      ['overwrite-and-delete', 'overwrite-and-keep', 'keep-canonical-and-delete-legacy', 'keep-both'],
+    );
+  });
+
+  test('case 3 with missing equalValues meta defaults to full 4-button set', async () => {
+    // Defensive: if a future caller forgets to pass meta, fall back to the full
+    // conflict-resolution set so the user never silently loses the overwrite options.
+    sinon.stub(vscode.workspace, 'workspaceFile').value(undefined);
+
+    sinon.stub(evaluatorModule, 'evaluateAllMigrations').callsFake(async (_uri, hooks) => {
+      hooks?.onCaseHit?.(3, TEST_ENTRY, vscode.ConfigurationTarget.Workspace);
+      return [];
+    });
+
+    const vm = await buildViewModel();
+
+    assert.strictEqual(vm.rows.length, 1);
+    assert.strictEqual(vm.rows[0].buttons.length, 4);
+  });
+
   test('single-folder mode: Global-scope hit is unaffected by the WorkspaceFolder suppression', async () => {
     sinon.stub(vscode.workspace, 'workspaceFile').value(undefined);
 
