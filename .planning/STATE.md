@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: Migration Consent & behave-vsc Cleanup
-status: verifying
-last_updated: "2026-05-12T00:00:00.000Z"
-last_activity: 2026-05-12 -- Phase 022 all plans complete, ready for verification
+status: ready
+last_updated: "2026-05-14T00:00:00.000Z"
+last_activity: 2026-05-14 -- Phase 023 complete, verified 9/9, 852 unit tests passing
 progress:
-  total_phases: 4
-  completed_phases: 3
-  total_plans: 15
-  completed_plans: 15
+  total_phases: 5
+  completed_phases: 4
+  total_plans: 20
+  completed_plans: 20
   percent: 100
 ---
 
@@ -20,22 +20,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Phase 022 — cleanup-integration-docs
+**Current focus:** Phase 023 complete — v1.5.0 ready to ship
 
 ## Current Position
 
-Phase: 023 (migrations-panel-webview) — PLANNED
-Plan: 0 of 5 (skeleton in CONTEXT.md; awaiting /gsd-plan-phase to detail)
-Status: New phase added 2026-05-14 to replace the diagnostics consent surface with a Webview panel after the 260513-oh5 → 260514-ean iteration chain could not reliably anchor Global-scope diagnostics under remote-extension-host conditions.
-Resume file: .planning/phases/023-migrations-panel-webview/023-CONTEXT.md
-Last activity: 2026-05-14 -- phase 023 registered in ROADMAP.md; CONTEXT.md captures design decisions and plan skeleton.
+Phase: 023 (migrations-panel-webview) — COMPLETE
+Plan: 5 of 5 complete (webview-shell, migrations-list, migration-mode, surface-swap, tests)
+Status: Diagnostics surface fully replaced by Webview panel. 25 commits, 9/9 verification spot-checks passed, 852 unit tests green, eslint clean.
+Resume file: .planning/phases/023-migrations-panel-webview/023-VERIFICATION.md
+Last activity: 2026-05-14 -- Phase 023 verified PASS; v1.5.0 milestone ready to ship.
 
 ```
 [####] Phase 19  Migration Foundation ✅
 [####] Phase 20  Migration Registry ✅
 [####] Phase 21  Consent UX (Case 2 & Case 3 Prompts) ✅
-[####] Phase 22  Cleanup, Integration & Docs ✅ (pending verification)
-[    ] Phase 23  Migrations Panel (Webview) — planned
+[####] Phase 22  Cleanup, Integration & Docs ✅
+[####] Phase 23  Migrations Panel (Webview) ✅
 ```
 
 ## Performance Metrics
