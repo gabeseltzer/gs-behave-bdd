@@ -202,7 +202,10 @@ export const workspace = {
   // 260514-djs: summary-toast "Open Settings" path calls openTextDocument(uri)
   // then window.showTextDocument(doc, { selection }). Tests stub these per-case.
   openTextDocument: (uri: Uri): Promise<{ uri: Uri }> => Promise.resolve({ uri }),
-  onDidChangeConfiguration: () => ({ dispose: () => { /* mock */ } }),
+  onDidChangeConfiguration: (cb: (e: { affectsConfiguration: (s: string) => boolean }) => void) => {
+    _onDidChangeConfigurationCallbacks.push(cb);
+    return { dispose: () => { /* mock */ } };
+  },
   onDidChangeWorkspaceFolders: () => ({ dispose: () => { /* mock */ } }),
   onDidSaveTextDocument: () => ({ dispose: () => { /* mock */ } }),
   onDidOpenTextDocument: () => ({ dispose: () => { /* mock */ } }),
@@ -270,6 +273,9 @@ interface MockWebviewPanel {
 let _lastWebviewPanel: MockWebviewPanel | undefined;
 const _onDidReceiveMessageCallbacks: Array<(m: unknown) => void> = [];
 const _onDidDisposeCallbacks: Array<() => void> = [];
+// Phase 023 Plan 05: capture onDidChangeConfiguration callbacks so panel.test.ts
+// can simulate a setting change and assert the panel re-renders.
+const _onDidChangeConfigurationCallbacks: Array<(e: { affectsConfiguration: (s: string) => boolean }) => void> = [];
 
 export function _getLastWebviewPanel(): MockWebviewPanel | undefined {
   return _lastWebviewPanel;
@@ -285,10 +291,15 @@ export function _disposeWebview(): void {
   if (cb) cb();
 }
 
+export function _fireConfigurationChange(e: { affectsConfiguration: (s: string) => boolean }): void {
+  for (const cb of _onDidChangeConfigurationCallbacks) cb(e);
+}
+
 export function _resetWebviewMocks(): void {
   _lastWebviewPanel = undefined;
   _onDidReceiveMessageCallbacks.length = 0;
   _onDidDisposeCallbacks.length = 0;
+  _onDidChangeConfigurationCallbacks.length = 0;
 }
 
 export const window = {
