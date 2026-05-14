@@ -107,11 +107,25 @@ export async function buildViewModel(): Promise<PanelViewModel> {
   // hits stay per-folder (genuinely distinct rows).
   const seen = new Set<string>();
 
+  // In a single-folder workspace, `.vscode/settings.json` is the single source
+  // for both Workspace and WorkspaceFolder scopes — VS Code's inspect() reports
+  // the same value at `workspaceValue` and `workspaceFolderValue`. The evaluator
+  // dutifully iterates both scopes, which would otherwise produce a phantom
+  // duplicate row for the same line. Suppress WorkspaceFolder hits here so the
+  // panel shows one row per setting; multi-root workspaces (workspaceFile
+  // defined) keep both because the scopes are genuinely independent there.
+  const isSingleFolderWorkspace = vscode.workspace.workspaceFile === undefined;
+
   for (const folder of folders) {
     try {
       await evaluateAllMigrations(folder.uri, {
         onCaseHit: (mcase, entry, scope) => {
           if (mcase !== 2 && mcase !== 3) return;
+
+          if (isSingleFolderWorkspace
+              && scope === vscode.ConfigurationTarget.WorkspaceFolder) {
+            return;
+          }
 
           if (scope === vscode.ConfigurationTarget.Global
               || scope === vscode.ConfigurationTarget.Workspace) {
