@@ -52,6 +52,7 @@ import {
   getDiagnosticCollection,
   type MigrationActionArgs,
 } from './migrations';
+import { MigrationsPanel } from './migrations/panel';
 
 
 const testData = new WeakMap<vscode.TestItem, BehaveTestData>();
@@ -431,6 +432,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         await vscode.commands.executeCommand('gs-behave-bdd.findStepReferences');
       }),
       vscode.commands.registerCommand('gs-behave-bdd.recheckMigrations', () => recheckMigrationsCommandHandler()),
+      // Phase 023 Plan 01: open the migrations Webview panel. Co-located
+      // above MIGRATION_ACTION_COMMAND so 023-04's deletion sweep keeps a
+      // mechanical diff.
+      vscode.commands.registerCommand('gs-behave-bdd.openMigrationsPanel', () => {
+        MigrationsPanel.createOrShow(context.extensionUri);
+      }),
       // 260513-oh5: migration consent quick-fix dispatcher + Code Action provider.
       // The provider attaches to settings.json / .code-workspace so the lightbulb
       // appears inline; the Problems pane also exposes the quick-fixes.

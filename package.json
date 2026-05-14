@@ -173,6 +173,10 @@
 			{
 				"command": "gs-behave-bdd.recheckMigrations",
 				"title": "Behave BDD: Recheck Migrations"
+			},
+			{
+				"command": "gs-behave-bdd.openMigrationsPanel",
+				"title": "Behave BDD: Open Migrations Panel"
 			}
 		],
 		"keybindings": [
