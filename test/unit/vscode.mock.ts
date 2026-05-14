@@ -239,6 +239,58 @@ export class CodeActionKind {
   constructor(public readonly value: string) { }
 }
 
+// Phase 023 Plan 01: minimal createWebviewPanel mock surface. Tests assert on
+// captured panel state and on messages posted to/from the host. The mock
+// captures the most recently registered onDidReceiveMessage and onDidDispose
+// callbacks at module level so tests can fire them via the exported helpers
+// (_fireWebviewMessage / _disposeWebview). Mirrors the existing
+// EventEmitter-shaped subscription pattern elsewhere in this file.
+
+interface MockWebviewPanel {
+  viewType: string;
+  title: string;
+  viewColumn: number | undefined;
+  options: unknown;
+  webview: {
+    cspSource: string;
+    html: string;
+    asWebviewUri: (u: Uri) => Uri;
+    onDidReceiveMessage: (cb: (m: unknown) => void) => { dispose: () => void };
+    postMessage: (m: unknown) => Promise<boolean>;
+  };
+  reveal: (c?: number) => void;
+  onDidDispose: (cb: () => void) => { dispose: () => void };
+  dispose: () => void;
+  // Test-only inspection surface.
+  _postedMessages: unknown[];
+  _revealCalls: number;
+  _disposed: boolean;
+}
+
+let _lastWebviewPanel: MockWebviewPanel | undefined;
+const _onDidReceiveMessageCallbacks: Array<(m: unknown) => void> = [];
+const _onDidDisposeCallbacks: Array<() => void> = [];
+
+export function _getLastWebviewPanel(): MockWebviewPanel | undefined {
+  return _lastWebviewPanel;
+}
+
+export function _fireWebviewMessage(msg: unknown): void {
+  const cb = _onDidReceiveMessageCallbacks[_onDidReceiveMessageCallbacks.length - 1];
+  if (cb) cb(msg);
+}
+
+export function _disposeWebview(): void {
+  const cb = _onDidDisposeCallbacks[_onDidDisposeCallbacks.length - 1];
+  if (cb) cb();
+}
+
+export function _resetWebviewMocks(): void {
+  _lastWebviewPanel = undefined;
+  _onDidReceiveMessageCallbacks.length = 0;
+  _onDidDisposeCallbacks.length = 0;
+}
+
 export const window = {
   showWarningMessage: () => Promise.resolve(undefined),
   showErrorMessage: () => Promise.resolve(undefined),
@@ -263,7 +315,55 @@ export const window = {
   // 260514-djs: paired with workspace.openTextDocument for the "Open Settings"
   // summary-toast action. Returns a stub editor; tests stub for assertions.
   showTextDocument: (_doc: unknown, _options?: unknown): Promise<unknown> => Promise.resolve({}),
+  // Phase 023 Plan 01: minimal Webview panel mock. Tests drive it via the
+  // exported _fireWebviewMessage / _disposeWebview helpers above.
+  activeTextEditor: undefined as { viewColumn?: number } | undefined,
+  createWebviewPanel: (
+    viewType: string,
+    title: string,
+    viewColumn: number,
+    options: unknown,
+  ): MockWebviewPanel => {
+    const panel: MockWebviewPanel = {
+      viewType,
+      title,
+      viewColumn,
+      options,
+      webview: {
+        cspSource: 'vscode-webview://mock',
+        html: '',
+        asWebviewUri: (u: Uri) => u,
+        onDidReceiveMessage: (cb: (m: unknown) => void) => {
+          _onDidReceiveMessageCallbacks.push(cb);
+          return { dispose: () => { /* mock */ } };
+        },
+        postMessage: (m: unknown) => {
+          panel._postedMessages.push(m);
+          return Promise.resolve(true);
+        },
+      },
+      reveal: (_c?: number) => { panel._revealCalls += 1; },
+      onDidDispose: (cb: () => void) => {
+        _onDidDisposeCallbacks.push(cb);
+        return { dispose: () => { /* mock */ } };
+      },
+      dispose: () => { panel._disposed = true; },
+      _postedMessages: [],
+      _revealCalls: 0,
+      _disposed: false,
+    };
+    _lastWebviewPanel = panel;
+    return panel;
+  },
 };
+
+export enum ViewColumn {
+  Active = -1,
+  Beside = -2,
+  One = 1,
+  Two = 2,
+  Three = 3,
+}
 
 export const debug = {
   startDebugging: async (_folder: unknown, _config: unknown): Promise<boolean> => true,
