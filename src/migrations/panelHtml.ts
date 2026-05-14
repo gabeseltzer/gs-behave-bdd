@@ -55,71 +55,117 @@ export function renderHtml(webview: vscode.Webview): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Behave BDD: Migrations</title>
   <style nonce="${nonce}">
+    /* Settings-page-inspired styling: per-setting card with a bolded title,
+       muted description, and the control beneath — mirrors VS Code's own
+       workbench.action.openSettings layout. No bordered boxes per row;
+       sections are separated by horizontal rules and generous spacing. */
     body {
       font-family: var(--vscode-font-family);
       color: var(--vscode-foreground);
       background: var(--vscode-editor-background);
-      padding: 1rem;
+      padding: 24px 28px 48px;
+      max-width: 920px;
+      line-height: 1.4;
     }
     h1 {
-      font-size: 1.2rem;
-      margin: 0 0 1rem 0;
+      font-size: 26px;
       font-weight: 600;
+      margin: 0 0 4px;
+      letter-spacing: -0.01em;
+    }
+    .page-desc {
+      color: var(--vscode-descriptionForeground);
+      font-size: 13px;
+      margin: 0 0 28px;
     }
     h2 {
-      font-size: 1rem;
-      margin: 1rem 0 .5rem 0;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
       font-weight: 600;
       color: var(--vscode-descriptionForeground);
+      margin: 24px 0 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--vscode-panel-border);
     }
-    .row {
-      border: 1px solid var(--vscode-panel-border);
-      padding: .75rem;
-      margin-bottom: .5rem;
+    h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0 0 6px;
+      letter-spacing: -0.005em;
     }
-    .row code {
+    .section {
+      padding: 14px 0 18px;
+    }
+    .section + .section {
+      border-top: 1px solid var(--vscode-panel-border);
+    }
+    .setting-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0 0 4px;
+    }
+    .setting-title code {
       font-family: var(--vscode-editor-font-family);
+      font-weight: 600;
+      font-size: 13px;
+      background: transparent;
     }
-    .row .scope {
+    .setting-desc {
       color: var(--vscode-descriptionForeground);
-      margin-left: .5rem;
+      font-size: 13px;
+      margin: 0 0 10px;
+      max-width: 720px;
     }
-    .row .actions {
-      margin-top: .5rem;
+    .setting-meta {
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      margin: 0 0 10px;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
     }
     button {
       background: var(--vscode-button-background);
       color: var(--vscode-button-foreground);
-      border: 0;
-      padding: .25rem .75rem;
-      margin-right: .25rem;
+      border: 1px solid transparent;
+      padding: 4px 14px;
+      font-size: 13px;
       cursor: pointer;
       font-family: var(--vscode-font-family);
+      border-radius: 2px;
+      line-height: 1.5;
+      position: relative;
     }
     button:hover {
       background: var(--vscode-button-hoverBackground);
     }
     button:focus {
       outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 1px;
+    }
+    button.secondary {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+    }
+    button.secondary:hover {
+      background: var(--vscode-button-secondaryHoverBackground);
     }
     .empty {
       color: var(--vscode-descriptionForeground);
-      font-style: italic;
-      margin-bottom: .5rem;
+      font-size: 13px;
+      margin: 12px 0 16px;
     }
-    .mode-section {
-      padding: .5rem 0 1rem;
-      border-bottom: 1px solid var(--vscode-panel-border);
-      margin-bottom: 1rem;
-    }
-    .mode-section h2 {
-      font-size: 1rem;
-      margin: 0 0 .5rem;
+    /* Mode section: pill-style toggle group matching VS Code's settings-UI
+       enum picker. Selected pill gets the primary button background. */
+    .mode-section .actions {
+      margin-top: 4px;
     }
     .mode-section button[data-mode] {
       background: var(--vscode-button-secondaryBackground);
       color: var(--vscode-button-secondaryForeground);
-      margin-right: .25rem;
     }
     .mode-section button[data-mode][aria-pressed="true"] {
       background: var(--vscode-button-background);
@@ -128,23 +174,66 @@ export function renderHtml(webview: vscode.Webview): string {
     .mode-section button[data-mode]:hover {
       background: var(--vscode-button-secondaryHoverBackground);
     }
-    .mode-section .desc {
+    .mode-section button[data-mode][aria-pressed="true"]:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
+    /* Hover preview popover. Anchored above the hovered button via absolute
+       positioning. Renders an indented JSON-ish diff: lines tagged - / + or
+       blank are colored to match VS Code's text-diff palette. */
+    .preview-popover {
+      position: absolute;
+      z-index: 1000;
+      background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background));
+      color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground));
+      border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-panel-border));
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      padding: 8px 12px;
+      font-family: var(--vscode-editor-font-family);
+      font-size: 12px;
+      white-space: pre;
+      pointer-events: none;
+      max-width: 560px;
+      overflow: hidden;
+    }
+    .preview-popover .preview-label {
       color: var(--vscode-descriptionForeground);
-      margin: .5rem 0 0;
-      font-size: .9em;
+      font-family: var(--vscode-font-family);
+      font-size: 11px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .preview-popover .line-del {
+      color: var(--vscode-gitDecoration-deletedResourceForeground, #d16969);
+      text-decoration: line-through;
+      text-decoration-thickness: 1px;
+    }
+    .preview-popover .line-add {
+      color: var(--vscode-gitDecoration-addedResourceForeground, #6a9955);
+    }
+    .preview-popover .line-keep {
+      color: var(--vscode-descriptionForeground);
+    }
+    .preview-popover .preview-nochange {
+      font-family: var(--vscode-font-family);
+      color: var(--vscode-descriptionForeground);
+      font-style: italic;
     }
   </style>
 </head>
 <body>
+  <h1>Behave BDD: Migrations</h1>
+  <p class="page-desc">Review and apply pending settings migrations. The actions you choose below write to your VS Code settings.json the same way the Settings UI does.</p>
   <div id="mode-root"></div>
-  <h1>Pending Migrations</h1>
-  <div id="root"><p class="empty">Loading…</p></div>
+  <div id="pending-root"><p class="empty">Loading…</p></div>
+  <div id="preview" class="preview-popover" style="display:none"></div>
   <script nonce="${nonce}">
     // Capture the VS Code API exactly once per webview load — calling
     // acquireVsCodeApi twice throws (023-RESEARCH Pitfall 2).
     const vscode = acquireVsCodeApi();
-    const root = document.getElementById('root');
+    const root = document.getElementById('pending-root');
     const modeRoot = document.getElementById('mode-root');
+    const previewEl = document.getElementById('preview');
 
     // Host-embedded constant — see renderHtml(). Values are alphanumeric +
     // dashes (registry-controlled); safe to interpolate via escape() into
@@ -160,6 +249,12 @@ export function renderHtml(webview: vscode.Webview): string {
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
+
+    // Per-row data captured at render time so the hover preview script can
+    // look up the (sourceKey, destKey, sourceValue, destValue) tuple by row id
+    // without round-tripping to the host or interpolating raw JSON into every
+    // button's dataset (which would blow up the DOM for non-trivial values).
+    const ROW_DATA = new Map();
 
     // Delegated click handler. Two button types:
     //   - data-recheck="true"  → post { kind: 'recheck' }
@@ -194,6 +289,117 @@ export function renderHtml(webview: vscode.Webview): string {
       }
     });
 
+    // Hover preview wiring. Show/hide a popover that diffs the underlying
+    // settings.json lines before/after the hovered action. The host already
+    // sends sourceValue and destValue via the view-model, so this is a pure
+    // client-side computation.
+    document.addEventListener('mouseover', (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLButtonElement)) return;
+      if (typeof t.dataset.action !== 'string') return;
+      const rowKey = t.dataset.rowKey;
+      const row = ROW_DATA.get(rowKey);
+      if (!row) return;
+      showPreview(t, row, t.dataset.action);
+    });
+    document.addEventListener('mouseout', (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLButtonElement)) return;
+      if (typeof t.dataset.action !== 'string') return;
+      hidePreview();
+    });
+
+    function hidePreview() {
+      previewEl.style.display = 'none';
+      previewEl.innerHTML = '';
+    }
+
+    function showPreview(buttonEl, row, action) {
+      const lines = buildPreviewLines(row, action);
+      if (lines.length === 0) {
+        previewEl.innerHTML =
+          '<div class="preview-label">Effect</div>'
+          + '<div class="preview-nochange">No changes to settings.json</div>';
+      } else {
+        const inner = lines.map(function (l) {
+          return '<span class="' + l.cls + '">' + escape(l.text) + '</span>';
+        }).join('\\n');
+        previewEl.innerHTML =
+          '<div class="preview-label">Effect on ' + escape(row.scopeLabel) + ' settings.json</div>'
+          + inner;
+      }
+      // Position above the button. If it would go off the top of the viewport,
+      // fall back to below.
+      const rect = buttonEl.getBoundingClientRect();
+      previewEl.style.display = 'block';
+      const popH = previewEl.offsetHeight;
+      const top = rect.top + window.scrollY - popH - 8;
+      const fitsAbove = rect.top - popH - 8 > 4;
+      previewEl.style.top = (fitsAbove ? top : (rect.bottom + window.scrollY + 8)) + 'px';
+      previewEl.style.left = (rect.left + window.scrollX) + 'px';
+    }
+
+    // Stable formatter for setting values — VS Code settings are JSON, so
+    // JSON.stringify with 2-space indent matches what the user would see in
+    // their settings.json. Truncate long values so the popover stays compact.
+    function formatValue(v) {
+      let s;
+      try { s = JSON.stringify(v, null, 2); }
+      catch { s = String(v); }
+      if (s === undefined) s = 'undefined';
+      if (s.length > 240) s = s.slice(0, 237) + '...';
+      return s;
+    }
+
+    function line(cls, prefix, key, value) {
+      return { cls: cls, text: prefix + ' "' + key + '": ' + formatValue(value) };
+    }
+
+    // Computes the lines to display per action. Returns [] when the action is
+    // a no-op (e.g. "Keep both", "Don't migrate", "Skip").
+    function buildPreviewLines(row, action) {
+      const src = row.sourceKey;
+      const dst = row.destKey;
+      const sv = row.sourceValue;
+      const dv = row.destValue;
+
+      switch (action) {
+        case 'migrate-and-delete':
+          return [
+            line('line-add',  '+', dst, sv),
+            line('line-del',  '-', src, sv),
+          ];
+        case 'migrate-and-keep':
+          return [
+            line('line-add',  '+', dst, sv),
+            line('line-keep', ' ', src, sv),
+          ];
+        case 'dont-migrate':
+          return [];
+        case 'overwrite-and-delete':
+          return [
+            line('line-del',  '-', dst, dv),
+            line('line-add',  '+', dst, sv),
+            line('line-del',  '-', src, sv),
+          ];
+        case 'overwrite-and-keep':
+          return [
+            line('line-del',  '-', dst, dv),
+            line('line-add',  '+', dst, sv),
+            line('line-keep', ' ', src, sv),
+          ];
+        case 'keep-canonical-and-delete-legacy':
+          return [
+            line('line-keep', ' ', dst, dv),
+            line('line-del',  '-', src, sv),
+          ];
+        case 'keep-both':
+          return [];
+        default:
+          return [];
+      }
+    }
+
     window.addEventListener('message', (ev) => {
       const m = ev.data;
       if (!m || typeof m !== 'object') return;
@@ -203,6 +409,8 @@ export function renderHtml(webview: vscode.Webview): string {
     });
 
     function render(vm) {
+      ROW_DATA.clear();
+      hidePreview();
       if (!vm) {
         modeRoot.innerHTML = '';
         root.innerHTML = '<p class="empty">Loading…</p>';
@@ -216,8 +424,13 @@ export function renderHtml(webview: vscode.Webview): string {
 
       if (vm.empty) {
         root.innerHTML =
-          '<p class="empty">No pending migrations.</p>' +
-          '<button type="button" data-recheck="true">Recheck Migrations</button>';
+          '<h2>Pending Migrations</h2>'
+          + '<div class="section">'
+            + '<p class="empty">No pending migrations.</p>'
+            + '<div class="actions">'
+              + '<button type="button" class="secondary" data-recheck="true">Recheck Migrations</button>'
+            + '</div>'
+          + '</div>';
         return;
       }
 
@@ -230,16 +443,26 @@ export function renderHtml(webview: vscode.Webview): string {
         groups.get(key).push(row);
       }
 
-      const sections = [];
+      const blocks = ['<h2>Pending Migrations</h2>'];
       for (const [folderName, rows] of groups) {
-        const header = showFolderHeaders
-          ? '<h2>' + escape(folderName) + '</h2>'
-          : '';
-        const rowMarkup = rows.map(renderRow).join('');
-        sections.push(header + rowMarkup);
+        if (showFolderHeaders) {
+          blocks.push('<h3>' + escape(folderName) + '</h3>');
+        }
+        for (const row of rows) {
+          blocks.push(renderRow(row));
+        }
       }
+      // Footer recheck button at the bottom — mirrors VS Code's "Restore
+      // Defaults" placement at the end of settings sections.
+      blocks.push(
+        '<div class="section">'
+        + '<div class="actions">'
+          + '<button type="button" class="secondary" data-recheck="true">Recheck Migrations</button>'
+        + '</div>'
+        + '</div>'
+      );
 
-      root.innerHTML = sections.join('');
+      root.innerHTML = blocks.join('');
     }
 
     function renderModeSection(currentMode) {
@@ -254,28 +477,59 @@ export function renderHtml(webview: vscode.Webview): string {
       }).join('');
 
       modeRoot.innerHTML =
-        '<div class="mode-section">'
-          + '<h2>Migration Mode</h2>'
-          + buttons
-          + '<p class="desc">Applied at Global scope. Affects how silent migrations are handled on next activation.</p>'
-          + '</div>';
+        '<h2>Migration Mode</h2>'
+        + '<div class="section mode-section">'
+          + '<p class="setting-title">gs-behave-bdd.migrationMode</p>'
+          + '<p class="setting-desc">How silent migrations are handled the next time the extension activates. Applied at Global scope.</p>'
+          + '<div class="actions">'
+            + buttons
+          + '</div>'
+        + '</div>';
+    }
+
+    function describeAction(row, action) {
+      // Tooltip fallback used as the title attribute on each action button.
+      // The popover is richer, but keyboard users and screen readers still
+      // get a hint.
+      switch (action) {
+        case 'migrate-and-delete':              return 'Copy legacy value to ' + row.destKey + ' and delete legacy line';
+        case 'migrate-and-keep':                return 'Copy legacy value to ' + row.destKey + ' and keep legacy line';
+        case 'dont-migrate':                    return 'Do nothing; mark this migration as handled';
+        case 'overwrite-and-delete':            return 'Replace ' + row.destKey + ' with legacy value and delete legacy line';
+        case 'overwrite-and-keep':              return 'Replace ' + row.destKey + ' with legacy value and keep legacy line';
+        case 'keep-canonical-and-delete-legacy':return 'Keep ' + row.destKey + ' unchanged; delete legacy line';
+        case 'keep-both':                       return 'Leave both lines unchanged; mark as handled';
+        default: return '';
+      }
     }
 
     function renderRow(row) {
+      // Stable row key — included on every button as data-row-key so the
+      // hover handler can look up the row's value tuple.
+      const rowKey = row.entryId + '|' + row.scope + '|' + row.wkspUri;
+      ROW_DATA.set(rowKey, row);
+
       const buttons = row.buttons.map(function (b) {
         return '<button type="button"'
           + ' data-action="' + escape(b.action) + '"'
           + ' data-entry-id="' + escape(row.entryId) + '"'
           + ' data-case="' + row.case + '"'
           + ' data-scope="' + row.scope + '"'
-          + ' data-wksp-uri="' + escape(row.wkspUri) + '">'
+          + ' data-wksp-uri="' + escape(row.wkspUri) + '"'
+          + ' data-row-key="' + escape(rowKey) + '"'
+          + ' title="' + escape(describeAction(row, b.action)) + '">'
           + escape(b.label)
           + '</button>';
       }).join('');
 
-      return '<div class="row">'
-        + '<code>' + escape(row.sourceKey) + '</code> → <code>' + escape(row.destKey) + '</code>'
-        + '<span class="scope">at ' + escape(row.scopeLabel) + '</span>'
+      const caseLabel = row.case === 2
+        ? 'Legacy key set; canonical key is not'
+        : 'Both legacy and canonical keys are set';
+
+      return '<div class="section">'
+        + '<p class="setting-title"><code>' + escape(row.sourceKey) + '</code> &rarr; <code>' + escape(row.destKey) + '</code></p>'
+        + '<p class="setting-desc">' + escape(caseLabel) + '. Hover an action to preview the change.</p>'
+        + '<p class="setting-meta">Scope: ' + escape(row.scopeLabel) + '</p>'
         + '<div class="actions">' + buttons + '</div>'
         + '</div>';
     }

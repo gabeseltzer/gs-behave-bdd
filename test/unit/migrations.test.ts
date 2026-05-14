@@ -369,7 +369,7 @@ suite('Phase 19 — evaluateMigration: case 3 (both set)', () => {
     assert.strictEqual(wf.case, 3);
   });
 
-  test('3.9a: case 3 passes equalValues=true when source and dest match at the same scope', async () => {
+  test('3.9a: case 3 passes equalValues=true plus sourceValue and destValue when they match', async () => {
     setupConfigStub({
       legacyKey: { workspaceValue: false },
       canonicalKey: { workspaceValue: false },
@@ -380,10 +380,10 @@ suite('Phase 19 — evaluateMigration: case 3 (both set)', () => {
     const wsHit = onCaseHit.getCalls().find(
       c => c.args[0] === 3 && c.args[2] === vscode.ConfigurationTarget.Workspace,
     )!;
-    assert.deepStrictEqual(wsHit.args[3], { equalValues: true });
+    assert.deepStrictEqual(wsHit.args[3], { sourceValue: false, destValue: false, equalValues: true });
   });
 
-  test('3.9b: case 3 passes equalValues=false when source and dest differ at the same scope', async () => {
+  test('3.9b: case 3 passes equalValues=false plus the differing sourceValue and destValue', async () => {
     setupConfigStub({
       legacyKey: { workspaceValue: 'a' },
       canonicalKey: { workspaceValue: 'b' },
@@ -394,7 +394,7 @@ suite('Phase 19 — evaluateMigration: case 3 (both set)', () => {
     const wsHit = onCaseHit.getCalls().find(
       c => c.args[0] === 3 && c.args[2] === vscode.ConfigurationTarget.Workspace,
     )!;
-    assert.deepStrictEqual(wsHit.args[3], { equalValues: false });
+    assert.deepStrictEqual(wsHit.args[3], { sourceValue: 'a', destValue: 'b', equalValues: false });
   });
 });
 
