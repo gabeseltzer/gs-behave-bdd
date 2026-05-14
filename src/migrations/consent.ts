@@ -215,6 +215,28 @@ function describeScope(scope: MigrationScope): string {
   }
 }
 
+/**
+ * Emits a multi-line summary of the pending migrations to the workspace
+ * output channel before the orchestrator does any dispatching. Pairs with
+ * the existing per-action audit lines (D-A6.1) so the output channel shows
+ * both what was found and what was done.
+ */
+function logHitsSummary(hits: readonly ConsentHit[], wkspUri: vscode.Uri): void {
+  const case2 = hits.filter(h => h.case === 2).length;
+  const case3 = hits.filter(h => h.case === 3).length;
+  config.logger.logInfo(
+    `Pending migrations: ${hits.length} (case 2: ${case2}, case 3: ${case3})`,
+    wkspUri,
+  );
+  for (const h of hits) {
+    config.logger.logInfo(
+      `  • ${h.entry.id} at ${describeScope(h.scope)} (case ${h.case}): `
+      + `${h.entry.sourceNamespace}.${h.entry.sourceKey} → ${h.entry.destNamespace}.${h.entry.destKey}`,
+      wkspUri,
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Orchestrator entry point (D-A1 / D-A3 / D-A4 / D-A5.4 / D-A6.1 / D-A7)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -270,9 +292,26 @@ export async function runConsentFlow(
   hits: readonly ConsentHit[],
   mode: MigrationMode,
 ): Promise<void> {
-  // ── 1. Build groups keyed by (entry.id, case) ────────────────────────────
+  // ── 0. Dedupe single-folder phantom hits ────────────────────────────────
+  // In a single-folder workspace, .vscode/settings.json is the source for both
+  // Workspace and WorkspaceFolder scopes — VS Code's inspect() reports the
+  // same value at both. The evaluator surfaces both, which would otherwise
+  // (a) inflate the notification count, (b) cause double-writes during silent
+  // dispatch, and (c) duplicate the per-hit audit log lines. Drop the
+  // WorkspaceFolder duplicates here; multi-root workspaces keep both because
+  // the scopes are genuinely independent.
+  const effectiveHits: readonly ConsentHit[] = vscode.workspace.workspaceFile === undefined
+    ? hits.filter(h => h.scope !== vscode.ConfigurationTarget.WorkspaceFolder)
+    : hits;
+
+  // ── 1. Log potential migrations found (output channel surface) ──────────
+  if (effectiveHits.length > 0) {
+    logHitsSummary(effectiveHits, wkspUri);
+  }
+
+  // ── 2. Build groups keyed by (entry.id, case) ────────────────────────────
   const groupMap = new Map<string, ConsentGroup>();
-  for (const hit of hits) {
+  for (const hit of effectiveHits) {
     const key = `${hit.entry.id}::${hit.case}`;
     const existing = groupMap.get(key);
     if (existing) {
@@ -288,7 +327,7 @@ export async function runConsentFlow(
     return a.case - b.case;
   });
 
-  // ── 2. Apply silent migrationMode dispatch for case-2 groups ─────────────
+  // ── 3. Apply silent migrationMode dispatch for case-2 groups ─────────────
   // (case 3 always prompts, regardless of mode — D-A4.3)
   const promptBoundHits: ConsentHit[] = [];
   for (const group of groups) {
@@ -301,7 +340,7 @@ export async function runConsentFlow(
     }
   }
 
-  // ── 3. Summary toast → Migrations Panel for prompt-bound hits ───────────
+  // ── 4. Summary toast → Migrations Panel for prompt-bound hits ───────────
   // 023-04: replaces the diagnostics-publishing + two-button toast with a
   // single-button toast that opens the Migrations Panel (Webview). The panel
   // re-evaluates from scratch when it opens, so we don't need to thread any
