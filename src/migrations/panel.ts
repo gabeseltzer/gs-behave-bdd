@@ -27,11 +27,16 @@
 //   - `onDidChangeConfiguration` listener filtered to `gs-behave-bdd` and
 //     `behave-vsc` namespaces.
 //
-// 023-03 will add the `setMigrationMode` branch.
+// 023-03 wires:
+//   - `setMigrationMode` → validates value, writes
+//     `gs-behave-bdd.migrationMode` at **Global scope only** (Decision D —
+//     `migrationMode` is a user preference, not a project preference: the
+//     user reaches the panel from any folder and expects the change to apply
+//     universally), then `_refresh()`.
 import * as vscode from 'vscode';
 import { config } from '../configuration';
 import { dispatchMigrationAction, type MigrationActionArgs } from './codeActions';
-import { buildViewModel } from './panelViewModel';
+import { buildViewModel, MIGRATION_MODE_VALUES, type MigrationMode } from './panelViewModel';
 import { renderHtml } from './panelHtml';
 import { MIGRATION_REGISTRY } from './registry';
 import type { MigrationScope } from './types';
@@ -41,8 +46,7 @@ type PanelInboundMessage =
   | { kind: 'requestState' }
   | { kind: 'dispatchAction'; args: MigrationActionArgs }
   | { kind: 'recheck' }
-  // 023-03 will wire this:
-  | { kind: 'setMigrationMode'; [k: string]: unknown };
+  | { kind: 'setMigrationMode'; value: MigrationMode };
 
 
 export class MigrationsPanel {
@@ -155,11 +159,44 @@ export class MigrationsPanel {
           await this._refresh();
           return;
 
-        case 'setMigrationMode':
-          // 023-03 wires this. Log + ignore for now so we can see if the
-          // webview tries to fire it prematurely.
-          config.logger.logInfoAllWksps('MigrationsPanel: ignoring setMigrationMode (wired in 023-03)');
+        case 'setMigrationMode': {
+          // V5 input-validation (023-RESEARCH §Security): re-check the value
+          // against the canonical enum strings even though the static union
+          // says `MigrationMode`. The message arrived over postMessage and is
+          // strictly untrusted at runtime.
+          const value = (msg as { value?: unknown }).value;
+          if (typeof value !== 'string' || !(MIGRATION_MODE_VALUES as readonly string[]).includes(value)) {
+            config.logger.logInfoAllWksps('MigrationsPanel: ignoring setMigrationMode with invalid value');
+            return;
+          }
+
+          // Decision D: ALWAYS write at Global scope. The panel deliberately
+          // exposes no Workspace / WorkspaceFolder selector for migrationMode
+          // — see file header.
+          //
+          // The `targetWkspUri` scoping argument to `getConfiguration` is
+          // not strictly required for Global writes, but matches the pattern
+          // in `recheckCommand.ts:74-78` (some VS Code APIs use it for
+          // resource resolution in multi-root setups, and passing the first
+          // folder is harmless when none is present we just pass `undefined`).
+          const targetWkspUri = vscode.workspace.workspaceFolders?.[0]?.uri;
+          try {
+            const cfg = vscode.workspace.getConfiguration('gs-behave-bdd', targetWkspUri);
+            await cfg.update('migrationMode', value, vscode.ConfigurationTarget.Global);
+            config.logger.logInfoAllWksps(`MigrationsPanel: migrationMode set to '${value}' at Global scope`);
+          } catch (e) {
+            // Mirrors `recheckCommand.ts:79-91` — log + swallow. The
+            // onDidChangeConfiguration listener won't fire on failure, but
+            // the explicit `_refresh()` below keeps the UI consistent.
+            config.logger.logInfoAllWksps(`MigrationsPanel: failed to write migrationMode: ${e}`);
+          }
+
+          // Explicit refresh for determinism. The `onDidChangeConfiguration`
+          // listener will ALSO fire on success — benign double-refresh; same
+          // pattern as the action dispatch flow in 023-02.
+          await this._refresh();
           return;
+        }
 
         default: {
           const _exhaustive: never = msg;
