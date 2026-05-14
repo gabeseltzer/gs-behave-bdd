@@ -24,17 +24,18 @@ See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
 
 ## Current Position
 
-Phase: 022 (cleanup-integration-docs) — READY FOR VERIFICATION
-Plan: 3 of 3 complete
-Status: All three plans landed; ready for /gsd-verify-work or gsd-verifier
-Resume file: .planning/phases/022-cleanup-integration-docs/022-CONTEXT.md
-Last activity: 2026-05-12 -- 022-02 integration suite landed; phase 022 ready for verification
+Phase: 023 (migrations-panel-webview) — PLANNED
+Plan: 0 of 5 (skeleton in CONTEXT.md; awaiting /gsd-plan-phase to detail)
+Status: New phase added 2026-05-14 to replace the diagnostics consent surface with a Webview panel after the 260513-oh5 → 260514-ean iteration chain could not reliably anchor Global-scope diagnostics under remote-extension-host conditions.
+Resume file: .planning/phases/023-migrations-panel-webview/023-CONTEXT.md
+Last activity: 2026-05-14 -- phase 023 registered in ROADMAP.md; CONTEXT.md captures design decisions and plan skeleton.
 
 ```
 [####] Phase 19  Migration Foundation ✅
 [####] Phase 20  Migration Registry ✅
 [####] Phase 21  Consent UX (Case 2 & Case 3 Prompts) ✅
 [####] Phase 22  Cleanup, Integration & Docs ✅ (pending verification)
+[    ] Phase 23  Migrations Panel (Webview) — planned
 ```
 
 ## Performance Metrics

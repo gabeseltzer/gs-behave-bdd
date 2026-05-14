@@ -69,7 +69,7 @@ Archive: [milestones/v1.4.0-ROADMAP.md](milestones/v1.4.0-ROADMAP.md)
 
 </details>
 
-### 🚧 v1.5.0 Migration Consent & `behave-vsc` Cleanup (Phases 19-22) — IN PROGRESS
+### 🚧 v1.5.0 Migration Consent & `behave-vsc` Cleanup (Phases 19-23) — IN PROGRESS
 
 **Milestone goal:** Make settings migration opt-in via per-migration consent prompts, complete the cross-extension migration off `behave-vsc`, and pay down the `activeProjectCache` invalidation debt from v1.4.0.
 
@@ -81,6 +81,7 @@ Archive: [milestones/v1.4.0-ROADMAP.md](milestones/v1.4.0-ROADMAP.md)
 - [ ] **Phase 20: Migration Registry** — Refactor v1.4.0's two migrations into the new registry and add `behave-vsc` → `gs-behave-bdd` entries for every silent-fallback key.
 - [ ] **Phase 21: Consent UX (Case 2 & Case 3 Prompts)** — Wire activation-time scanning to non-blocking notifications, implement the case 2 / case 3 actions, and honour `migrationMode` overrides + dismissal semantics.
 - [ ] **Phase 22: Cleanup, Integration & Docs** — Remove the `behave-vsc` silent fallback reads, add the consent-flow integration suite, and document the new UX in README + setting descriptions.
+- [ ] **Phase 23: Migrations Panel (Webview)** — Replace Problems-pane diagnostics with a dedicated Webview that lists all pending migrations, offers per-migration actions, and surfaces the Migration Mode setting. Closes the host-filesystem-path gap that diagnostics couldn't bridge in remote-extension-host setups.
 
 #### Phase Details
 
@@ -150,6 +151,28 @@ Plans:
 - [x] 022-02-integration-test-PLAN.md — New example-projects/migration-consent/ fixture + integration suite covering Case 1 silent, Case 2 Migrate & delete, Case 3 Overwrite & delete (TEST-07).
 - [x] 022-03-docs-PLAN.md — README bullet #14 + migration sub-section; tighten package.json descriptions for migrationMode + completedMigrations (DOC-01, DOC-02).
 
+##### Phase 23: Migrations Panel (Webview)
+**Goal**: A dedicated Webview panel owns the entire migration consent surface — replacing the Problems-pane diagnostics that the prior consent-diagnostics work (260513-oh5 → 260514-ean) couldn't make reliable in remote-extension-host setups. Users see every pending migration in one place, can change Migration Mode from there, and dispatch actions without leaving the panel.
+**Depends on**: Phase 22 (the diagnostics surface this replaces shipped in the 260513-oh5 quick-task chain, which itself was UX iteration on Phase 21's toast prompts).
+**Requirements**: Replaces the diagnostics-based discharge path for CONSENT-01..04 and MIGRATE-05/06 with a Webview-based one. Carries forward TEST-01 / TEST-02 dispatch-coverage requirements via the Webview message handler (which still routes through `dispatchMigrationAction`).
+**Success Criteria** (what must be TRUE):
+  1. A new `Behave BDD: Open Migrations Panel` command (id `gs-behave-bdd.openMigrationsPanel`) opens a single-instance Webview panel; opening it a second time reveals the existing panel.
+  2. The Webview lists every currently-pending case-2 / case-3 hit across every workspace folder, grouped sensibly, with each row showing legacy key, canonical key, scope, current values, and the case-specific action buttons (3 for case 2, 4 for case 3).
+  3. The Webview has a "Migration Mode" section at the top showing the current `gs-behave-bdd.migrationMode` value and offering UI to change it; the change writes to the canonical setting and the panel re-renders.
+  4. When the user picks an action, the Webview sends a message to the extension which dispatches through `dispatchMigrationAction`; on success the row updates in place (or disappears if no remaining hits for that entry+scope).
+  5. The summary toast still fires on activation when there are case-2 / case-3 hits; its lone button is now `Open Migrations Panel` and opens the Webview.
+  6. The Problems-pane diagnostics for migrations are gone — `publishConsentDiagnostics`, `clearDiagnosticsForEntryAtScope`, the `MigrationCodeActionProvider`, the `gs-behave-bdd.migration.action` command, the `gs-behave-bdd.migrations` DiagnosticCollection — all deleted. The `vscode-userdata:` anchor hack (260514-ean) goes with them.
+  7. Empty state: when there are no pending migrations, the Webview shows "No pending migrations" plus a "Recheck Migrations" button that invokes the existing `gs-behave-bdd.recheckMigrations` command.
+  8. Unit tests cover: Webview HTML renders the expected sections for case-2 and case-3 hits, message handler dispatches correctly per action, Migration Mode change writes to settings, empty state renders. Integration suite Tests 2 and 3 still pass (they call `dispatchMigrationAction` directly — the surface change is transparent to them).
+**Plans:** TBD (set during `/gsd-plan-phase`)
+**Plans:**
+- [ ] 023-01-PLAN.md — Webview shell: lifecycle (create / reveal / dispose), command registration, basic CSP-safe HTML scaffold, theming via CSS custom properties.
+- [ ] 023-02-PLAN.md — Render the migrations list: build view-model from current hits (re-evaluate registry inline), case-2 / case-3 action buttons, message-passing wiring to `dispatchMigrationAction`.
+- [ ] 023-03-PLAN.md — Migration Mode section: read current value, render UI for the 4 enum values, write on selection, re-render.
+- [ ] 023-04-PLAN.md — Wire the summary toast button to open the panel; add `gs-behave-bdd.openMigrationsPanel` to the command palette; remove the diagnostics surface (publishConsentDiagnostics, clearDiagnosticsForEntryAtScope, MigrationCodeActionProvider, related command + tests).
+- [ ] 023-05-PLAN.md — Tests: Webview unit tests (Mocha + JSDOM-style if needed), integration test adjustments if any, regression of recheck-consent-flow test 4.10 to use the new surface.
+**UI hint**: yes (Webview HTML/CSS)
+
 #### Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -158,3 +181,4 @@ Plans:
 | 20. Migration Registry | 5/5 | Complete | 2026-05-08 |
 | 21. Consent UX (Case 2 & Case 3 Prompts) | 3/3 | Complete | 2026-05-11 |
 | 22. Cleanup, Integration & Docs | 0/3 | Planned | - |
+| 23. Migrations Panel (Webview) | 0/5 | Planned | - |
