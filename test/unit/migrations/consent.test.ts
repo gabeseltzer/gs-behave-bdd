@@ -21,11 +21,21 @@ import * as assert from 'assert';
 import * as sinon from 'sinon';
 import * as configModule from '../../../src/configuration';
 import {
-  disposeDiagnosticCollection,
-  getDiagnosticCollection,
   runConsentFlow,
   type MigrationEntry,
 } from '../../../src/migrations';
+
+// 023-04: the diagnostics surface (publishConsentDiagnostics /
+// clearDiagnosticsForEntryAtScope / getDiagnosticCollection /
+// disposeDiagnosticCollection) was deleted along with the Problems-pane UI.
+// These local shims keep this file compiling so the rest of the unit suite
+// can run; assertions that depend on diagnostic state are now expected to
+// fail until 023-05 reshapes them around the panel signal.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getDiagnosticCollection(): { forEach(cb: (uri: any, diags: any[]) => void): void } {
+  return { forEach: () => undefined };
+}
+function disposeDiagnosticCollection(): void { /* no-op shim — 023-05 cleans this up */ }
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const vscode = require('vscode');
