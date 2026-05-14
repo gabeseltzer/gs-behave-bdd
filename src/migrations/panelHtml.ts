@@ -1,4 +1,4 @@
-// Phase 023 Plan 01: CSP-safe HTML scaffold for the Migrations Webview.
+// Phase 023 Plan 02 Task 3: CSP-safe HTML scaffold for the Migrations Webview.
 //
 // Inline template literal (no external assets) — see 023-RESEARCH §Asset
 // Strategy: the panel is small enough that the bundler / copy-webpack-plugin
@@ -10,11 +10,18 @@
 // One nonce per `renderHtml` call, captured ONCE per call (023-RESEARCH
 // Pitfall 3) to keep the meta tag in sync with the actual tags.
 //
-// 023-01 scope: `render(vm)` and the click delegate are stubs. The click
-// delegate intentionally does NOT postMessage `dispatchAction`-shaped events
-// because the host-side branch doesn't exist until 023-02 Task 2 — sending
-// them would just log "no handler" warnings. The only postMessage in this
-// plan is the initial `requestState` ping at the bottom of the script.
+// 023-02 wires:
+//   - `render(vm)` builds real per-row markup from the view-model posted by
+//     `MigrationsPanel._refresh()`. Multi-folder workspaces get `<h2>` section
+//     headers grouping rows by workspace folder name (Decision A); single-
+//     folder workspaces suppress the header to avoid noise.
+//   - Empty state renders a Recheck Migrations button that posts
+//     `{ kind: 'recheck' }`.
+//   - Delegated click handler distinguishes `data-recheck` (recheck) from
+//     `data-action` (dispatchAction) buttons and posts the appropriate
+//     message kind. Host-side validation is re-applied (V5).
+//
+// 023-03 will add the Migration Mode picker UI above the row list.
 import * as vscode from 'vscode';
 
 
@@ -46,10 +53,26 @@ export function renderHtml(webview: vscode.Webview): string {
       margin: 0 0 1rem 0;
       font-weight: 600;
     }
+    h2 {
+      font-size: 1rem;
+      margin: 1rem 0 .5rem 0;
+      font-weight: 600;
+      color: var(--vscode-descriptionForeground);
+    }
     .row {
       border: 1px solid var(--vscode-panel-border);
       padding: .75rem;
       margin-bottom: .5rem;
+    }
+    .row code {
+      font-family: var(--vscode-editor-font-family);
+    }
+    .row .scope {
+      color: var(--vscode-descriptionForeground);
+      margin-left: .5rem;
+    }
+    .row .actions {
+      margin-top: .5rem;
     }
     button {
       background: var(--vscode-button-background);
@@ -69,6 +92,7 @@ export function renderHtml(webview: vscode.Webview): string {
     .empty {
       color: var(--vscode-descriptionForeground);
       font-style: italic;
+      margin-bottom: .5rem;
     }
   </style>
 </head>
@@ -81,18 +105,42 @@ export function renderHtml(webview: vscode.Webview): string {
     const vscode = acquireVsCodeApi();
     const root = document.getElementById('root');
 
-    // Delegated click handler. 023-01 only reads dataset for diagnostic
-    // purposes — no dispatchAction postMessage until 023-02 Task 2 wires
-    // the host branch. The lone postMessage in this plan is the
-    // requestState ping below.
+    // 4-line HTML escaper. Acceptable here because the values we interpolate
+    // are registry-derived setting keys (alphanumeric + dots) plus
+    // workspace folder names — not free-form user input. See 023-RESEARCH
+    // §Don't Hand-Roll: dompurify is overkill at this volume.
+    function escape(s) {
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // Delegated click handler. Two button types:
+    //   - data-recheck="true"  → post { kind: 'recheck' }
+    //   - data-action="<verb>" → post { kind: 'dispatchAction', args: {...} }
+    // Any other click is ignored. Host re-validates the payload before
+    // dispatching (V5 — see panel.ts validateActionArgs).
     document.addEventListener('click', (e) => {
-      const target = e.target;
-      if (!(target instanceof HTMLButtonElement)) return;
-      if (!target.dataset || !target.dataset.action) return;
-      // 023-02: post { kind: 'dispatchAction', ... } here once the host
-      // switch in panel.ts handles it. For now intentionally a no-op so
-      // we don't generate spurious "unhandled message" log lines.
-      return;
+      const t = e.target;
+      if (!(t instanceof HTMLButtonElement)) return;
+
+      if (t.dataset.recheck === 'true') {
+        vscode.postMessage({ kind: 'recheck' });
+        return;
+      }
+
+      if (typeof t.dataset.action === 'string' && t.dataset.action.length > 0) {
+        vscode.postMessage({
+          kind: 'dispatchAction',
+          args: {
+            entryId: t.dataset.entryId,
+            case: Number(t.dataset.case),
+            scope: Number(t.dataset.scope),
+            action: t.dataset.action,
+            wkspUri: t.dataset.wkspUri,
+          },
+        });
+      }
     });
 
     window.addEventListener('message', (ev) => {
@@ -103,15 +151,60 @@ export function renderHtml(webview: vscode.Webview): string {
       }
     });
 
-    function render(_vm) {
-      // 023-02 replaces this with real per-row markup. For now the empty
-      // placeholder rendered server-side is the whole UI.
-      root.innerHTML = '<p class="empty">No pending migrations.</p>';
+    function render(vm) {
+      if (!vm) {
+        root.innerHTML = '<p class="empty">Loading…</p>';
+        return;
+      }
+
+      if (vm.empty) {
+        root.innerHTML =
+          '<p class="empty">No pending migrations.</p>' +
+          '<button type="button" data-recheck="true">Recheck Migrations</button>';
+        return;
+      }
+
+      // Group rows by folder when more than one workspace folder is open.
+      const showFolderHeaders = vm.folderCount > 1;
+      const groups = new Map();
+      for (const row of vm.rows) {
+        const key = row.folderName;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(row);
+      }
+
+      const sections = [];
+      for (const [folderName, rows] of groups) {
+        const header = showFolderHeaders
+          ? '<h2>' + escape(folderName) + '</h2>'
+          : '';
+        const rowMarkup = rows.map(renderRow).join('');
+        sections.push(header + rowMarkup);
+      }
+
+      root.innerHTML = sections.join('');
     }
 
-    // Kick the host to send us the first state. In 023-01 the host logs
-    // and ignores; 023-02 Task 2 replaces the host branch with a real
-    // _refresh() call.
+    function renderRow(row) {
+      const buttons = row.buttons.map(function (b) {
+        return '<button type="button"'
+          + ' data-action="' + escape(b.action) + '"'
+          + ' data-entry-id="' + escape(row.entryId) + '"'
+          + ' data-case="' + row.case + '"'
+          + ' data-scope="' + row.scope + '"'
+          + ' data-wksp-uri="' + escape(row.wkspUri) + '">'
+          + escape(b.label)
+          + '</button>';
+      }).join('');
+
+      return '<div class="row">'
+        + '<code>' + escape(row.sourceKey) + '</code> → <code>' + escape(row.destKey) + '</code>'
+        + '<span class="scope">at ' + escape(row.scopeLabel) + '</span>'
+        + '<div class="actions">' + buttons + '</div>'
+        + '</div>';
+    }
+
+    // Kick the host to send us the first state.
     vscode.postMessage({ kind: 'requestState' });
   </script>
 </body>
