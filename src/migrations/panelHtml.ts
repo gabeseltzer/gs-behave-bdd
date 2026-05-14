@@ -21,13 +21,26 @@
 //     `data-action` (dispatchAction) buttons and posts the appropriate
 //     message kind. Host-side validation is re-applied (V5).
 //
-// 023-03 will add the Migration Mode picker UI above the row list.
+// 023-03 wires:
+//   - Migration Mode section above the row list. Buttons (one per
+//     `MIGRATION_MODE_OPTIONS` entry) with `aria-pressed` reflecting
+//     `vm.migrationMode`. Selected state restyled via [aria-pressed="true"].
+//   - Delegated click handler extended to post
+//     `{ kind: 'setMigrationMode', value }` for `data-mode` buttons.
+//   - `MIGRATION_MODE_OPTIONS` is embedded as a JSON literal at HTML build
+//     time — the browser script doesn't import host modules. Safe because
+//     option values/labels are alphanumeric+dashes (no XSS surface).
 import * as vscode from 'vscode';
+import { MIGRATION_MODE_OPTIONS } from './panelViewModel';
 
 
 export function renderHtml(webview: vscode.Webview): string {
   const nonce = getNonce();
   const cspSource = webview.cspSource;
+  // Embed mode options as a JSON literal. `JSON.stringify` produces a valid
+  // JS expression whose contents are safe inside a `<script>` block (no
+  // </script> in the data; values are registry-controlled).
+  const modeOptionsJson = JSON.stringify(MIGRATION_MODE_OPTIONS);
 
   // CSP notes:
   //   - default-src 'none'  — deny everything not explicitly allowed.
@@ -94,9 +107,36 @@ export function renderHtml(webview: vscode.Webview): string {
       font-style: italic;
       margin-bottom: .5rem;
     }
+    .mode-section {
+      padding: .5rem 0 1rem;
+      border-bottom: 1px solid var(--vscode-panel-border);
+      margin-bottom: 1rem;
+    }
+    .mode-section h2 {
+      font-size: 1rem;
+      margin: 0 0 .5rem;
+    }
+    .mode-section button[data-mode] {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+      margin-right: .25rem;
+    }
+    .mode-section button[data-mode][aria-pressed="true"] {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    .mode-section button[data-mode]:hover {
+      background: var(--vscode-button-secondaryHoverBackground);
+    }
+    .mode-section .desc {
+      color: var(--vscode-descriptionForeground);
+      margin: .5rem 0 0;
+      font-size: .9em;
+    }
   </style>
 </head>
 <body>
+  <div id="mode-root"></div>
   <h1>Pending Migrations</h1>
   <div id="root"><p class="empty">Loading…</p></div>
   <script nonce="${nonce}">
@@ -104,6 +144,12 @@ export function renderHtml(webview: vscode.Webview): string {
     // acquireVsCodeApi twice throws (023-RESEARCH Pitfall 2).
     const vscode = acquireVsCodeApi();
     const root = document.getElementById('root');
+    const modeRoot = document.getElementById('mode-root');
+
+    // Host-embedded constant — see renderHtml(). Values are alphanumeric +
+    // dashes (registry-controlled); safe to interpolate via escape() into
+    // the rendered button attributes.
+    const MODES = ${modeOptionsJson};
 
     // 4-line HTML escaper. Acceptable here because the values we interpolate
     // are registry-derived setting keys (alphanumeric + dots) plus
@@ -126,6 +172,11 @@ export function renderHtml(webview: vscode.Webview): string {
 
       if (t.dataset.recheck === 'true') {
         vscode.postMessage({ kind: 'recheck' });
+        return;
+      }
+
+      if (typeof t.dataset.mode === 'string' && t.dataset.mode.length > 0) {
+        vscode.postMessage({ kind: 'setMigrationMode', value: t.dataset.mode });
         return;
       }
 
@@ -153,9 +204,15 @@ export function renderHtml(webview: vscode.Webview): string {
 
     function render(vm) {
       if (!vm) {
+        modeRoot.innerHTML = '';
         root.innerHTML = '<p class="empty">Loading…</p>';
         return;
       }
+
+      // Migration Mode section renders above the row list regardless of
+      // whether there are pending migrations — picking the mode is useful
+      // even when the list is empty (affects next activation).
+      renderModeSection(vm.migrationMode);
 
       if (vm.empty) {
         root.innerHTML =
@@ -183,6 +240,25 @@ export function renderHtml(webview: vscode.Webview): string {
       }
 
       root.innerHTML = sections.join('');
+    }
+
+    function renderModeSection(currentMode) {
+      const buttons = MODES.map(function (opt) {
+        const pressed = opt.value === currentMode ? 'true' : 'false';
+        return '<button type="button"'
+          + ' data-mode="' + escape(opt.value) + '"'
+          + ' aria-pressed="' + pressed + '"'
+          + ' title="' + escape(opt.description) + '">'
+          + escape(opt.label)
+          + '</button>';
+      }).join('');
+
+      modeRoot.innerHTML =
+        '<div class="mode-section">'
+          + '<h2>Migration Mode</h2>'
+          + buttons
+          + '<p class="desc">Applied at Global scope. Affects how silent migrations are handled on next activation.</p>'
+          + '</div>';
     }
 
     function renderRow(row) {
