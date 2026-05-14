@@ -60,6 +60,19 @@ export function resolveAnchorUri(scope: MigrationScope, wkspUri: vscode.Uri): vs
   switch (scope) {
     case vscode.ConfigurationTarget.Global: {
       const home = os.homedir();
+
+      // 260514-dvt: when the extension runs on a VS Code Server (devcontainer,
+      // WSL, SSH-remote, attached-container, Codespaces), Global user
+      // settings.json lives under `$HOME/.vscode-server/...`, NOT the
+      // local-install path. `os.homedir()` returns the container/remote home,
+      // and `vscode.env.remoteName` is the canonical signal that we're in a
+      // remote host context.
+      if (vscode.env.remoteName) {
+        return vscode.Uri.file(
+          path.join(home, serverDataFolderName(), 'data', 'User', 'settings.json'),
+        );
+      }
+
       const folder = userDataFolderName();
       let p: string;
       if (process.platform === 'win32') {
@@ -101,6 +114,25 @@ function userDataFolderName(): string {
     case 'Visual Studio Code - Insiders': return 'Code - Insiders';
     case 'Visual Studio Code - Exploration': return 'Code - Exploration';
     default: return name; // VSCodium, Code-OSS, etc. use the appName as the folder.
+  }
+}
+
+/**
+ * 260514-dvt: counterpart to userDataFolderName for the remote/server case.
+ * VS Code Server stores user-data under `$HOME/.vscode-server/...` (stable)
+ * with a per-variant suffix for Insiders / Exploration. VSCodium-server and
+ * other forks don't follow a widely-published convention; fall back to the
+ * stable folder name — worst case the diagnostic anchors at a non-existent
+ * path and the toast's `Open Settings` button (which uses the
+ * `workbench.action.openSettingsJson` command) remains the safety net.
+ */
+function serverDataFolderName(): string {
+  const name = vscode.env.appName ?? 'Visual Studio Code';
+  switch (name) {
+    case 'Visual Studio Code': return '.vscode-server';
+    case 'Visual Studio Code - Insiders': return '.vscode-server-insiders';
+    case 'Visual Studio Code - Exploration': return '.vscode-server-exploration';
+    default: return '.vscode-server';
   }
 }
 

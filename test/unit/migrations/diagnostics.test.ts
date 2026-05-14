@@ -242,6 +242,32 @@ suite('260513-oh5 — diagnostics.ts', () => {
     );
   });
 
+  // 260514-dvt: remote-host detection. Extension running in a VS Code Server
+  // (devcontainer / WSL / SSH-remote / Codespaces / attached-container) must
+  // anchor at the server data dir, not the local-install path.
+  test('resolveAnchorUri(Global) returns the server data dir when remoteName is set (devcontainer)', () => {
+    sinon.stub(vscode.env, 'remoteName').value('dev-container');
+    const uri = resolveAnchorUri(vscode.ConfigurationTarget.Global, MOCK_WKSP);
+    assert.ok(uri);
+    const fp = uri.fsPath.replace(/\\/g, '/');
+    assert.ok(
+      fp.includes('.vscode-server/data/User/settings.json'),
+      `expected .vscode-server/data/User/settings.json; got: ${fp}`,
+    );
+  });
+
+  test('resolveAnchorUri(Global) uses server-insiders folder on Insiders + remote', () => {
+    sinon.stub(vscode.env, 'remoteName').value('wsl');
+    sinon.stub(vscode.env, 'appName').value('Visual Studio Code - Insiders');
+    const uri = resolveAnchorUri(vscode.ConfigurationTarget.Global, MOCK_WKSP);
+    assert.ok(uri);
+    const fp = uri.fsPath.replace(/\\/g, '/');
+    assert.ok(
+      fp.includes('.vscode-server-insiders/data/User/settings.json'),
+      `expected .vscode-server-insiders/data/User/settings.json; got: ${fp}`,
+    );
+  });
+
   // ── publishConsentDiagnostics ────────────────────────────────────────────
 
   test('publishConsentDiagnostics writes one Diagnostic per hit with the right shape', async () => {
