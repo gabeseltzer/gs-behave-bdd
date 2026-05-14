@@ -47,9 +47,7 @@ import {
   readMigrationMode,
   type ConsentHit,
   MIGRATION_ACTION_COMMAND,
-  MigrationCodeActionProvider,
   dispatchMigrationAction,
-  getDiagnosticCollection,
   type MigrationActionArgs,
 } from './migrations';
 import { MigrationsPanel } from './migrations/panel';
@@ -438,24 +436,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.commands.registerCommand('gs-behave-bdd.openMigrationsPanel', () => {
         MigrationsPanel.createOrShow(context.extensionUri);
       }),
-      // 260513-oh5: migration consent quick-fix dispatcher + Code Action provider.
-      // The provider attaches to settings.json / .code-workspace so the lightbulb
-      // appears inline; the Problems pane also exposes the quick-fixes.
+      // 023-04: the Webview panel is the sole UI for case-2 / case-3 migrations.
+      // MIGRATION_ACTION_COMMAND is still registered so the panel (and any
+      // future caller) can dispatch via vscode.commands.executeCommand.
       vscode.commands.registerCommand(
         MIGRATION_ACTION_COMMAND,
         (args: MigrationActionArgs) => dispatchMigrationAction(args),
       ),
-      vscode.languages.registerCodeActionsProvider(
-        [
-          { language: 'jsonc', pattern: '**/settings.json' },
-          { language: 'json', pattern: '**/settings.json' },
-          { language: 'jsonc', pattern: '**/*.code-workspace' },
-          { language: 'json', pattern: '**/*.code-workspace' },
-        ],
-        new MigrationCodeActionProvider(),
-        { providedCodeActionKinds: MigrationCodeActionProvider.providedCodeActionKinds },
-      ),
-      getDiagnosticCollection(),
       // Legacy command aliases for users migrating from behave-vsc — preserves custom keybindings
       vscode.commands.registerTextEditorCommand(`behave-vsc.gotoStep`, gotoStepHandler),
       vscode.commands.registerTextEditorCommand(`behave-vsc.findStepReferences`, findStepReferencesHandler),
