@@ -189,6 +189,9 @@ export const workspace = {
     if (typeof pathOrUri === 'string') return pathOrUri;
     return pathOrUri.fsPath || pathOrUri.path || String(pathOrUri);
   },
+  // 260514-djs: summary-toast "Open Settings" path calls openTextDocument(uri)
+  // then window.showTextDocument(doc, { selection }). Tests stub these per-case.
+  openTextDocument: (uri: Uri): Promise<{ uri: Uri }> => Promise.resolve({ uri }),
   onDidChangeConfiguration: () => ({ dispose: () => { /* mock */ } }),
   onDidChangeWorkspaceFolders: () => ({ dispose: () => { /* mock */ } }),
   onDidSaveTextDocument: () => ({ dispose: () => { /* mock */ } }),
@@ -247,6 +250,9 @@ export const window = {
   // Phase 19 Plan 03: recheckCommand uses showQuickPick for the scope picker
   // (D-06). Default returns undefined (user dismissed); stubs override via Sinon.
   showQuickPick: (_items?: unknown, _options?: unknown): Promise<unknown> => Promise.resolve(undefined),
+  // 260514-djs: paired with workspace.openTextDocument for the "Open Settings"
+  // summary-toast action. Returns a stub editor; tests stub for assertions.
+  showTextDocument: (_doc: unknown, _options?: unknown): Promise<unknown> => Promise.resolve({}),
 };
 
 export const debug = {
@@ -265,8 +271,15 @@ export const debug = {
 };
 
 export const commands = {
-  executeCommand: () => Promise.resolve(undefined),
+  executeCommand: (..._args: unknown[]) => Promise.resolve(undefined),
   registerCommand: () => ({ dispose: () => { /* mock */ } })
+};
+
+// 260514-djs: diagnostics.ts userDataFolderName() reads vscode.env.appName to
+// pick the right user-data folder for Global-scope anchors. Default to stable
+// VS Code; tests stub appName to exercise Insiders / VSCodium variants.
+export const env = {
+  appName: 'Visual Studio Code',
 };
 
 export enum FileType {

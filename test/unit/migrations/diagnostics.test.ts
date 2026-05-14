@@ -202,20 +202,44 @@ suite('260513-oh5 — diagnostics.ts', () => {
 
   // ── buildDiagnosticMessage ───────────────────────────────────────────────
 
-  test('case 2 message names both keys and the scope', () => {
+  test('case 2 message names the legacy key and points at Behave BDD', () => {
     const entry = makeEntry('justMyCode');
     const msg = buildDiagnosticMessage(entry, 2, vscode.ConfigurationTarget.Global);
-    assert.ok(msg.includes('behave-vsc.justMyCode'));
-    assert.ok(msg.includes('gs-behave-bdd.justMyCode'));
-    assert.ok(msg.includes('Global'));
+    assert.ok(msg.startsWith('behave-vsc.justMyCode'), `expected to start with the legacy key; got: ${msg}`);
+    assert.ok(/can be migrated for use with Behave BDD/.test(msg), `expected migration framing; got: ${msg}`);
+    assert.ok(/quick-fix/i.test(msg), `expected mention of quick-fix; got: ${msg}`);
   });
 
-  test('case 3 message starts with "Both" and names both keys', () => {
+  test('case 3 message names both keys and frames as a both-set conflict', () => {
     const entry = makeEntry('justMyCode');
     const msg = buildDiagnosticMessage(entry, 3, vscode.ConfigurationTarget.Workspace);
-    assert.ok(msg.startsWith('Both '));
-    assert.ok(msg.includes('behave-vsc.justMyCode'));
-    assert.ok(msg.includes('gs-behave-bdd.justMyCode'));
+    assert.ok(msg.startsWith('behave-vsc.justMyCode'), `expected to start with the legacy key; got: ${msg}`);
+    assert.ok(msg.includes('gs-behave-bdd.justMyCode'), `expected canonical key; got: ${msg}`);
+    assert.ok(/both set/.test(msg), `expected "both set" framing; got: ${msg}`);
+  });
+
+  // 260514-djs: resolveAnchorUri must honor vscode.env.appName so Insiders
+  // (and other variants) anchor at the right user-data folder. Hardcoding
+  // "Code" broke clickable navigation from the Problems pane on Insiders
+  // (user-testing report).
+  test('resolveAnchorUri(Global) folds vscode.env.appName into the path', () => {
+    sinon.stub(vscode.env, 'appName').value('Visual Studio Code - Insiders');
+    const uri = resolveAnchorUri(vscode.ConfigurationTarget.Global, MOCK_WKSP);
+    assert.ok(uri);
+    assert.ok(
+      uri.fsPath.includes('Code - Insiders'),
+      `expected "Code - Insiders" in path on Insiders; got: ${uri.fsPath}`,
+    );
+  });
+
+  test('resolveAnchorUri(Global) uses non-Microsoft appName verbatim (VSCodium)', () => {
+    sinon.stub(vscode.env, 'appName').value('VSCodium');
+    const uri = resolveAnchorUri(vscode.ConfigurationTarget.Global, MOCK_WKSP);
+    assert.ok(uri);
+    assert.ok(
+      uri.fsPath.includes('VSCodium'),
+      `expected "VSCodium" folder for VSCodium; got: ${uri.fsPath}`,
+    );
   });
 
   // ── publishConsentDiagnostics ────────────────────────────────────────────

@@ -685,8 +685,8 @@ suite('Phase 19 Plan 03 — recheckMigrationsCommandHandler', () => {
     );
     const summaryMsg = String(showInfoStub.firstCall.args[0]);
     assert.ok(
-      /legacy behave-vsc setting/.test(summaryMsg),
-      `summary toast should mention behave-vsc settings; got: ${summaryMsg}`,
+      /can be migrated for Behave BDD/.test(summaryMsg),
+      `summary toast should match new copy; got: ${summaryMsg}`,
     );
 
     // Diagnostic was published for the justMyCode case-2 hit at Global scope.
