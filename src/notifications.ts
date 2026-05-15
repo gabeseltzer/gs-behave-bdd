@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { config } from './configuration';
 import { diagLog } from './logger';
-import { normalizeFeaturesPathEntry } from './common';
+import { featuresPathMergeWithDedup } from './migrations/featuresPath';
+import { suppressMultiConfigToArray } from './migrations/suppressedNotifications';
 
 /**
  * Phase 15: Notification suppression infrastructure.
@@ -108,13 +109,18 @@ export async function showSuppressibleNotification(
 
 /**
  * Result of a migration transform callback.
- * - `write`: write `value` as the new dest value AND remove the source key (both at same scope).
+ * - `write`: write `value` as the new dest value. `removeSource` controls whether
+ *   the source key is removed (both at same scope):
+ *     - `removeSource: true` (or omitted) — remove source (default, current behavior).
+ *     - `removeSource: false` — preserve source (Phase 21 D-A8.3: needed for the
+ *       case-2 "migrate-and-keep" and case-3 "overwrite-and-keep" actions, which
+ *       write the dest but intentionally leave the legacy entry in place).
  * - `skipDest`: do NOT write the dest. `removeSource` controls whether the source key is removed:
  *     - `removeSource: true`  — remove source (Phase 16 D-08: blank legacy value, drop it).
  *     - `removeSource: false` — preserve source (Phase 15: legacyValue !== true is a no-op).
  */
 type TransformResult<T> =
-  | { kind: 'write'; value: T }
+  | { kind: 'write'; value: T; removeSource?: boolean }
   | { kind: 'skipDest'; removeSource: boolean };
 
 /**
@@ -207,18 +213,28 @@ async function migrateScopedSetting<TSrc, TDest>(opts: {
 
   try {
     if (result.kind === 'write') {
+      // D-A8.3 (Phase 21): the optional `removeSource` field on the write
+      // variant gates legacy-key removal. Omitted or `true` → remove (current
+      // behavior, all prior callers). Explicit `false` → preserve the source
+      // entry (needed for case-2 "migrate-and-keep" / case-3 "overwrite-and-keep").
+      const shouldRemoveSource = result.removeSource !== false;
       // W-01: if the dest at this scope is already deep-equal to the proposed
       // value, skip the dest write — it's a no-op that nevertheless triggers a
       // configuration-change event and a full reparse cycle on idempotent
-      // re-activation. Still remove the source to complete the migration.
+      // re-activation. Still honour removeSource for the legacy entry.
       if (destAtScope !== undefined && deepEqualForSettings(destAtScope, result.value)) {
-        await sourceCfg.update(opts.sourceKey, undefined, target);
+        if (shouldRemoveSource) {
+          await sourceCfg.update(opts.sourceKey, undefined, target);
+        }
         return true;
       }
-      // Phase 15 contract: write dest, then remove source. Order matters for the test
-      // assertion that updateSpy.firstCall == dest, secondCall == source removal.
+      // Phase 15 contract: write dest, then (optionally) remove source. Order
+      // matters for the test assertion that updateSpy.firstCall == dest,
+      // secondCall == source removal.
       await destCfg.update(opts.destKey, result.value, target);
-      await sourceCfg.update(opts.sourceKey, undefined, target);
+      if (shouldRemoveSource) {
+        await sourceCfg.update(opts.sourceKey, undefined, target);
+      }
       return true;
     }
     // kind === 'skipDest'
@@ -249,98 +265,38 @@ async function migrateScopedSetting<TSrc, TDest>(opts: {
 }
 
 /**
- * Phase 15 / NOTIF-06 — refactored in Phase 16 to call the migrateScopedSetting
- * primitive (D-MOD). Public signature unchanged: Promise<void>.
- *
- * Behavior preserved:
- *   - When legacyValue !== true (including false): NO update() calls (callCount === 0).
- *   - When legacyValue === true: write [...existingArr, "multiConfigNotification"]
- *     (deduped) at the detected scope, then remove the legacy boolean.
- *   - On update() rejection: log via config.logger.logInfo, return.
+ * Phase 20 thin shim delegating to `suppressMultiConfigToArray` (registry entry id:
+ * `suppressMultiConfig-self`). Public `Promise<void>` signature preserved for the
+ * `test/unit/notifications.test.ts` regression bar (Pitfall 1). Full deletion is Phase 22.
  */
 export async function migrateLegacySuppressMultiConfig(wkspUri: vscode.Uri): Promise<void> {
   await migrateScopedSetting<boolean, string[]>({
-    namespace: "gs-behave-bdd",
-    sourceKey: "suppressMultiConfigNotification",
-    destKey: "suppressedNotifications",
+    namespace: 'gs-behave-bdd',
+    sourceKey: 'suppressMultiConfigNotification',
+    destKey: 'suppressedNotifications',
     wkspUri,
-    transform: (legacyValue, existingArr) => {
-      if (legacyValue !== true) {
-        // Pre-refactor parity: no dest write AND no source removal (callCount === 0
-        // contract at notifications.test.ts L335).
-        return { kind: 'skipDest', removeSource: false };
-      }
-      const current = Array.isArray(existingArr) ? [...existingArr] : [];
-      if (current.includes("multiConfigNotification")) {
-        // Already present — write the unchanged array (still triggers source removal).
-        return { kind: 'write', value: current };
-      }
-      return { kind: 'write', value: [...current, "multiConfigNotification"] };
-    },
+    transform: suppressMultiConfigToArray,
   });
   // Public signature is Promise<void> — discard the boolean return.
 }
 
-// Phase 16 — namespaces inspected for legacy featuresPath. D-02: both source values
-// land in canonical gs-behave-bdd.featuresPaths. behave-vsc.featuresPaths is NEVER written.
-const FEATURES_PATH_NAMESPACES: readonly ("gs-behave-bdd" | "behave-vsc")[] =
-  ["gs-behave-bdd", "behave-vsc"] as const;
-
-// Phase 16 — D-07 single source of truth. The actual implementation lives in
-// common.ts (W-07) so settings.ts and notifications.ts cannot drift. Aliased
-// here under the original name to keep call sites stable and review-friendly.
-const normalizePathEntry = normalizeFeaturesPathEntry;
-
 /**
- * Phase 16 / DEP-02, DEP-03: One-shot migration of the legacy
- * `featuresPath: string` setting (in EITHER `gs-behave-bdd` or `behave-vsc` namespace
- * per D-02) to the canonical `gs-behave-bdd.featuresPaths: string[]` setting.
+ * Phase 20 D-A4.1: refactored to delegate to featuresPathMergeWithDedup.
+ * Public Promise<boolean> signature preserved through v1.5.0; full deletion is Phase 22.
  *
- * For each source namespace × each detected scope:
- *   - Same-scope merge-with-dedup: append the singular into existing plural
- *     (post-normalization comparison per D-07).
- *   - Empty/whitespace-only legacy values: skip dest write, still remove legacy (D-08).
- *   - Default-equivalent ("features") and known-fatal (".") values: migrate literally
- *     (D-09); the per-entry fatal-error guard at src/settings.ts:232-234 handles
- *     the "." case downstream.
- *
- * Cross-scope and cross-namespace independence (D-04): each (namespace × scope) hit
- * migrates independently into gs-behave-bdd.featuresPaths at the matching scope.
- *
- * @returns true iff at least one (namespace × scope) was migrated; false otherwise (D-01).
- *
- * Never throws on update() rejection — primitive logs via config.logger.logInfo (D-05).
- *
- * @see .planning/phases/16-deprecate-featurespath/16-PATTERNS.md (Phase 16 wrapper)
+ * Never throws — primitive logs via diagLog on update() rejection (D-05).
+ * Registry entries: featuresPath-self, featuresPath-from-behavevsc.
  */
 export async function migrateLegacyFeaturesPath(wkspUri: vscode.Uri): Promise<boolean> {
   let anyMigrated = false;
-  for (const sourceNs of FEATURES_PATH_NAMESPACES) {
+  for (const sourceNs of ['gs-behave-bdd', 'behave-vsc'] as const) {
     const migrated = await migrateScopedSetting<string, string[]>({
       namespace: sourceNs,
-      sourceKey: "featuresPath",
-      destNamespace: "gs-behave-bdd",     // D-02: canonical destination, even when source is behave-vsc
-      destKey: "featuresPaths",
+      sourceKey: 'featuresPath',
+      destNamespace: 'gs-behave-bdd',
+      destKey: 'featuresPaths',
       wkspUri,
-      transform: (legacyValue, existingArr) => {
-        // D-08: empty/whitespace → remove source but skip dest write.
-        if (legacyValue === undefined || typeof legacyValue !== 'string' || legacyValue.trim() === "") {
-          return { kind: 'skipDest', removeSource: true };
-        }
-        const normalized = normalizePathEntry(legacyValue);
-        if (normalized === "") {
-          // Post-normalization empty (e.g., the value was "/" or "\\").
-          return { kind: 'skipDest', removeSource: true };
-        }
-        // D-06 / D-07: same-scope merge-with-dedup, post-normalization comparison.
-        const current = Array.isArray(existingArr) ? [...existingArr] : [];
-        if (current.some(p => normalizePathEntry(p) === normalized)) {
-          // Already present — write the unchanged array (still triggers source removal
-          // via the primitive's kind='write' branch).
-          return { kind: 'write', value: current };
-        }
-        return { kind: 'write', value: [...current, normalized] };
-      },
+      transform: featuresPathMergeWithDedup,
     });
     anyMigrated = anyMigrated || migrated;
   }

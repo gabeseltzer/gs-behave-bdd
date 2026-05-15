@@ -92,6 +92,18 @@ export function setActiveProject(wkspUri: vscode.Uri, entry: ProjectEntry): void
 }
 
 
+/**
+ * Phase 19 / CLEANUP-02: drop all cached active-project entries so the next
+ * discovery cycle recomputes them fresh. Called from configurationChangedHandler
+ * when a scan-shaping setting changes (D-09, D-10).
+ *
+ * Replaces the v1.4.0 read-time discoveryDepth re-read in src/common.ts.
+ */
+export function clearActiveProjectCache(): void {
+  activeProjectCache.clear();
+}
+
+
 export function removeProjectByConfigUri(
   wkspUri: vscode.Uri,
   configUri: vscode.Uri
@@ -164,8 +176,7 @@ export function clearProjectList(wkspUri: vscode.Uri): void {
 
 export function isManualProjectPathMode(wkspUri: vscode.Uri): boolean {
   const wkspConfig = vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri);
-  const legacyConfig = vscode.workspace.getConfiguration("behave-vsc", wkspUri);
-  return hasExplicitSetting(wkspConfig, "projectPath", legacyConfig);
+  return hasExplicitSetting(wkspConfig, "projectPath");
 }
 
 

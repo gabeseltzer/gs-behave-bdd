@@ -20,9 +20,17 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 - v1.4.0: Reusable notification suppression module, `featuresPath` deprecation with auto-migration, `migrateScopedSetting` primitive, migrations integration suite (4 phases, 17 plans)
 - 697 unit tests passing; 19 integration suites passing
 
-## Next Milestone Goals
+## Current Milestone: v1.5.0 Migration Consent & `behave-vsc` Cleanup
 
-(To be defined via `/gsd-new-milestone`.)
+**Goal:** Make settings migration opt-in via a one-time consent prompt, then complete the cross-extension migration off the legacy `behave-vsc` namespace and pay down the `activeProjectCache` debt from v1.4.0.
+
+**Target features:**
+
+- Consent-driven migration UX — one-time non-blocking notification with three explicit actions (*migrate and delete*, *migrate and keep legacy*, *don't migrate*); explicit choices lock in permanently, dismissals leave the prompt re-surfaceable.
+- `gs-behave-bdd.migrationMode` setting (enum: `prompt` | `migrate-and-delete` | `migrate-keep-legacy` | `skip`, default `prompt`) drives all migration decisions extension-wide and is editable like any normal setting.
+- Refactor v1.4.0's `migrateLegacyFeaturesPath` and `migrateLegacySuppressMultiConfig` to route through the consent gate (no more silent auto-migration).
+- `behave-vsc` → `gs-behave-bdd` cross-extension migration on activation, gated by the same consent; once shipped, delete the silent-fallback reads in `configuration.ts`, `common.ts`, and `discovery/projectList.ts`.
+- `activeProjectCache` invalidation: replace the read-time `discoveryDepth` re-read in `src/common.ts:347` with proper `clearScanResultCache()` invalidation when discovery-influencing settings change.
 
 ## Requirements
 
@@ -96,7 +104,7 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 
 ### Active
 
-(Requirements for next milestone — to be defined via `/gsd-new-milestone`.)
+(Requirements for v1.5.0 — to be defined in REQUIREMENTS.md.)
 
 ### Out of Scope
 
@@ -176,4 +184,4 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 This document evolves at phase transitions and milestone boundaries.
 
 ---
-*Last updated: 2026-05-04 after v1.4.0 milestone shipped*
+*Last updated: 2026-05-07 — v1.5.0 Migration Consent & `behave-vsc` Cleanup milestone started*
