@@ -2,6 +2,7 @@
 created: 2026-05-04T18:52:00.320Z
 title: Migrate settings from previous extension versions
 area: configuration
+resolves_phase: 20
 files:
   - src/configuration.ts:60-84
   - src/common.ts:202

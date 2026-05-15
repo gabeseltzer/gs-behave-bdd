@@ -1,5 +1,6 @@
 {
   "gs-behave-bdd.featuresPath": "features",
   "behave-vsc.featuresPath": "features-alt",
-  "gs-behave-bdd.suppressMultiConfigNotification": true
+  "gs-behave-bdd.suppressMultiConfigNotification": true,
+  "gs-behave-bdd.migrationMode": "migrate-and-delete"
 }

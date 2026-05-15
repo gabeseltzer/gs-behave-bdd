@@ -1,28 +1,42 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4.0
-milestone_name: Deprecate featuresPath & Notification Suppression
-status: shipped
-last_updated: "2026-05-06T00:00:00Z"
+milestone: v1.5.0
+milestone_name: Migration Consent & behave-vsc Cleanup
+status: ready
+last_updated: "2026-05-14T00:00:00.000Z"
+last_activity: 2026-05-14 -- Phase 023 complete, verified 9/9, 852 unit tests passing
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 4
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 20
+  completed_plans: 20
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-04 — v1.4.0 shipped)
+See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Planning next milestone — run `/gsd-new-milestone` to define scope.
+**Current focus:** Phase 023 complete — v1.5.0 ready to ship
 
 ## Current Position
 
-Milestone v1.4.0 shipped 2026-05-04. No active phase.
+Phase: 023 (migrations-panel-webview) — COMPLETE
+Plan: 5 of 5 complete (webview-shell, migrations-list, migration-mode, surface-swap, tests)
+Status: Diagnostics surface fully replaced by Webview panel. 25 commits, 9/9 verification spot-checks passed, 852 unit tests green, eslint clean.
+Resume file: .planning/phases/023-migrations-panel-webview/023-VERIFICATION.md
+Last activity: 2026-05-14 -- Phase 023 verified PASS; v1.5.0 milestone ready to ship.
+
+```
+[####] Phase 19  Migration Foundation ✅
+[####] Phase 20  Migration Registry ✅
+[####] Phase 21  Consent UX (Case 2 & Case 3 Prompts) ✅
+[####] Phase 22  Cleanup, Integration & Docs ✅
+[####] Phase 23  Migrations Panel (Webview) ✅
+```
 
 ## Performance Metrics
 
@@ -31,12 +45,23 @@ Milestone v1.4.0 shipped 2026-05-04. No active phase.
 - Milestones shipped: 5 (1.0.0 2026-04-16, 1.1.0 2026-04-17, 1.2.0 2026-04-22, 1.3.0 2026-04-23, v1.4.0 2026-05-04)
 - Total phases completed: 18 (1.0.0: 1-3, 1.1.0: 4-6, 1.2.0: 7-11, 1.3.0: 12-14, v1.4.0: 15-18)
 - Total plans completed: 52 (1.0.0: 6, 1.1.0: 9, 1.2.0: 13, 1.3.0: 7, v1.4.0: 17)
+- Tests at v1.4.0 close: 697 unit + 19 integration suites passing
 
 ## Accumulated Context
+
+### v1.5.0 Decisions
+
+- Coarse granularity → 4 phases for v1.5.0 (resisted per-task splits seen in v1.4.0).
+- Phase numbering continues from v1.4.0 (last phase 18) → v1.5.0 starts at phase 19.
+- `activeProjectCache` invalidation (CLEANUP-02) lands in Phase 19 alongside foundation work — independent of migration UX, eliminates v1.4.0 carry-forward regression risk early.
+- `CLEANUP-01` (silent-fallback removal) deferred to Phase 22, after the new migration flow has shipped and been bedded in by the integration suite — most user-visible behaviour change in v1.5.0.
+- v1.4.0's two migrations (`migrateLegacyFeaturesPath`, `migrateLegacySuppressMultiConfig`) both refactor through the new registry in Phase 20, alongside the new `behave-vsc` entries — single coherent landing point for all registry work.
+- All migrations continue to route through the v1.4.0 `migrateScopedSetting<TSrc, TDest>` primitive — no parallel implementations.
 
 ### Roadmap Evolution
 
 - Phase 18 added: Address v1.4.0 tech debt: artifact rollups, mock cleanup
+- v1.5.0 added: Phases 19-22 for Migration Consent & `behave-vsc` Cleanup (2026-05-07)
 
 ### Decisions
 
@@ -51,6 +76,8 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - [Phase 16]: D-18 ordering: featuresPath migration runs before suppressMultiConfig at activation
 - [Phase 16]: Pitfall 8: config.reloadSettings called WITHOUT await (sync void)
 - [Phase 16]: Plan 05: Schema entry gs-behave-bdd.featuresPath removed (DEP-01); settings.ts ladder collapsed to 3 rungs (D-15); common.ts hasFeaturesFolder Branch A is plural-only (D-16). Executed Task 2 before Task 1 to keep every commit's compile graph green. 4 obsolete tests in multiPathPrecedence.test.ts deferred to Plan 06 alongside testWorkspaceConfig.ts mock surgery and fixture cascade.
+- [Phase 21]: Plan 02: activation-wiring — replaced bare evaluateAllMigrations(wkspUri) call with D-A3.4 collect-then-prompt; `void runConsentFlow(wkspUri, hits, mode)` is fire-and-forget so activation never blocks on prompts. Promise.all parallelism, reloadSettings, and outer try/catch preserved. 826 unit tests passing; 2 structural substring assertions in notifications.test.ts widened to match the new hooks-arg shape (Rule 1).
+- [Phase 21]: Plan 03: tests — 23 new Mocha/Sinon unit tests in `test/unit/migrations/consent.test.ts` pin the consent UX contract (case-2 actions × 3 + dismissal, case-2 silent modes × 3, case-3 actions × 4 + dismissal, case-3-prompts-when-skip per D-A4.3, grouping × 4, audit-log × 3). Unit suite 826 → 849 passing. Test-only plan; no src changes. No deviations.
 - [Phase 16]: Plan 06: atomic mock surgery + 8-file fixture cascade. Singular featuresPath surface removed from TestWorkspaceConfig (D-17/DEP-06); 11 obsolete tests deleted, helper edge-case tests retargeted from featuresPath to projectPath to preserve coverage. 4 deferred Plan-05 failures resolved. Full unit suite 696 passing 0 failing. 34 migration tests preserved (D-MOD regression bar GREEN). Phase 16 functionally complete.
 
 ### v1.4.0 Decisions
@@ -116,9 +143,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 
 > Closed by Phase 18 Plan 02 audit-rollup; pattern remains for future redesign. Preserved here so the v1.4.0 milestone-audit recommendations survive `/gsd-complete-milestone v1.4.0`.
 
-**`activeProjectCache` invalidation pattern (`src/common.ts` `hasFeaturesFolder()`):**
-
-The Phase 12 active-project block re-reads `discoveryDepth` at lookup time rather than invalidating `activeProjectCache` when discovery-influencing settings change. Working but ad-hoc — see commit `c08ced5` (re-applied from `27f14e0` after a diagnostic revert/re-revert during the Phase 17 regression bisect) and the WHY comment near `src/common.ts:347`. Recommended follow-up: pair `clearScanResultCache()` with project-list invalidation when discovery-influencing settings change. Tracked here so the v1.4.0 milestone-audit recommendation isn’t lost.
+**`activeProjectCache` invalidation pattern (`src/common.ts` `hasFeaturesFolder()`):** ✅ **RESOLVED by Phase 19 Plan 04 (CLEANUP-02).** `configurationChangedHandler` now calls `clearActiveProjectCache()` alongside `clearScanResultCache()` whenever any scan-shaping setting changes (D-09: `discoveryDepth`, `discoveryStopOnFirstHit`, `projectPath`, `projectPaths`, `featuresPath`, `featuresPaths`). The v1.4.0 read-time `discoveryDepth` re-read in `src/common.ts` and its surrounding tech-debt comment block are gone; TEST-06 pins the new shape.
 
 **Multiroot integration mutex flake:** environmental — documented in `AI_INSTRUCTIONS.md` § "Integration Test Structure" (Local-dev gotcha). Surfaces as `Another instance of app 'Code' is already active` / `AssertionError: assert(instances)` when the developer’s own VS Code is running during `npm run test:integration`. No code action needed.
 
@@ -131,3 +156,18 @@ The Phase 12 active-project block re-reads `discoveryDepth` at lookup time rathe
 | 2026-05-05 | update-integration-migration-tests | `35e0a48` | Aligned `test/integration/migrations suite/extension.test.ts` with v1.4.0 review B-01 (notification copy) and B-02 (publisher-independent settings query). Closes the integration-test gap flagged in the v1.4.0 review batch. |
 | 2026-05-06 | formally-dismiss-stale-uat-verification | `dd5dc87` | Closed out the two outstanding `/gsd-audit-uat` items by flipping `04-HUMAN-UAT.md` test results from `skipped` → `pass` (superseded by Phase 04 unit tests + 1.2.0/1.4.0 integration coverage) and `15-VERIFICATION.md` frontmatter from `human_needed` → `passed` (deferred manual checks resolved by the Phase 17 real-VSCode migrations integration suite). Audit now reports 0 outstanding items. Docs-only; no code changed. |
 | 2026-05-06 | update-readme-for-v1-4-0-featurespaths-p | `e9e2fb4` | Brought README up to date with the v1.4.0 user-facing surface: replaced 8 `featuresPath` references with `featuresPaths` (plural, array syntax in both settings.json examples), added a "Migrating from `featuresPath`" callout, and added feature item #13 introducing per-notification suppression + the `suppressedNotifications` setting. Docs-only; no code changed. |
+| 2026-05-13 | recheck-consent-flow | `1940b72` | Phase 22 bugfix: `gs-behave-bdd.recheckMigrations` cleared `completedMigrations` and re-ran the evaluator but never invoked `runConsentFlow` — case-2 / case-3 hits were classified and dropped, so the user saw no prompt. Caught while testing `behave-vsc.justMyCode: false` at user level. Moved orchestration (hits collection + `readMigrationMode` + `runConsentFlow`) inside `recheckCommand.ts`; dropped the optional `EvaluatorHooks` parameter. Added regression test 4.10 in `test/unit/migrations.test.ts` (847 unit tests passing). |
+| 2026-05-14 | evaluator-dedupe-single-root | `0c30607`, `ab49f47` | Fixed duplicate Workspace + Workspace Folder rows in the Migrations Panel for single-folder workspaces. VS Code's `inspect()` populates both `workspaceValue` and `workspaceFolderValue` from the same `.vscode/settings.json` when a folder URI is passed, so the evaluator was producing two pending hits for one line. Initially attempted at the evaluator layer (broke 40 tests that depend on the per-scope iteration contract); landed at `panelViewModel.buildViewModel` instead — when `workspaceFile === undefined`, WorkspaceFolder-scope `onCaseHit` is suppressed. Multi-root workspaces unchanged. +4 unit tests in `panelViewModel.test.ts`; corrected the misleading integration-test comment at `extension.test.ts:82-92`. 856 unit tests passing. |
+| 2026-05-14 | userdata-scheme-anchor | `a948bb9` | User-testing chain (Windows-host + Linux-devcontainer): prior path-computing fixes couldn't reach the host filesystem from the remote extension host. No public extension API surfaces the User settings.json path under remote-extension-host conditions. Switched the Global-scope diagnostic anchor to `vscode-userdata:/User/settings.json` — the same internal scheme VS Code's built-in Settings UI uses; resolved by VS Code core on the window side, works uniformly across local / remote / devcontainer / Codespaces / web / portable / profiles. The scheme is undocumented (microsoft/vscode#174971); the toast's `Open Settings` button (`workbench.action.openSettingsJson`) is the safety net if it ever breaks. Dropped 4 path-detection tests (now irrelevant) and the `userDataFolderName` / `serverDataFolderName` helpers; added 1 test pinning scheme + path. 855 unit tests passing; eslint + webpack clean. |
+| 2026-05-14 | remote-anchor-path | `e6683a7` | Follow-up to consent-ux-polish: Global-scope diagnostic was still anchoring at the local-install path inside a Linux devcontainer. Added `vscode.env.remoteName` check at the top of `resolveAnchorUri(Global)` — when set, returns `$HOME/.vscode-server/data/User/settings.json` (variant-aware: `.vscode-server-insiders` for Insiders, etc.). +2 unit tests pinning devcontainer + WSL+Insiders paths. 859 passing total. |
+| 2026-05-14 | consent-ux-polish | `bd5e52c` | Four follow-ups from user testing of `6f1adb2`. (1) Toast copy → `"N setting(s) can be migrated for Behave BDD"`. (2) Toast now carries `Open Problems` + `Open Settings` buttons (non-blocking `.then()` chain); `Open Settings` opens the first hit's anchor file at the legacy-key line with a `workbench.action.openSettingsJson` fallback. (3) Fixed the Global-anchor path on non-stable VS Code builds — was hardcoded to `Code`, now uses `vscode.env.appName` so Insiders / VSCodium / Code-OSS map to their actual user-data folder names (the "editor could not be opened" bug the user reported). (4) Rewrote diagnostic message copy: case-2 names the legacy key and frames as migration, case-3 names both keys and frames as a "both set" conflict. 857 unit tests passing (+5 net); eslint + webpack clean. |
+| 2026-05-13 | consent-diagnostics | `6f1adb2` | Refactored migration consent UX from per-(entry,case) toast prompts to Problems-pane diagnostics + Code Actions, with a single summary toast. Sidesteps VS Code's plain-text-only notification limitation (the prior bullet/bold copy displayed as literal characters). New modules `src/migrations/diagnostics.ts` (anchor + JSONC-range + publish/clear) and `src/migrations/codeActions.ts` (provider + dispatchMigrationAction command). Refactored `consent.ts` so the seven action handlers are exported; `runConsentFlow` now publishes diagnostics + summary toast. Added `jsonc-parser ^3.3.1` (bundle +5KB), restored `smol-toml ^1.6.0` (had been silently dropped from dependencies). Reshaped `consent.test.ts` (action/grouping tests moved to new `diagnostics.test.ts`); updated `migrations.test.ts` test 4.10; rewrote integration suite Tests 2 & 3 to drive actions via `dispatchMigrationAction`. 852 unit tests passing; eslint + tsc clean. |
+| Phase 020 P01 | 10m | 2 tasks | 2 files |
+| Phase 020-migration-registry P04 | 25m | 5 tasks | 6 files |
+| Phase 021 P01 | 25min | 3 tasks | 3 files |
+
+## Session Continuity
+
+**Last action:** Phase 022 plan 022-02 (integration suite) landed — fixture at example-projects/migration-consent/, suite at test/integration/migration-consent suite/ with Test 0-3 (cleanup-pin, Case 1 silent, Case 2 Migrate & delete, Case 3 Overwrite & delete), registered in runTestSuites.ts. Unit tests 836 passing; ESLint clean; tsc clean. Sandbox blocker on .vscode/*.json writes from prior session was resolved interactively.
+**Next action:** Run /gsd-verify-work on phase 022 (or gsd-verifier), then /gsd-complete-milestone v1.5.0.
+**Loaded context:** PROJECT.md, REQUIREMENTS.md, MILESTONES.md, config.json.

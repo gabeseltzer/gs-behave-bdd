@@ -144,10 +144,9 @@ export async function cleanExtensionTempDirectory(cancelToken: vscode.Cancellati
 
 // get the actual value in the file or return undefined, this is
 // for cases where we need to distinguish between an unset value and the default value
-export const getActualWorkspaceSetting = <T>(wkspConfig: vscode.WorkspaceConfiguration, name: string, legacyConfig?: vscode.WorkspaceConfiguration): T => {
+export const getActualWorkspaceSetting = <T>(wkspConfig: vscode.WorkspaceConfiguration, name: string): T => {
   const value = wkspConfig.inspect(name)?.workspaceFolderValue;
   if (value !== undefined) return value as T;
-  if (legacyConfig) return legacyConfig.inspect(name)?.workspaceFolderValue as T;
   return undefined as unknown as T;
 }
 
@@ -157,16 +156,11 @@ export const getActualWorkspaceSetting = <T>(wkspConfig: vscode.WorkspaceConfigu
 // Does NOT modify getActualWorkspaceSetting (different callers, different return types).
 export function hasExplicitSetting(
   wkspConfig: vscode.WorkspaceConfiguration,
-  name: string,
-  legacyConfig?: vscode.WorkspaceConfiguration
+  name: string
 ): boolean {
   const insp = wkspConfig.inspect(name);
   if (insp && (insp.globalValue !== undefined || insp.workspaceValue !== undefined || insp.workspaceFolderValue !== undefined))
     return true;
-  if (legacyConfig) {
-    const legacyInsp = legacyConfig.inspect(name);
-    if (legacyInsp?.workspaceFolderValue !== undefined) return true;
-  }
   return false;
 }
 
@@ -211,7 +205,6 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
   function hasFeaturesFolder(folder: vscode.WorkspaceFolder): boolean {
 
     const wkspConfig = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri);
-    const legacyWkspConfig = vscode.workspace.getConfiguration("behave-vsc", folder.uri);
 
     // === BRANCH A: Explicit settings detected (D-02, INTG-07) ===
     // When explicit settings exist at any scope, skip config-file discovery entirely.
@@ -219,10 +212,10 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     // Phase 16 / D-16: Branch A gate is plural-only. Singular featuresPath is
     // auto-migrated to featuresPaths at activation (Plan 03/04), so by the time
     // hasFeaturesFolder runs the singular setting is no longer present.
-    if (hasExplicitSetting(wkspConfig, "projectPath", legacyWkspConfig) ||
+    if (hasExplicitSetting(wkspConfig, "projectPath") ||
         hasExplicitNonEmptyArraySetting(wkspConfig, "featuresPaths")) {
 
-      const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath", legacyWkspConfig);
+      const projectPath = getActualWorkspaceSetting<string>(wkspConfig, "projectPath");
 
       // Determine the project root (either custom projectPath or workspace root)
       let projectUri = folder.uri;
@@ -351,21 +344,12 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
     }
 
     // === Phase 12: Check active project from project list ===
-    // Phase 17 fix: also gate on currentDiscoveryDepth so a stale activeProject
-    // (cached at activation depth) does not resurrect a subdir config when the user
-    // later lowers discoveryDepth below where the active project lives.
-    // Note: this is a deliberate read-time check, not a cache-invalidation hook —
-    // activeProjectCache outlives the settings that influence its keys, and a proper
-    // clearScanResultCache()-paired invalidation is tracked as v1.4.0 follow-up tech debt
-    // (see .planning/v1.4.0-MILESTONE-AUDIT.md tech_debt list).
+    // Phase 19 / CLEANUP-02: activeProjectCache is now invalidated proactively
+    // by configurationChangedHandler when scan-shaping settings change (D-09).
+    // The v1.4.0 read-time discoveryDepth re-read is gone.
     if (!isManualProjectPathMode(folder.uri)) {
       const activeProject = getActiveProject(folder.uri);
-      // N-04: this getConfiguration call is on the <1ms hot path; cost is one
-      // scope-chain walk per workspace folder per cache miss. For 10+ root
-      // workspaces with frequent invalidation this could matter. Documented
-      // as v1.4.0 tech debt — out of scope here, but flagged for awareness.
-      const currentDiscoveryDepth = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri).get<number>("discoveryDepth") ?? 3;
-      if (activeProject && activeProject.depth <= currentDiscoveryDepth) {
+      if (activeProject) {
         const subdirConfigResult = findBehaveConfig(activeProject.dirUri);
         if (subdirConfigResult && subdirConfigResult.ok) {
           clearPathDiagnostics(subdirConfigResult.configFileUri);
