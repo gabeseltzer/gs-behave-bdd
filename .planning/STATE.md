@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: Migration Consent & behave-vsc Cleanup
-status: ready
-last_updated: "2026-05-14T00:00:00.000Z"
-last_activity: 2026-05-14 -- Phase 023 complete, verified 9/9, 852 unit tests passing
+status: Awaiting next milestone
+last_updated: "2026-05-15T19:09:20.891Z"
+last_activity: 2026-05-15 — Milestone v1.5.0 completed and archived
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 20
   completed_plans: 20
   percent: 100
@@ -17,35 +17,26 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-07 — v1.5.0 milestone started)
+See: .planning/PROJECT.md (updated 2026-05-15 — v1.5.0 shipped)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Phase 023 complete — v1.5.0 ready to ship
+**Current focus:** Planning v1.6.0 — duplicate-scenario detection rework
 
 ## Current Position
 
-Phase: 023 (migrations-panel-webview) — COMPLETE
-Plan: 5 of 5 complete (webview-shell, migrations-list, migration-mode, surface-swap, tests)
-Status: Diagnostics surface fully replaced by Webview panel. 25 commits, 9/9 verification spot-checks passed, 852 unit tests green, eslint clean.
-Resume file: .planning/phases/023-migrations-panel-webview/023-VERIFICATION.md
-Last activity: 2026-05-14 -- Phase 023 verified PASS; v1.5.0 milestone ready to ship.
-
-```
-[####] Phase 19  Migration Foundation ✅
-[####] Phase 20  Migration Registry ✅
-[####] Phase 21  Consent UX (Case 2 & Case 3 Prompts) ✅
-[####] Phase 22  Cleanup, Integration & Docs ✅
-[####] Phase 23  Migrations Panel (Webview) ✅
-```
+Phase: Milestone v1.5.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-15 — Milestone v1.5.0 completed and archived
 
 ## Performance Metrics
 
 **Velocity (cumulative):**
 
-- Milestones shipped: 5 (1.0.0 2026-04-16, 1.1.0 2026-04-17, 1.2.0 2026-04-22, 1.3.0 2026-04-23, v1.4.0 2026-05-04)
-- Total phases completed: 18 (1.0.0: 1-3, 1.1.0: 4-6, 1.2.0: 7-11, 1.3.0: 12-14, v1.4.0: 15-18)
-- Total plans completed: 52 (1.0.0: 6, 1.1.0: 9, 1.2.0: 13, 1.3.0: 7, v1.4.0: 17)
-- Tests at v1.4.0 close: 697 unit + 19 integration suites passing
+- Milestones shipped: 6 (1.0.0 2026-04-16, 1.1.0 2026-04-17, 1.2.0 2026-04-22, 1.3.0 2026-04-23, v1.4.0 2026-05-04, v1.5.0 2026-05-15)
+- Total phases completed: 23 (1.0.0: 1-3, 1.1.0: 4-6, 1.2.0: 7-11, 1.3.0: 12-14, v1.4.0: 15-18, v1.5.0: 19-23)
+- Total plans completed: 72 (1.0.0: 6, 1.1.0: 9, 1.2.0: 13, 1.3.0: 7, v1.4.0: 17, v1.5.0: 20)
+- Tests at v1.5.0 close: 852 unit + 20 integration suites passing
 
 ## Accumulated Context
 
@@ -170,6 +161,30 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 
 ## Session Continuity
 
-**Last action:** Phase 022 plan 022-02 (integration suite) landed — fixture at example-projects/migration-consent/, suite at test/integration/migration-consent suite/ with Test 0-3 (cleanup-pin, Case 1 silent, Case 2 Migrate & delete, Case 3 Overwrite & delete), registered in runTestSuites.ts. Unit tests 836 passing; ESLint clean; tsc clean. Sandbox blocker on .vscode/*.json writes from prior session was resolved interactively.
-**Next action:** Run /gsd-verify-work on phase 022 (or gsd-verifier), then /gsd-complete-milestone v1.5.0.
-**Loaded context:** PROJECT.md, REQUIREMENTS.md, MILESTONES.md, config.json.
+**Last action:** v1.5.0 milestone archived (audit passed 29/29 requirements). PROJECT.md / ROADMAP.md / MILESTONES.md / STATE.md updated. REQUIREMENTS.md archived to milestones/v1.5.0-REQUIREMENTS.md.
+**Next action:** Create branch `gabes/fix-duplicate-scenario-regex` off main; run `/gsd-new-milestone` to define v1.6.0 (duplicate-scenario detection rework).
+**Loaded context:** PROJECT.md, MILESTONES.md, ROADMAP.md, config.json.
+
+## Deferred Items
+
+Items acknowledged and deferred at v1.5.0 milestone close on 2026-05-15:
+
+| Category | Item | Status |
+|----------|------|--------|
+| quick_task | 260506-h9v-formally-dismiss-stale-uat-verification- | missing |
+| quick_task | 260506-ijf-update-readme-for-v1-4-0-featurespaths-p | missing |
+| quick_task | 260513-o1k-recheck-consent-flow | missing |
+| quick_task | 260513-oh5-consent-diagnostics | missing |
+| quick_task | 260514-djs-consent-ux-polish | missing |
+| quick_task | 260514-dvt-remote-anchor-path | missing |
+| quick_task | 260514-ean-userdata-scheme-anchor | missing |
+| quick_task | 260515-j3n-codelens-feature-update | missing |
+| todo | 2026-05-04-make-more-notifications-suppressable.md | open — candidate for v1.6.0+ |
+| todo | 2026-05-04-migrate-settings-from-previous-extension-versions.md | superseded by v1.5.0 (CONSENT-* / MIGRATE-*) |
+
+Most quick-tasks above are completed work (commits already in git); their artifact files were absorbed into the v1.5.0 chain. The two TODOs: notification-suppression audit is a real v1.6.0+ candidate; the migration-settings TODO is fully delivered by v1.5.0 and can be closed.
+
+## Operator Next Steps
+
+- Create branch `gabes/fix-duplicate-scenario-regex` off main
+- Run /gsd-new-milestone to define v1.6.0 (duplicate-scenario detection)

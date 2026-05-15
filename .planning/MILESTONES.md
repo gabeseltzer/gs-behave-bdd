@@ -1,5 +1,34 @@
 # Milestones
 
+## v1.5.0 Migration Consent & behave-vsc Cleanup (Shipped: 2026-05-15)
+
+**Phases completed:** 5 phases (19-23), 20 plans
+**Requirements:** 29/29 satisfied (CONSENT-01..09, MIGRATE-01..09, CLEANUP-01..02, TEST-01..07, DOC-01..02)
+**Timeline:** 2026-05-07 → 2026-05-15 (9 days)
+**Tests at close:** 852 unit tests + 20 integration suites passing
+
+**Key accomplishments:**
+
+- `gs-behave-bdd.migrationMode` (enum: `prompt` | `migrate-and-delete` | `migrate-and-keep` | `skip`, default `prompt`) and `gs-behave-bdd.completedMigrations: string[]` settings registered with schema-pin tests and per-scope semantics (Phase 19).
+- Per-scope migration evaluator (`src/migrations/evaluator.ts`) inspects each unfinished migration × each VS Code scope (Global / Workspace / WorkspaceFolder) and dispatches to case 1 (silent) / case 2 (mode-controlled) / case 3 (always-prompt) logic; mark-Finished writes land at the exact scope; empty/whitespace legacy values treated as case 1 via the v1.4.0 `migrateScopedSetting` primitive (Phase 19 — MIGRATE-04/07/08/09).
+- `Behave BDD: Recheck Migrations` command — quick-pick scope picker with availability filtering, clears `completedMigrations` at the chosen scope, re-runs the evaluator path (Phase 19 — CONSENT-09, 11 new unit tests).
+- 17-entry migration registry (`src/migrations/registry.ts`): v1.4.0's two migrations refactored as registry entries (`featuresPath-self`, `suppressMultiConfig-self`) plus 11 plain + 4 transform-bearing `behave-vsc` → `gs-behave-bdd` cross-extension entries covering every silent-fallback key (Phase 20 — MIGRATE-01/02/03).
+- `runConsentFlow` orchestrator (`src/migrations/consent.ts`) with 7 action handlers wired fire-and-forget at activation; case 2 honours `migrationMode`, case 3 *always* prompts (4 actions), dismissal leaves migrations unfinished; per-scope write-failure isolation via `dispatchOverScopes` (Phase 21 — CONSENT-01..04/06, MIGRATE-05/06).
+- Silent `behave-vsc.*` fallback reads removed from runtime discovery path (`settings.ts`, `configuration.ts`, `common.ts`, `discovery/projectList.ts`); `getWithLegacyFallback` ladder deleted; `legacyConfig` parameter dropped from settings types (Phase 22 — CLEANUP-01).
+- `activeProjectCache` invalidation pairing: `clearActiveProjectCache()` + `clearScanResultCache()` now fire together from `configurationChangedHandler` whenever any of 6 scan-shaping settings change, replacing the v1.4.0 read-time `discoveryDepth` re-read in `src/common.ts` (Phase 19 — CLEANUP-02, closes v1.4.0 carry-forward debt).
+- Migrations Panel Webview (`src/migrations/panel.ts`, `panelHtml.ts`, `panelViewModel.ts`) — replaces the Problems-pane diagnostics surface that couldn't bridge remote-extension-host file paths. `gs-behave-bdd.openMigrationsPanel` command, single-instance lifecycle, lists pending migrations grouped by entry × case, surfaces Migration Mode setting, dispatches actions via `dispatchMigrationAction` → consent handlers. Diagnostics surface fully deleted (Phase 23 — diagnostics.ts, MigrationCodeActionProvider, MIGRATION_DIAG_SOURCE all gone).
+- 20th integration suite: `migration-consent suite` (`example-projects/migration-consent/`) covering Case 1 silent, Case 2 *Migrate & delete*, Case 3 *Overwrite & delete* end-to-end in real VS Code (Phase 22 — TEST-07, 4 passing).
+- README "Migrating from `behave-vsc`" section + tightened `migrationMode` / `completedMigrations` `markdownDescription` copy with case-3-always-prompts callout and *Recheck Migrations* command reference (Phase 22 — DOC-01/02).
+
+**Carry-forward / deferred to v1.6.0+:**
+
+- Notification-suppression audit — more `logger.showWarn` / `showError` call sites could use the v1.4.0 `suppressedNotifications` infrastructure (backlog).
+- `behave-vsc` references remaining in `src/notifications.ts` FEATURES_PATH_NAMESPACES array — intentionally kept; possible v1.6.0 candidate after user migration window.
+
+**Deferred quick-tasks at close** (10 items — see STATE.md § Deferred Items): mostly v1.5.0 chain quick-tasks (consent-diagnostics, consent-ux-polish, remote-anchor-path, userdata-scheme-anchor) that fed into Phase 23's Webview replacement, plus pre-v1.5.0 housekeeping (stale UAT dismissal, v1.4.0 README update) and one v1.6.0 seed (codelens-feature-update).
+
+---
+
 ## v1.4.0 Deprecate featuresPath & Notification Suppression (Shipped: 2026-05-04)
 
 **Phases completed:** 4 phases (15-18), 17 plans
