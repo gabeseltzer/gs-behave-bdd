@@ -51,6 +51,16 @@ export class Uri {
     return Uri.file(joined);
   }
 
+  // Generic Uri.from for any code path that builds a non-file URI (e.g.
+  // `vscode-userdata:`). Keeps scheme + path verbatim so tests can assert
+  // on them.
+  static from(components: { scheme: string; path: string }): Uri {
+    const u = new Uri(components.scheme, components.path);
+    u.scheme = components.scheme;
+    u.path = components.path;
+    return u;
+  }
+
   toString(): string {
     // Normalize path for consistent comparison
     // Windows: C:\path -> file:///c:/path
@@ -99,19 +109,26 @@ export class Selection {
 }
 
 export class DiagnosticCollection {
-  private diagnostics = new Map<string, Diagnostic[]>();
+  // 260513-oh5: keep the original Uri object so consumers iterating via
+  // forEach get a real Uri (not just the string key). Map keys remain strings
+  // for set/get/delete lookup parity with VS Code's behavior.
+  private diagnostics = new Map<string, { uri: Uri; diags: Diagnostic[] }>();
 
   clear() { this.diagnostics.clear(); }
   delete(uri: Uri) { this.diagnostics.delete(uri.toString()); }
   dispose() { this.diagnostics.clear(); }
-  forEach() { /* mock */ }
-  get(uri: Uri): Diagnostic[] { return this.diagnostics.get(uri.toString()) || []; }
+  forEach(callback: (uri: Uri, diagnostics: readonly Diagnostic[]) => void): void {
+    for (const { uri, diags } of this.diagnostics.values()) {
+      callback(uri, diags);
+    }
+  }
+  get(uri: Uri): Diagnostic[] { return this.diagnostics.get(uri.toString())?.diags ?? []; }
   has(uri: Uri): boolean { return this.diagnostics.has(uri.toString()); }
   set(uri: Uri, diagnostics: Diagnostic[] | undefined) {
     if (diagnostics === undefined || diagnostics.length === 0) {
       this.diagnostics.delete(uri.toString());
     } else {
-      this.diagnostics.set(uri.toString(), diagnostics);
+      this.diagnostics.set(uri.toString(), { uri, diags: diagnostics });
     }
   }
 }
@@ -144,6 +161,10 @@ export const workspace = {
   },
   getWorkspaceFolder: (uri: Uri) => ({ uri, name: 'mock-workspace', index: 0 }),
   workspaceFolders: [],
+  // Phase 19 Plan 03: recheckCommand inspects workspaceFile to know whether
+  // Workspace scope is writeable (D-07). Stubs may overwrite this via Sinon
+  // to simulate a .code-workspace being open.
+  workspaceFile: undefined as Uri | undefined,
   getConfiguration: (section?: string) => ({
     get: (key: string, defaultValue?: unknown) => {
       // Return default values for known configuration keys
@@ -178,7 +199,13 @@ export const workspace = {
     if (typeof pathOrUri === 'string') return pathOrUri;
     return pathOrUri.fsPath || pathOrUri.path || String(pathOrUri);
   },
-  onDidChangeConfiguration: () => ({ dispose: () => { /* mock */ } }),
+  // openTextDocument: used by various features (settings.json open paths,
+  // language services). Tests stub these per-case.
+  openTextDocument: (uri: Uri): Promise<{ uri: Uri }> => Promise.resolve({ uri }),
+  onDidChangeConfiguration: (cb: (e: { affectsConfiguration: (s: string) => boolean }) => void) => {
+    _onDidChangeConfigurationCallbacks.push(cb);
+    return { dispose: () => { /* mock */ } };
+  },
   onDidChangeWorkspaceFolders: () => ({ dispose: () => { /* mock */ } }),
   onDidSaveTextDocument: () => ({ dispose: () => { /* mock */ } }),
   onDidOpenTextDocument: () => ({ dispose: () => { /* mock */ } }),
@@ -199,8 +226,68 @@ export const languages = {
   registerDocumentSymbolProvider: () => ({ dispose: () => { /* mock */ } }),
   registerReferenceProvider: () => ({ dispose: () => { /* mock */ } }),
   registerDocumentSemanticTokensProvider: (_selector: unknown, _provider: unknown, _legend: unknown) => ({ dispose: () => { /* mock */ } }),
-  registerCodeLensProvider: (_selector: unknown, _provider: unknown) => ({ dispose: () => { /* mock */ } })
+  registerCodeLensProvider: (_selector: unknown, _provider: unknown) => ({ dispose: () => { /* mock */ } }),
 };
+
+// Phase 023 Plan 01: minimal createWebviewPanel mock surface. Tests assert on
+// captured panel state and on messages posted to/from the host. The mock
+// captures the most recently registered onDidReceiveMessage and onDidDispose
+// callbacks at module level so tests can fire them via the exported helpers
+// (_fireWebviewMessage / _disposeWebview). Mirrors the existing
+// EventEmitter-shaped subscription pattern elsewhere in this file.
+
+interface MockWebviewPanel {
+  viewType: string;
+  title: string;
+  viewColumn: number | undefined;
+  options: unknown;
+  webview: {
+    cspSource: string;
+    html: string;
+    asWebviewUri: (u: Uri) => Uri;
+    onDidReceiveMessage: (cb: (m: unknown) => void) => { dispose: () => void };
+    postMessage: (m: unknown) => Promise<boolean>;
+  };
+  reveal: (c?: number) => void;
+  onDidDispose: (cb: () => void) => { dispose: () => void };
+  dispose: () => void;
+  // Test-only inspection surface.
+  _postedMessages: unknown[];
+  _revealCalls: number;
+  _disposed: boolean;
+}
+
+let _lastWebviewPanel: MockWebviewPanel | undefined;
+const _onDidReceiveMessageCallbacks: Array<(m: unknown) => void> = [];
+const _onDidDisposeCallbacks: Array<() => void> = [];
+// Phase 023 Plan 05: capture onDidChangeConfiguration callbacks so panel.test.ts
+// can simulate a setting change and assert the panel re-renders.
+const _onDidChangeConfigurationCallbacks: Array<(e: { affectsConfiguration: (s: string) => boolean }) => void> = [];
+
+export function _getLastWebviewPanel(): MockWebviewPanel | undefined {
+  return _lastWebviewPanel;
+}
+
+export function _fireWebviewMessage(msg: unknown): void {
+  const cb = _onDidReceiveMessageCallbacks[_onDidReceiveMessageCallbacks.length - 1];
+  if (cb) cb(msg);
+}
+
+export function _disposeWebview(): void {
+  const cb = _onDidDisposeCallbacks[_onDidDisposeCallbacks.length - 1];
+  if (cb) cb();
+}
+
+export function _fireConfigurationChange(e: { affectsConfiguration: (s: string) => boolean }): void {
+  for (const cb of _onDidChangeConfigurationCallbacks) cb(e);
+}
+
+export function _resetWebviewMocks(): void {
+  _lastWebviewPanel = undefined;
+  _onDidReceiveMessageCallbacks.length = 0;
+  _onDidDisposeCallbacks.length = 0;
+  _onDidChangeConfigurationCallbacks.length = 0;
+}
 
 export const window = {
   showWarningMessage: () => Promise.resolve(undefined),
@@ -219,8 +306,62 @@ export const window = {
     reveal: () => Promise.resolve(),
     onDidChangeVisibility: () => ({ dispose: () => { /* mock */ } })
   }),
-  registerTreeDataProvider: () => ({ dispose: () => { /* mock */ } })
+  registerTreeDataProvider: () => ({ dispose: () => { /* mock */ } }),
+  // Phase 19 Plan 03: recheckCommand uses showQuickPick for the scope picker
+  // (D-06). Default returns undefined (user dismissed); stubs override via Sinon.
+  showQuickPick: (_items?: unknown, _options?: unknown): Promise<unknown> => Promise.resolve(undefined),
+  // Paired with workspace.openTextDocument for any test that opens a document.
+  // Returns a stub editor; tests stub for assertions.
+  showTextDocument: (_doc: unknown, _options?: unknown): Promise<unknown> => Promise.resolve({}),
+  // Phase 023 Plan 01: minimal Webview panel mock. Tests drive it via the
+  // exported _fireWebviewMessage / _disposeWebview helpers above.
+  activeTextEditor: undefined as { viewColumn?: number } | undefined,
+  createWebviewPanel: (
+    viewType: string,
+    title: string,
+    viewColumn: number,
+    options: unknown,
+  ): MockWebviewPanel => {
+    const panel: MockWebviewPanel = {
+      viewType,
+      title,
+      viewColumn,
+      options,
+      webview: {
+        cspSource: 'vscode-webview://mock',
+        html: '',
+        asWebviewUri: (u: Uri) => u,
+        onDidReceiveMessage: (cb: (m: unknown) => void) => {
+          _onDidReceiveMessageCallbacks.push(cb);
+          return { dispose: () => { /* mock */ } };
+        },
+        postMessage: (m: unknown) => {
+          panel._postedMessages.push(m);
+          return Promise.resolve(true);
+        },
+      },
+      reveal: (_c?: number) => { panel._revealCalls += 1; },
+      onDidDispose: (cb: () => void) => {
+        _onDidDisposeCallbacks.push(cb);
+        return { dispose: () => { /* mock */ } };
+      },
+      dispose: () => { panel._disposed = true; },
+      _postedMessages: [],
+      _revealCalls: 0,
+      _disposed: false,
+    };
+    _lastWebviewPanel = panel;
+    return panel;
+  },
 };
+
+export enum ViewColumn {
+  Active = -1,
+  Beside = -2,
+  One = 1,
+  Two = 2,
+  Three = 3,
+}
 
 export const debug = {
   startDebugging: async (_folder: unknown, _config: unknown): Promise<boolean> => true,
@@ -238,8 +379,19 @@ export const debug = {
 };
 
 export const commands = {
-  executeCommand: () => Promise.resolve(undefined),
+  executeCommand: (..._args: unknown[]) => Promise.resolve(undefined),
   registerCommand: () => ({ dispose: () => { /* mock */ } })
+};
+
+// 260514-djs: diagnostics.ts userDataFolderName() reads vscode.env.appName to
+// pick the right user-data folder for Global-scope anchors. Default to stable
+// VS Code; tests stub appName to exercise Insiders / VSCodium variants.
+// 260514-dvt: remoteName tells us we're on a VS Code Server (devcontainer,
+// WSL, SSH-remote, etc.). Default undefined (local); tests stub to exercise
+// the server-data-dir path.
+export const env: { appName: string; remoteName: string | undefined } = {
+  appName: 'Visual Studio Code',
+  remoteName: undefined,
 };
 
 export enum FileType {
