@@ -4,9 +4,20 @@
 import * as path from 'path';
 
 export class EventEmitter<T = unknown> {
-  event: (listener: (e: T) => unknown) => { dispose: () => void } = () => ({ dispose: () => { /* mock */ } });
-  fire(_event: T) { /* mock */ }
-  dispose() { /* mock */ }
+  private _listeners: Array<(e: T) => unknown> = [];
+  event = (listener: (e: T) => unknown): { dispose: () => void } => {
+    this._listeners.push(listener);
+    return {
+      dispose: () => {
+        const i = this._listeners.indexOf(listener);
+        if (i >= 0) this._listeners.splice(i, 1);
+      }
+    };
+  };
+  fire(event: T) {
+    for (const l of [...this._listeners]) l(event);
+  }
+  dispose() { this._listeners = []; }
 }
 
 export class CancellationTokenSource {

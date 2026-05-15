@@ -425,4 +425,22 @@ suite('codeLensProvider', () => {
 
   });
 
+
+  suite('refresh', () => {
+
+    test('refresh() fires onDidChangeCodeLenses so VS Code re-queries open .py files', () => {
+      let fired = 0;
+      const sub = provider.onDidChangeCodeLenses(() => { fired++; });
+      try {
+        provider.refresh();
+        assert.strictEqual(fired, 1, 'onDidChangeCodeLenses should fire exactly once per refresh()');
+        provider.refresh();
+        assert.strictEqual(fired, 2, 'each refresh() should fire onDidChangeCodeLenses');
+      } finally {
+        sub.dispose();
+      }
+    });
+
+  });
+
 });
