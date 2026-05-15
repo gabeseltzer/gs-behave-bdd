@@ -11,26 +11,19 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 
 ## Current State
 
-**Shipped:** v1.4.0 Deprecate featuresPath & Notification Suppression (2026-05-04)
+**Shipped:** v1.5.0 Migration Consent & `behave-vsc` Cleanup (2026-05-15)
 
 - 1.0.0: Config parsing, discovery cache, UX (3 phases, 6 plans)
 - 1.1.0: Real-time config watching, malformed-config run guard, E2E integration coverage (3 phases, 9 plans)
 - 1.2.0: Multi-path types end-to-end, BFS monorepo scanner, `featuresPaths[]` setting, 3 integration fixtures (5 phases, 13 plans)
 - 1.3.0: Project switching with quick-pick command, status bar indicator, `workspaceState` persistence, rebuild on switch (3 phases, 7 plans)
 - v1.4.0: Reusable notification suppression module, `featuresPath` deprecation with auto-migration, `migrateScopedSetting` primitive, migrations integration suite (4 phases, 17 plans)
-- 697 unit tests passing; 19 integration suites passing
+- v1.5.0: Migration registry (17 entries), per-scope evaluator with case 1/2/3 dispatch, consent UX, `behave-vsc` silent-read removal, Migrations Panel Webview, `activeProjectCache` invalidation paired with scan-shaping settings (5 phases, 20 plans)
+- 852 unit tests passing; 20 integration suites passing
 
-## Current Milestone: v1.5.0 Migration Consent & `behave-vsc` Cleanup
+## Next Milestone Goals
 
-**Goal:** Make settings migration opt-in via a one-time consent prompt, then complete the cross-extension migration off the legacy `behave-vsc` namespace and pay down the `activeProjectCache` debt from v1.4.0.
-
-**Target features:**
-
-- Consent-driven migration UX — one-time non-blocking notification with three explicit actions (*migrate and delete*, *migrate and keep legacy*, *don't migrate*); explicit choices lock in permanently, dismissals leave the prompt re-surfaceable.
-- `gs-behave-bdd.migrationMode` setting (enum: `prompt` | `migrate-and-delete` | `migrate-keep-legacy` | `skip`, default `prompt`) drives all migration decisions extension-wide and is editable like any normal setting.
-- Refactor v1.4.0's `migrateLegacyFeaturesPath` and `migrateLegacySuppressMultiConfig` to route through the consent gate (no more silent auto-migration).
-- `behave-vsc` → `gs-behave-bdd` cross-extension migration on activation, gated by the same consent; once shipped, delete the silent-fallback reads in `configuration.ts`, `common.ts`, and `discovery/projectList.ts`.
-- `activeProjectCache` invalidation: replace the read-time `discoveryDepth` re-read in `src/common.ts:347` with proper `clearScanResultCache()` invalidation when discovery-influencing settings change.
+**v1.6.0 (TBD)** — focus area: duplicate-scenario detection rework. Today the extension uses local regex to find duplicate scenarios and surfaces them in the Problems pane; the regex over-reports false positives and misses the real duplicates that behave itself catches at runtime. Goal: rip out the regex detector and instead parse behave's own duplicate-scenario errors (with their locations) into Problems-pane diagnostics. Requirements + roadmap to be defined via `/gsd-new-milestone`.
 
 ## Requirements
 
@@ -102,9 +95,23 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 - ✓ Integration test with multi-project fixture — 1.3.0 (TEST-03)
 - ✓ README covers auto-discovery, multi-path, monorepo, switching — 1.3.0 (DOC-01)
 
+- ✓ Consent-driven migration UX — case 2 prompt (3 actions) / case 3 prompt (4 actions, always); explicit choices lock in, dismissals re-surface — v1.5.0 (CONSENT-01..04, CONSENT-06)
+- ✓ `gs-behave-bdd.migrationMode` enum setting (prompt / migrate-and-delete / migrate-and-keep / skip) — v1.5.0 (CONSENT-05)
+- ✓ `gs-behave-bdd.completedMigrations: string[]` per-scope setting — v1.5.0 (CONSENT-07/08)
+- ✓ `Behave BDD: Recheck Migrations` command with quick-pick scope picker — v1.5.0 (CONSENT-09)
+- ✓ Per-scope migration evaluator with case 1/2/3 dispatch (Global / Workspace / WorkspaceFolder) — v1.5.0 (MIGRATE-04/07/08/09)
+- ✓ 17-entry migration registry: v1.4.0 self-migrations + 15 `behave-vsc` → `gs-behave-bdd` cross-extension entries — v1.5.0 (MIGRATE-01/02/03)
+- ✓ Case 2 + case 3 action handlers route through `migrateScopedSetting` primitive — v1.5.0 (MIGRATE-05/06)
+- ✓ Silent `behave-vsc.*` fallback reads removed from runtime discovery path — v1.5.0 (CLEANUP-01)
+- ✓ `activeProjectCache` invalidation paired with scan-shaping setting changes (closes v1.4.0 carry-forward debt) — v1.5.0 (CLEANUP-02)
+- ✓ Migrations Panel Webview replaces Problems-pane diagnostics; works in remote-extension-host setups — v1.5.0
+- ✓ `migration-consent` integration suite covers Case 1 silent / Case 2 migrate-and-delete / Case 3 overwrite-and-delete end-to-end — v1.5.0 (TEST-07)
+
 ### Active
 
-(Requirements for v1.5.0 — to be defined in REQUIREMENTS.md.)
+(Requirements for v1.6.0 — to be defined in REQUIREMENTS.md via `/gsd-new-milestone`.)
+
+Seed: duplicate-scenario detection rework — replace local regex detector with parser that lifts duplicate-scenario errors (and their file:line locations) directly from behave's output, surfaced in the Problems pane.
 
 ### Out of Scope
 
@@ -118,9 +125,9 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 
 ## Context
 
-**Tech stack:** TypeScript, VS Code Extension API, Mocha/Sinon, smol-toml.
-**Test coverage:** 697 unit tests; 19 integration suites.
-**Shipped:** 5 milestones, 18 phases, 52 plans across 1.0.0 + 1.1.0 + 1.2.0 + 1.3.0 + v1.4.0.
+**Tech stack:** TypeScript, VS Code Extension API, Mocha/Sinon, smol-toml, jsonc-parser.
+**Test coverage:** 852 unit tests; 20 integration suites.
+**Shipped:** 6 milestones, 23 phases, 72 plans across 1.0.0 + 1.1.0 + 1.2.0 + 1.3.0 + v1.4.0 + v1.5.0.
 
 **Key files added during 1.0.0-v1.4.0:**
 
@@ -138,6 +145,8 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 - `src/migrations.ts` — `migrateScopedSetting<TSrc, TDest>` primitive + `migrateLegacyFeaturesPath`/`migrateLegacySuppressMultiConfig` wrappers (v1.4.0)
 - `test/integration/migrations integration suite/` — 7 real-VSCode tests covering both migrations end-to-end (v1.4.0)
 - `example-projects/migration-stale/` — seeded settings.json fixture for migration integration tests (v1.4.0)
+- `src/migrations/` — full module: `types.ts`, `registry.ts` (17 entries), `evaluator.ts` (case 1/2/3 dispatch), `completedMigrations.ts` (per-scope helpers), `consent.ts` (runConsentFlow + 7 action handlers), `recheckCommand.ts`, `plain.ts` / `featuresPath.ts` / `suppressedNotifications.ts` / `envPresets.ts` (entry factories), `codeActions.ts` (command dispatch), `panel.ts` / `panelHtml.ts` / `panelViewModel.ts` (Webview) (v1.5.0)
+- `example-projects/migration-consent/` — seeded `behave-vsc.*` settings fixture for the migration-consent integration suite (v1.5.0)
 
 ## Constraints
 
@@ -178,10 +187,17 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 | Read-time `discoveryDepth` re-read in `hasFeaturesFolder()` (v1.4.0) | Tactical fix for cache-staleness regression; redesign deferred | ⚠ Revisit — proper invalidation pairing tracked as v1.4.0 carry-forward |
 | Phase 17 as dedicated cross-cutting verification phase (v1.4.0) | Migrations span Phases 15+16; integration evidence belongs in its own phase | ✓ Good — caught the `activeProjectCache` regression |
 | Phase 18 closure phase (v1.4.0) | Audit found low-severity artifact + cleanup gaps; address before close | ✓ Good — zero outstanding artifact debt |
+| Single migration registry with case 1/2/3 evaluator (v1.5.0) | Per-scope inspect/dispatch with explicit case semantics; v1.4.0's two migrations + new `behave-vsc` entries all land here | ✓ Good — 17 entries, idempotent, no parallel paths |
+| Case 3 *always* prompts regardless of `migrationMode` (v1.5.0) | Both keys set at one scope is genuinely ambiguous; silent overwrite would surprise users | ✓ Good — D-A4.3 |
+| `runConsentFlow` fire-and-forget at activation (v1.5.0) | Activation must not block on user prompts; collect-then-prompt with `void runConsentFlow(...)` | ✓ Good — D-A3.4 |
+| `dispatchOverScopes` per-scope try/catch (v1.5.0) | One failing scope must not abort the entire migration loop | ✓ Good — D-A5.4 |
+| Mid-milestone pivot from Problems-pane diagnostics to Webview (v1.5.0 Phase 23) | Diagnostics couldn't bridge host filesystem paths in remote-extension-host setups; `vscode-userdata:` anchor scheme worked but the UX was fragile across local / remote / devcontainer / Codespaces | ✓ Good — Webview is the canonical surface; diagnostics surface fully removed |
+| `MIGRATION_ACTION_COMMAND` registration kept after Webview pivot (v1.5.0) | Webview is the only in-process caller, but keeping it registered preserves the integration suite (TEST-07 drives actions through it directly) | ✓ Good — Phase 023-04 Task 2 |
+| Proactive `activeProjectCache` + `clearScanResultCache()` pairing (v1.5.0) | Replaces v1.4.0 read-time `discoveryDepth` re-read; closes carry-forward tech debt | ✓ Good — CLEANUP-02 |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
 ---
-*Last updated: 2026-05-07 — v1.5.0 Migration Consent & `behave-vsc` Cleanup milestone started*
+*Last updated: 2026-05-15 — v1.5.0 Migration Consent & `behave-vsc` Cleanup shipped*
