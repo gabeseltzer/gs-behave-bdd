@@ -304,7 +304,10 @@ suite('fileParser - reparseFile debouncing', () => {
         'callback should receive the featuresUri for the changed workspace');
     });
 
-    test('callback is NOT invoked for feature files (they reparse immediately, not via debounce)', async () => {
+    test('callback is invoked synchronously for feature files (CodeLens/diagnostics need to refresh)', async () => {
+      // Feature edits change which feature lines reference a step definition. Subscribers
+      // (CodeLens, diagnostics) must be notified so the displayed reference count stays
+      // in sync — even though no .py file changed.
       couldBePythonStepsFileStub.returns(false);
       isFeatureFileStub.returns(true);
 
@@ -321,14 +324,15 @@ suite('fileParser - reparseFile debouncing', () => {
         }),
       } as unknown as vscode.TestController;
 
-      let callbackFired = false;
-      fileParser.onStepMappingsRebuilt = () => { callbackFired = true; };
+      const callbackArgs: vscode.Uri[] = [];
+      fileParser.onStepMappingsRebuilt = (uri) => callbackArgs.push(uri);
 
       await fileParser.reparseFile(featureFileUri, 'Feature: test', wkspSettings, testData, ctrlStub);
-      await clock.tickAsync(500);
 
-      assert.strictEqual(callbackFired, false,
-        'callback should NOT fire for feature file reparses (only for Python debounce path)');
+      assert.strictEqual(callbackArgs.length, 1,
+        'callback should fire exactly once for a feature file reparse (no debounce)');
+      assert.strictEqual(callbackArgs[0].path, featuresUri.path,
+        'callback should receive the featuresUri for the changed workspace');
 
       getFeatureNameStub.restore();
     });

@@ -35,6 +35,20 @@ export function findDecoratorLine(document: vscode.TextDocument, funcLine: numbe
 
 export class StepCodeLensProvider implements vscode.CodeLensProvider {
 
+  private readonly _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
+  public readonly onDidChangeCodeLenses: vscode.Event<void> = this._onDidChangeCodeLenses.event;
+
+  // Called by the extension when step mappings are rebuilt (e.g. feature file edits),
+  // so VS Code re-queries provideCodeLenses for open .py files and the displayed
+  // reference count stays in sync with the underlying mappings.
+  public refresh(): void {
+    this._onDidChangeCodeLenses.fire();
+  }
+
+  public dispose(): void {
+    this._onDidChangeCodeLenses.dispose();
+  }
+
   async provideCodeLenses(
     document: vscode.TextDocument,
     _token: vscode.CancellationToken

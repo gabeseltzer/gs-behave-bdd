@@ -385,6 +385,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     // where files change via the disk (e.g. git branch switch) without going through
     // onDidChangeTextDocument, as well as the case where validateStepDefinitions was called
     // eagerly (before the debounce fired) and produced stale results.
+    const codeLensProvider = new StepCodeLensProvider();
     parser.onStepMappingsRebuilt = (featuresUri: vscode.Uri) => {
       for (const document of vscode.workspace.textDocuments) {
         if (!isFeatureFile(document.uri)) continue;
@@ -393,6 +394,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         validateFixtureTags(document);
         validateStepDefinitions(document);
       }
+      // Refresh CodeLens for open .py step files — feature edits change the
+      // reference count even though the .py document itself didn't change.
+      codeLensProvider.refresh();
     };
 
     // any function contained in a context.subscriptions.push() will execute immediately, 
@@ -410,6 +414,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       junitWatcher,
       statusItem,
       projectStatusBar,
+      codeLensProvider,
       { dispose: () => clearConfigDebounceTimers() },
       vscode.commands.registerCommand('gs-behave-bdd.openOutput', () => {
         const wkspUris = getUrisOfWkspFoldersWithFeatures();
@@ -459,7 +464,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.languages.registerHoverProvider({ language: "gherkin" }, new FixtureHoverProvider()),
       vscode.languages.registerReferenceProvider(["gherkin", "python"], new StepReferenceProvider()),
       vscode.languages.registerReferenceProvider(["gherkin", "python"], new FixtureReferenceProvider()),
-      vscode.languages.registerCodeLensProvider("python", new StepCodeLensProvider())
+      vscode.languages.registerCodeLensProvider("python", codeLensProvider)
     );
 
 

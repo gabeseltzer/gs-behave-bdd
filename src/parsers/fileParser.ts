@@ -640,6 +640,10 @@ export class FileParser {
         await this._updateTestItemFromFeatureFileContent(wkspSettings, content, testData, ctrl, fileUri, "reparseFile", false);
         const root = getFeaturesRootForFile(wkspSettings, fileUri) ?? wkspSettings.featuresUri;
         rebuildStepMappings(root, wkspSettings.featuresUri);
+        // Notify subscribers (e.g. CodeLens, diagnostics) that mappings changed.
+        // Feature edits change which feature lines reference a step definition,
+        // so consumers of step mappings must refresh even though no .py changed.
+        this.onStepMappingsRebuilt?.(wkspSettings.featuresUri);
       }
       catch (e: unknown) {
         config.logger.showError(e, wkspSettings.uri);
