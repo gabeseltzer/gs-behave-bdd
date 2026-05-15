@@ -111,6 +111,27 @@
 					"markdownDescription": "When enabled, the subdirectory config scanner stops at the first depth level that yields a behave config file. When disabled (default), the scanner always scans to `discoveryDepth` so it can report all found configs.",
 					"default": false
 				},
+				"gs-behave-bdd.migrationMode": {
+					"scope": "resource",
+					"type": "string",
+					"enum": [
+						"prompt",
+						"migrate-and-delete",
+						"migrate-and-keep",
+						"skip"
+					],
+					"markdownDescription": "Default strategy for migrating legacy `behave-vsc.*` settings when only the legacy key is set (case 2): `prompt` (default) asks per scope, `migrate-and-delete` / `migrate-and-keep` apply silently, `skip` finishes without copying. Case 3 (both legacy and canonical set) always prompts regardless; run *Behave BDD: Recheck Migrations* to re-evaluate.",
+					"default": "prompt"
+				},
+				"gs-behave-bdd.completedMigrations": {
+					"scope": "resource",
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"markdownDescription": "Array of migration IDs marked Finished at this scope. Each VS Code scope (Global / Workspace / Workspace Folder) maintains its own list; run *Behave BDD: Recheck Migrations* to clear and re-prompt.",
+					"default": []
+				},
 				"gs-behave-bdd.suppressedNotifications": {
 					"scope": "resource",
 					"type": "array",
@@ -148,6 +169,14 @@
 				"command": "gs-behave-bdd.selectProject",
 				"title": "Behave BDD: Select Project",
 				"icon": "$(folder-active)"
+			},
+			{
+				"command": "gs-behave-bdd.recheckMigrations",
+				"title": "Behave BDD: Recheck Migrations"
+			},
+			{
+				"command": "gs-behave-bdd.openMigrationsPanel",
+				"title": "Behave BDD: Open Migrations Panel"
 			}
 		],
 		"keybindings": [
@@ -265,7 +294,7 @@
 	"name": "gs-behave-bdd",
 	"displayName": "Behave BDD",
 	"description": "Full langague support for Behave feature files. Run and debug tests. Navigate between steps and definitions. Forked from jimasp's behave-vsc",
-	"version": "1.4.2",
+	"version": "1.5.0",
 	"icon": "images/gs-behave-bdd.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",
@@ -349,6 +378,8 @@
 		"webpack-cli": "^4.8.0"
 	},
 	"dependencies": {
+		"jsonc-parser": "^3.3.1",
+		"smol-toml": "^1.6.1",
 		"xml2js": "^0.6.2"
 	}
 }

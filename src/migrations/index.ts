@@ -1,0 +1,11 @@
+export type { MigrationEntry, MigrationCase, MigrationScope } from './types';
+export { ALL_MIGRATION_SCOPES } from './types';
+export { MIGRATION_REGISTRY } from './registry';
+export { isMigrationFinishedAtScope, markMigrationFinishedAtScope } from './completedMigrations';
+export type { EvaluationResult, EvaluatorHooks } from './evaluator';
+export { evaluateMigration, evaluateAllMigrations } from './evaluator';
+export { recheckMigrationsCommandHandler } from './recheckCommand';
+export { runConsentFlow, readMigrationMode } from './consent';
+export type { Case2Action, Case3Action, MigrationMode, ConsentHit } from './consent';
+export { MIGRATION_ACTION_COMMAND, dispatchMigrationAction, type MigrationActionArgs } from './codeActions';
+export { MigrationsPanel } from './panel';

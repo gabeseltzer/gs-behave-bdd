@@ -567,16 +567,23 @@ suite('Phase 15 — extension.ts activation ordering (Pitfall 3)', () => {
     return fs.readFileSync(extPath, 'utf8');
   }
 
-  test('activate.*migration order: migrateLegacySuppressMultiConfig precedes updateDiscoveryUX', () => {
+  test('Phase 20 D-A6.1: extension.ts no longer calls migrateLegacySuppressMultiConfig directly', () => {
     const src = readExtensionSrc();
-    const migrationIdx = src.indexOf('migrateLegacySuppressMultiConfig(wkspUri)');
-    // Match the call site (with paren), not the function declaration.
+    // D-A6.1: the direct call site was deleted; only evaluateAllMigrations drives migrations now.
+    assert.ok(
+      !src.includes('migrateLegacySuppressMultiConfig(wkspUri)'),
+      'D-A6.1: migrateLegacySuppressMultiConfig direct call site must be deleted from extension.ts',
+    );
+    // Ordering invariant: evaluateAllMigrations must still precede updateDiscoveryUX.
+    // Phase 21 D-A3.4: the call site now takes a second `hooks` arg, so match the
+    // call prefix `evaluateAllMigrations(wkspUri` rather than the bare-call form.
+    const evaluatorIdx = src.indexOf('evaluateAllMigrations(wkspUri');
     const discoveryCallIdx = src.indexOf('updateDiscoveryUX(getUrisOfWkspFoldersWithFeatures()');
-    assert.notStrictEqual(migrationIdx, -1, 'migration call must exist in extension.ts');
+    assert.notStrictEqual(evaluatorIdx, -1, 'evaluateAllMigrations call must exist in extension.ts');
     assert.notStrictEqual(discoveryCallIdx, -1, 'updateDiscoveryUX call must exist in extension.ts');
     assert.ok(
-      migrationIdx < discoveryCallIdx,
-      'migration must precede updateDiscoveryUX call (Pitfall 3 / D-05)',
+      evaluatorIdx < discoveryCallIdx,
+      'evaluateAllMigrations must precede updateDiscoveryUX call (Pitfall 3 / D-A6.1)',
     );
   });
 
@@ -873,33 +880,28 @@ suite('Phase 16 — activation order and notification structural tests (D-18, D-
     return fs.readFileSync(extPath, 'utf8');
   }
 
-  test('(D-18) activate(): migrateLegacyFeaturesPath precedes migrateLegacySuppressMultiConfig', () => {
+  test('Phase 20 D-A6.1: extension.ts no longer calls migrateLegacyFeaturesPath or migrateLegacySuppressMultiConfig directly', () => {
     const src = readExtensionSrc();
-    const featuresPathIdx = src.indexOf('migrateLegacyFeaturesPath(wkspUri)');
-    const suppressIdx = src.indexOf('migrateLegacySuppressMultiConfig(wkspUri)');
-    assert.notStrictEqual(featuresPathIdx, -1, 'migrateLegacyFeaturesPath call must exist in extension.ts');
-    assert.notStrictEqual(suppressIdx, -1, 'migrateLegacySuppressMultiConfig call must exist in extension.ts');
+    // D-A6.1: both v1.4.0 direct call sites were deleted; evaluateAllMigrations is the sole driver.
     assert.ok(
-      featuresPathIdx < suppressIdx,
-      'D-18: featuresPath migration must run BEFORE suppressMultiConfig (data shape before UX cleanup)',
+      !src.includes('migrateLegacyFeaturesPath(wkspUri)'),
+      'D-A6.1: migrateLegacyFeaturesPath direct call site must be deleted from extension.ts',
+    );
+    assert.ok(
+      !src.includes('migrateLegacySuppressMultiConfig(wkspUri)'),
+      'D-A6.1: migrateLegacySuppressMultiConfig direct call site must be deleted from extension.ts',
+    );
+    // Phase 21 D-A3.4: the activation call now passes a `hooks` arg as the
+    // second parameter, so the substring is `evaluateAllMigrations(wkspUri,` or
+    // (pre-21) `evaluateAllMigrations(wkspUri)`. Match the common prefix.
+    assert.ok(
+      src.includes('evaluateAllMigrations(wkspUri'),
+      'D-A6.1: evaluateAllMigrations(wkspUri...) must be the activation-time migration driver',
     );
   });
 
-  test('(D-13) post-loop notification uses suppression key "featuresPathMigration"', () => {
+  test('(B-02) extension.ts does not use hard-coded publisher ID in Open Settings commands', () => {
     const src = readExtensionSrc();
-    const hasKey = src.includes('"featuresPathMigration"') || src.includes("'featuresPathMigration'");
-    assert.ok(hasKey, 'D-13: suppression key literal "featuresPathMigration" must appear in extension.ts');
-  });
-
-  test('(D-12) Open Settings command uses publisher-independent search query', () => {
-    const src = readExtensionSrc();
-    // Per review B-02: command arg uses a publisher-independent search query
-    // (mirrors the multi-config notification pattern at extension.ts:139), so
-    // the deep-link survives a publisher rename.
-    assert.ok(
-      src.includes('"gs-behave-bdd.featuresPaths"') || src.includes("'gs-behave-bdd.featuresPaths'"),
-      'B-02: Open Settings command must use the publisher-independent search query "gs-behave-bdd.featuresPaths"',
-    );
     assert.ok(
       !src.includes('@ext:gabeseltzer.gs-behave-bdd'),
       'B-02: hard-coded publisher ID @ext:gabeseltzer.gs-behave-bdd must not appear in extension.ts',
