@@ -87,6 +87,7 @@ export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseRes
       break;
     case "error":
     case "hook_error":
+    case "cleanup_error":
       if (!item.test.uri || !item.test.range)
         throw "invalid test item";
       message = new vscode.TestMessage(result.failedText ?? "error");
@@ -100,7 +101,7 @@ export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseRes
   item.scenario.result = result.status;
   const statusOutput = result.status === "passed" || result.status === "skipped"
     ? result.status.toUpperCase()
-    : result.status === "error" || result.status === "hook_error"
+    : result.status === "error" || result.status === "hook_error" || result.status === "cleanup_error"
       ? "ERROR"
       : "FAILED";
   run.appendOutput(`Test item ${vscode.Uri.parse(item.test.id).fsPath}: ${statusOutput}\r\n`);
@@ -108,7 +109,7 @@ export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseRes
   // Propagate failure/error results to ancestor items (group and outline) so the
   // error message is visible on parent nodes in the Test Explorer, not just the row.
   // Use reportedAncestors to avoid duplicate calls when multiple rows fail in the same group.
-  if (item.scenario.exampleRow && (result.status === "failed" || result.status === "error" || result.status === "hook_error")) {
+  if (item.scenario.exampleRow && (result.status === "failed" || result.status === "error" || result.status === "hook_error" || result.status === "cleanup_error")) {
     let ancestor = item.test.parent;
     while (ancestor) {
       if (reportedAncestors.has(ancestor.id))
@@ -147,12 +148,12 @@ function CreateParseResult(wkspSettings: WorkspaceSettings, debug: boolean, test
     return { status: "untested", duration: xmlDuration };
   }
 
-  if (xmlStatus !== "failed" && xmlStatus !== "error" && xmlStatus !== "hook_error") {
+  if (xmlStatus !== "failed" && xmlStatus !== "error" && xmlStatus !== "hook_error" && xmlStatus !== "cleanup_error") {
     throw new Error(`Unrecognised behave scenario status result "${xmlStatus}" found while parsing junit file ` +
       `for testCase "${testCase.$.name}"`);
   }
 
-  // status === "failed", "error", or "hook_error"
+  // status === "failed", "error", "hook_error", or "cleanup_error"
 
   const reasonBlocks: string[] = [];
   const concatErrText = (testCase: TestCase) => {
@@ -525,7 +526,8 @@ function reportResult(run: vscode.TestRun, debug: boolean, item: vscode.TestItem
       break;
     }
     case "error":
-    case "hook_error": {
+    case "hook_error":
+    case "cleanup_error": {
       const msg = new vscode.TestMessage(result.failedText ?? "error");
       if (item.uri && item.range)
         msg.location = new vscode.Location(item.uri, item.range);
@@ -538,6 +540,6 @@ function reportResult(run: vscode.TestRun, debug: boolean, item: vscode.TestItem
 
 
 function isWorse(status: string, currentWorst: string): boolean {
-  const severity: Record<string, number> = { "passed": 0, "skipped": 1, "failed": 2, "error": 3, "hook_error": 3 };
+  const severity: Record<string, number> = { "passed": 0, "skipped": 1, "failed": 2, "error": 3, "hook_error": 3, "cleanup_error": 3 };
   return (severity[status] ?? 0) > (severity[currentWorst] ?? 0);
 }
