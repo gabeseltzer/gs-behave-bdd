@@ -5,7 +5,8 @@ import {
   getContentFromFilesystem,
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, isFeatureFile,
   logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile,
-  getDiscoveryEntry, basename, setProjectSwitchInProgress, WkspError
+  getDiscoveryEntry, basename, setProjectSwitchInProgress, WkspError,
+  reloadSettingsAndSurfaceError
 } from './common';
 import { setConfigParseErrorDiagnostic, clearConfigParseErrorDiagnostic } from './handlers/configDiagnostics';
 import { StepFileStep } from './parsers/stepsParser';
@@ -1152,17 +1153,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
             continue;
           }
 
-          // Per-workspace try/catch: reloadSettings throws WkspError when the
-          // user breaks their settings mid-session (e.g. types a bad projectPath).
-          // Without this, the throw bubbles out of the loop and skips the parse
-          // call below, so the language-status item never flips to "Invalid Settings".
-          // The thrown error is surfaced here with workspace context; the parser's
-          // guard will set the fatal-settings marker on the next parseFilesForWorkspace.
-          try {
-            config.reloadSettings(wkspUri);
-          } catch (e: unknown) {
-            config.logger.showError(e, wkspUri);
-          }
+          // Per-workspace try/catch via helper: reloadSettings throws WkspError
+          // when the user breaks settings mid-session. Without this, the throw
+          // bubbles out of the loop and skips the parse call below, so the
+          // language-status item never flips to "Invalid Settings".
+          reloadSettingsAndSurfaceError(
+            () => config.reloadSettings(wkspUri),
+            (e, uri) => config.logger.showError(e, uri),
+            wkspUri,
+          );
           const oldWatchers = wkspWatchers.get(wkspUri);
           if (oldWatchers)
             oldWatchers.forEach(w => w.dispose());
