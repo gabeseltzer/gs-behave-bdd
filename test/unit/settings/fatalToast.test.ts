@@ -121,7 +121,7 @@ suite('fatal toast shape & actions (260518-hyz Task 3)', () => {
 
     const err = expectWkspError(() => buildSettings({ projectPath: 'badproj' }));
     assert.match(err.message,
-      /^Behave BDD: project path "badproj" not found in workspace "[^"]+"\. Tests cannot load\.$/,
+      /^project path "badproj" not found\. Tests cannot load\.$/,
       `unexpected toast shape: ${err.message}`);
   });
 
@@ -154,7 +154,7 @@ suite('fatal toast shape & actions (260518-hyz Task 3)', () => {
 
     const err = expectWkspError(() => buildSettings({ featuresPaths: ['badfeat'] }));
     assert.match(err.message,
-      /^Behave BDD: features path "badfeat" not found in workspace "[^"]+"\. Tests cannot load\.$/,
+      /^features path "badfeat" not found\. Tests cannot load\.$/,
       `unexpected features-path toast: ${err.message}`);
   });
 
@@ -167,7 +167,7 @@ suite('fatal toast shape & actions (260518-hyz Task 3)', () => {
 
     const err = expectWkspError(() => buildSettings({ projectPath: 'badproj', featuresPaths: ['badfeat'] }));
     assert.match(err.message,
-      /^Behave BDD: workspace "[^"]+" has invalid settings\. Tests cannot load\.$/,
+      /^invalid settings\. Tests cannot load\.$/,
       `expected generic fallback, got: ${err.message}`);
   });
 
