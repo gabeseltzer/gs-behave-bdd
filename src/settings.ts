@@ -318,10 +318,10 @@ export class WorkspaceSettings {
     if (this._fatalErrors.length === 1 && quotedMatch) {
       const kind = quotedMatch[1]; // "project path" | "features path"
       const value = quotedMatch[2];
-      return `Behave BDD: ${kind} "${value}" not found in workspace "${this.name}". Tests cannot load.`;
+      return `${kind} "${value}" not found. Tests cannot load.`;
     }
     // Multiple fatals OR an unrecognized shape → fall back to a generic message.
-    return `Behave BDD: workspace "${this.name}" has invalid settings. Tests cannot load.`;
+    return `invalid settings. Tests cannot load.`;
   }
 
 

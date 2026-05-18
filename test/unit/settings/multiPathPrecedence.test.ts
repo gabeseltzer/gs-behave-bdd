@@ -147,7 +147,7 @@ suite('multiPathPrecedence (TEST-12, D-11)', () => {
       // buildFatalToast falls back to the generic "has invalid settings" shape.
       assert.throws(
         () => buildSettings({ featuresPaths: ['.'] }),
-        (err: Error) => err.message.includes('has invalid settings')
+        (err: Error) => err.message.includes('invalid settings')
                      && err.message.includes('Tests cannot load')
       );
     });
