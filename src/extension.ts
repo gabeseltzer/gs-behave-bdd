@@ -255,6 +255,48 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       projectStatusBar.show();
     };
     updateProjectStatusBarFn = updateProjectStatusBar;
+
+    // The language-status item + parser event handlers must be wired BEFORE any
+    // parser method that fires _notifyStatusChange/_notifyStepLoadError —
+    // otherwise activation-time notifications fire into the void and the item
+    // is stuck at its initial "Behave: Parsing..." busy=true state.
+    const statusItem = vscode.languages.createLanguageStatusItem('behave.status', { language: 'gherkin' });
+    statusItem.name = "Behave BDD Status";
+    statusItem.text = "Behave: Parsing...";
+    statusItem.busy = true;
+
+    parser.onStatusChange((busy: boolean) => {
+      statusItem.busy = busy;
+      if (busy) {
+        statusItem.text = "Behave: Parsing...";
+        return;
+      }
+      // If any workspace's settings failed to construct, surface that on the
+      // language-status item so users don't see a green "Ready" while the
+      // extension is actually unable to load tests.
+      if (parser.hasFatalSettings()) {
+        statusItem.text = "Behave: Invalid Settings";
+        statusItem.severity = vscode.LanguageStatusSeverity.Error;
+        statusItem.detail = "Tests cannot load — check workspace settings.";
+        return;
+      }
+      statusItem.text = "Behave: Ready";
+      statusItem.severity = vscode.LanguageStatusSeverity.Information;
+      statusItem.detail = undefined;
+    });
+
+    parser.onStepLoadError((error: string | undefined) => {
+      if (error) {
+        statusItem.text = "Behave: Step Load Error";
+        statusItem.severity = vscode.LanguageStatusSeverity.Error;
+        statusItem.detail = error.length > 200 ? error.substring(0, 200) + "..." : error;
+      } else {
+        statusItem.text = "Behave: Ready";
+        statusItem.severity = vscode.LanguageStatusSeverity.Information;
+        statusItem.detail = undefined;
+      }
+    });
+
     // Flag workspaces that opted in to behave (have explicit projectPath/featuresPaths)
     // but were filtered out of discovery (typically: configured path doesn't exist on disk).
     // Without this, the parser's guard is unreachable for those workspaces and the
@@ -320,43 +362,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
 
     const junitWatcher = new JunitWatcher();
     junitWatcher.startWatchingJunitFolder();
-
-    const statusItem = vscode.languages.createLanguageStatusItem('behave.status', { language: 'gherkin' });
-    statusItem.name = "Behave BDD Status";
-    statusItem.text = "Behave: Parsing...";
-    statusItem.busy = true;
-
-    parser.onStatusChange((busy: boolean) => {
-      statusItem.busy = busy;
-      if (busy) {
-        statusItem.text = "Behave: Parsing...";
-        return;
-      }
-      // If any workspace's settings failed to construct, surface that on the
-      // language-status item so users don't see a green "Ready" while the
-      // extension is actually unable to load tests.
-      if (parser.hasFatalSettings()) {
-        statusItem.text = "Behave: Invalid Settings";
-        statusItem.severity = vscode.LanguageStatusSeverity.Error;
-        statusItem.detail = "Tests cannot load — check workspace settings.";
-        return;
-      }
-      statusItem.text = "Behave: Ready";
-      statusItem.severity = vscode.LanguageStatusSeverity.Information;
-      statusItem.detail = undefined;
-    });
-
-    parser.onStepLoadError((error: string | undefined) => {
-      if (error) {
-        statusItem.text = "Behave: Step Load Error";
-        statusItem.severity = vscode.LanguageStatusSeverity.Error;
-        statusItem.detail = error.length > 200 ? error.substring(0, 200) + "..." : error;
-      } else {
-        statusItem.text = "Behave: Ready";
-        statusItem.severity = vscode.LanguageStatusSeverity.Information;
-        statusItem.detail = undefined;
-      }
-    });
 
     // Phase 20 D-A6.1: evaluator drives every registered migration.
     // Phase 21 D-A3.4: hooks collect case 2 / case 3 hits, runConsentFlow shows
