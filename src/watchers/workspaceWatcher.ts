@@ -13,6 +13,15 @@ export function startWatchingWorkspace(wkspUri: vscode.Uri, ctrl: vscode.TestCon
   const wkspSettings = config.workspaceSettings[wkspUri.path];
   const watchers: vscode.FileSystemWatcher[] = [];
 
+  // Guard: if WorkspaceSettings construction threw a FATAL error, the configuration getter has already
+  // surfaced exactly one user-facing notification and left _resourceSettings[wkspUri.path] unpopulated.
+  // Silently skip here — calling showError would produce a duplicate cascading notification.
+  if (!wkspSettings) {
+    diagLog(`startWatchingWorkspace: skipping ${wkspUri.path} — workspace settings unavailable (fatal config error already reported)`,
+      wkspUri, DiagLogType.warn);
+    return watchers;
+  }
+
   // One watcher per features root (INT-02)
   for (let i = 0; i < wkspSettings.featuresUris.length; i++) {
     const relPath = wkspSettings.workspaceRelativeFeaturesPaths[i];
