@@ -139,10 +139,16 @@ suite('multiPathPrecedence (TEST-12, D-11)', () => {
 
   suite('invalid-entry: "." rejection (D-07)', () => {
 
-    test('"." entry causes WkspError with expected message', () => {
+    test('"." entry causes WkspError with the generic short-toast shape', () => {
+      // 260518-hyz Task 3: the thrown WkspError now carries the short toast text
+      // (the verbose "... is not a valid ..." detail is logged to the output
+      // channel before the throw, not embedded in the toast). For a single fatal
+      // that isn't a simple project-path/features-path "not found" sentence,
+      // buildFatalToast falls back to the generic "has invalid settings" shape.
       assert.throws(
         () => buildSettings({ featuresPaths: ['.'] }),
-        (err: Error) => err.message.includes('not a valid')
+        (err: Error) => err.message.includes('has invalid settings')
+                     && err.message.includes('Tests cannot load')
       );
     });
   });
