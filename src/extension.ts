@@ -320,9 +320,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
 
     parser.onStatusChange((busy: boolean) => {
       statusItem.busy = busy;
-      statusItem.text = busy ? "Behave: Parsing..." : "Behave: Ready";
-      if (!busy)
-        statusItem.severity = vscode.LanguageStatusSeverity.Information;
+      if (busy) {
+        statusItem.text = "Behave: Parsing...";
+        return;
+      }
+      // If any workspace's settings failed to construct, surface that on the
+      // language-status item so users don't see a green "Ready" while the
+      // extension is actually unable to load tests.
+      if (parser.hasFatalSettings()) {
+        statusItem.text = "Behave: Invalid Settings";
+        statusItem.severity = vscode.LanguageStatusSeverity.Error;
+        statusItem.detail = "Tests cannot load — check workspace settings.";
+        return;
+      }
+      statusItem.text = "Behave: Ready";
+      statusItem.severity = vscode.LanguageStatusSeverity.Information;
+      statusItem.detail = undefined;
     });
 
     parser.onStepLoadError((error: string | undefined) => {
