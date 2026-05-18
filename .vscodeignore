@@ -31,3 +31,10 @@ CONTRIBUTING.md
 plans/**
 .pylintrc
 .tool-versions
+.planning/**
+.pytest_cache/**
+scratch/**
+gs-behave-bdd-*.vsix
+release-notes-*.md
+*.log
+.vsce-*
