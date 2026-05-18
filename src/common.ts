@@ -88,6 +88,25 @@ export class WkspError extends Error {
 }
 
 
+// Wraps a reloadSettings call so a thrown WkspError surfaces a user-facing
+// notification with workspace context instead of bubbling up and aborting the
+// caller's loop. Returns true if reload succeeded, false if it failed.
+// Extracted from configurationChangedHandler to keep the test seam thin.
+export function reloadSettingsAndSurfaceError(
+  reload: () => void,
+  showError: (e: unknown, wkspUri: vscode.Uri) => void,
+  wkspUri: vscode.Uri,
+): boolean {
+  try {
+    reload();
+    return true;
+  } catch (e: unknown) {
+    showError(e, wkspUri);
+    return false;
+  }
+}
+
+
 export const openDocumentRange = async (uri: vscode.Uri, range: vscode.Range, preserveFocus = true, preview = false) => {
 
   // fix for: "git reverted file no longer opens in read-only mode when go to step definition is clicked":
