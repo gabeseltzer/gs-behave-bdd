@@ -5,7 +5,7 @@ import {
   getContentFromFilesystem,
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, isFeatureFile,
   logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile,
-  getDiscoveryEntry, basename, setProjectSwitchInProgress
+  getDiscoveryEntry, basename, setProjectSwitchInProgress, WkspError
 } from './common';
 import { setConfigParseErrorDiagnostic, clearConfigParseErrorDiagnostic } from './handlers/configDiagnostics';
 import { StepFileStep } from './parsers/stepsParser';
@@ -361,7 +361,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         } catch (e) {
           // Defense-in-depth: evaluator never throws (Phase 19 D-03), but
           // reloadSettings is not contracted to never throw.
-          config.logger.logInfo(`Phase 21 migration consent flow error: ${e}`, wkspUri);
+          // 260518-hyz: when the caught error is a WkspError, it has already been
+          // surfaced to the user via the workspaceSettings getter / showError path,
+          // so demote the noisy "Phase 21 migration consent flow error" log to
+          // diagLog. Non-WkspError errors still get the visible logInfo trail.
+          if (e instanceof WkspError) {
+            diagLog(`Phase 21 migration consent flow saw settled WkspError for ${wkspUri.path}: ${e.message}`, wkspUri);
+          } else {
+            config.logger.logInfo(`Phase 21 migration consent flow error: ${e}`, wkspUri);
+          }
         }
       }),
     );
