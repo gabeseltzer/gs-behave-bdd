@@ -90,6 +90,24 @@ suite('fileParser - settings guard', () => {
       'guard must remain silent — configuration.ts already surfaced the FATAL error');
   });
 
+  test('fires status-change(false) so the "Behave: Parsing..." spinner clears', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const notifyStub = sinon.stub(fileParser as any, '_notifyStatusChange');
+
+    await fileParser.parseFilesForWorkspace(
+      wkspUri,
+      {} as never,
+      {} as vscode.TestController,
+      'unit-test',
+      false,
+    );
+
+    // First call (busy=true) happens before the guard; second call (busy=false)
+    // is what the guard MUST emit so the language-status spinner stops spinning.
+    const busyFalseCall = notifyStub.getCalls().find(c => c.args[0] === false);
+    assert.ok(busyFalseCall, 'guard must call _notifyStatusChange(false) to clear the spinner');
+  });
+
   test('state is not permanently poisoned: a second call with valid settings proceeds', async () => {
     // First call hits the guard.
     const firstResult = await fileParser.parseFilesForWorkspace(

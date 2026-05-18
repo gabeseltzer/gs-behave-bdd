@@ -74,7 +74,7 @@ suite('configuration: workspaceSettings getter failure caching (260518-hyz)', ()
     assert.strictEqual(showErrorStub.callCount, 1, 'showError must be invoked once total');
   });
 
-  test('reloadSettings(wkspUri) clears the failure cache so the next getter retries construction', () => {
+  test('reloadSettings(wkspUri) attempts construction but re-caches failures so the getter does not retry', () => {
     // Trigger initial failure + cache.
     void configModule.config.workspaceSettings;
     assert.strictEqual(ctorSpy.callCount, 1);
@@ -88,11 +88,12 @@ suite('configuration: workspaceSettings getter failure caching (260518-hyz)', ()
     // reloadSettings called ctor directly → count now 2.
     assert.strictEqual(ctorSpy.callCount, 2, 'reloadSettings should attempt construction (ctor call #2)');
 
-    // Failure flag was cleared at the start of reloadSettings, so cache is empty.
-    // Next getter access should retry construction again → count becomes 3.
+    // reloadSettings re-cached the failure after the throw, so subsequent getter
+    // calls must NOT re-invoke the ctor. (Prevents duplicate "settings dumps" in
+    // the output channel — the cascade fix from 260518-hyz follow-up.)
     void configModule.config.workspaceSettings;
-    assert.strictEqual(ctorSpy.callCount, 3,
-      'after reloadSettings the failure cache must be cleared so the getter retries construction');
+    assert.strictEqual(ctorSpy.callCount, 2,
+      'after reloadSettings fails, the getter must short-circuit on the re-cached failure');
   });
 });
 

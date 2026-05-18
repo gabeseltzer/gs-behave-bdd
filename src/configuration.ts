@@ -64,14 +64,23 @@ class ExtensionConfiguration implements Configuration {
     // previously failed and is now being re-loaded will surface a fresh
     // notification if it still fails (fix-then-break cycle).
     this._failedSettingsWorkspaces.delete(wkspUri.path);
-    if (testConfig) {
-      this._windowSettings = new WindowSettings(testConfig);
-      this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri, testConfig, this._windowSettings, this.logger);
-    }
-    else {
-      this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("gs-behave-bdd"));
-      this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
-        vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri), this._windowSettings, this.logger);
+    delete this._resourceSettings[wkspUri.path];
+    // Re-cache failures so subsequent workspaceSettings getter calls
+    // short-circuit instead of re-running the ctor (duplicate settings dumps).
+    // The throw is preserved so callers that want to react to the failure still can.
+    try {
+      if (testConfig) {
+        this._windowSettings = new WindowSettings(testConfig);
+        this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri, testConfig, this._windowSettings, this.logger);
+      }
+      else {
+        this._windowSettings = new WindowSettings(vscode.workspace.getConfiguration("gs-behave-bdd"));
+        this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
+          vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri), this._windowSettings, this.logger);
+      }
+    } catch (e) {
+      this._failedSettingsWorkspaces.set(wkspUri.path, e as Error);
+      throw e;
     }
   }
 
