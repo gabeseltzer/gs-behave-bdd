@@ -63,8 +63,23 @@ export interface DiscoveryEntry {
 // - the error is only logged/displayed once 
 // - the top-level catch can simply call config.logger.showError(e) and Logger will handle the rest
 // for more info on error handling, see contributing.md
+// Optional action surfaced as a button on the error toast emitted via Logger.showError.
+// Use the sentinel command "__showOutput" to focus the workspace output channel
+// (Logger.showError intercepts that value and calls logger.show(wkspUri) directly).
+// Any other `command` value is forwarded to vscode.commands.executeCommand(command, ...args).
+export interface WkspErrorAction {
+  label: string;
+  command: string;
+  args?: unknown[];
+}
+
 export class WkspError extends Error {
-  constructor(errorOrMsg: unknown, public wkspUri: vscode.Uri, public run?: vscode.TestRun) {
+  constructor(
+    errorOrMsg: unknown,
+    public wkspUri: vscode.Uri,
+    public run?: vscode.TestRun,
+    public actions?: WkspErrorAction[],
+  ) {
     const msg = errorOrMsg instanceof Error ? errorOrMsg.message : errorOrMsg as string;
     super(msg);
     this.stack = errorOrMsg instanceof Error ? errorOrMsg.stack : undefined;
