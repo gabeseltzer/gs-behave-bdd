@@ -27,10 +27,14 @@ class ExtensionConfiguration implements Configuration {
   private static _configuration?: ExtensionConfiguration;
   private _windowSettings: WindowSettings | undefined = undefined;
   private _resourceSettings: { [wkspUriPath: string]: WorkspaceSettings } = {};
-  // W-06: per-uri tracker so getter-path WkspError surfaces are emitted ONCE
-  // per workspace (across the lifetime of the singleton). Without this, the
-  // workspaceSettings getter silently demoted genuine errors to diagLog.
-  private _failedSettingsWorkspaces = new Set<string>();
+  // W-06 / 260518-hyz: per-uri tracker so getter-path WkspError surfaces are emitted
+  // ONCE per workspace (across the lifetime of the singleton). Stores the failure
+  // error itself (upgraded from Set<string> to Map<string, Error>) so the getter
+  // can short-circuit construction entirely on subsequent calls — without this,
+  // the WorkspaceSettings constructor reran on every getter access, producing
+  // duplicate log output and duplicate steps-folder warnings on broken configs.
+  // reloadSettings(wkspUri) deletes the entry to allow a fix-then-reload cycle.
+  private _failedSettingsWorkspaces = new Map<string, Error>();
 
   private constructor() {
     ExtensionConfiguration._configuration = this;
@@ -83,6 +87,14 @@ class ExtensionConfiguration implements Configuration {
     const winSettings = this.globalSettings;
     getUrisOfWkspFoldersWithFeatures().forEach(wkspUri => {
       if (!this._resourceSettings[wkspUri.path]) {
+        // 260518-hyz: short-circuit construction if this workspace's settings
+        // previously failed to construct. The failure was already surfaced via
+        // showError on the first attempt; reconstructing on every getter call
+        // produced duplicate log output and duplicate "No steps folder" warns.
+        // reloadSettings(wkspUri) clears this entry so a fix-then-reload retries.
+        if (this._failedSettingsWorkspaces.has(wkspUri.path)) {
+          return;
+        }
         try {
           this._resourceSettings[wkspUri.path] = new WorkspaceSettings(wkspUri,
             vscode.workspace.getConfiguration("gs-behave-bdd", wkspUri), winSettings, this.logger);
@@ -100,7 +112,7 @@ class ExtensionConfiguration implements Configuration {
           // Per-uri tracking prevents spamming if the getter is hit repeatedly for the same
           // bad workspace.
           if (!this._failedSettingsWorkspaces.has(wkspUri.path)) {
-            this._failedSettingsWorkspaces.add(wkspUri.path);
+            this._failedSettingsWorkspaces.set(wkspUri.path, e as Error);
             this.logger.showError(e, wkspUri);
           }
           diagLog(`workspaceSettings getter: skipping ${wkspUri.path} due to: ${e}`, wkspUri);
