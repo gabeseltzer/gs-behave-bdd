@@ -44,6 +44,9 @@ export class FileParser {
   private static readonly PYTHON_REPARSE_DEBOUNCE_MS = 500;
   private _statusChangeHandlers: ((busy: boolean) => void)[] = [];
   private _stepLoadErrorHandlers: ((error: string | undefined) => void)[] = [];
+  // Workspaces whose WorkspaceSettings ctor threw (e.g. bad projectPath). Surfaced
+  // to the language-status item so it shows Error severity instead of "Ready".
+  private _wkspsWithFatalSettings = new Set<string>();
 
   // Called after a Python file debounce fires and step mappings have been rebuilt.
   // extension.ts registers this to re-validate diagnostics for all open feature files.
@@ -63,6 +66,10 @@ export class FileParser {
 
   public clearStepLoadError() {
     this._notifyStepLoadError(undefined);
+  }
+
+  public hasFatalSettings(): boolean {
+    return this._wkspsWithFatalSettings.size > 0;
   }
 
   private _notifyStatusChange(busy: boolean) {
@@ -522,6 +529,7 @@ export class FileParser {
       // don't hang and so a subsequent call (after the user fixes their settings) is not poisoned.
       if (!wkspSettings) {
         diagLog(`parseFilesForWorkspace: skipping ${wkspUri.path} — workspace settings unavailable (fatal config error already reported)`);
+        this._wkspsWithFatalSettings.add(wkspPath);
         this._finishedFeaturesParseForWorkspace[wkspPath] = true;
         this._finishedStepsParseForWorkspace[wkspPath] = true;
         this._cancelTokenSources[wkspPath].dispose();
@@ -538,6 +546,9 @@ export class FileParser {
         }
         return undefined;
       }
+      // Reaching here means settings construction succeeded for this workspace.
+      // Clear any prior fatal marker (fix-then-reload cycle).
+      this._wkspsWithFatalSettings.delete(wkspPath);
 
       const start = performance.now();
       const featureFileCount = await this._parseFeatureFiles(wkspSettings, testData, ctrl, this._cancelTokenSources[wkspPath].token,

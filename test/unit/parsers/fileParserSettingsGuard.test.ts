@@ -90,6 +90,21 @@ suite('fileParser - settings guard', () => {
       'guard must remain silent — configuration.ts already surfaced the FATAL error');
   });
 
+  test('hasFatalSettings() returns true after guard fires', async () => {
+    assert.strictEqual(fileParser.hasFatalSettings(), false, 'precondition: no fatals before first call');
+
+    await fileParser.parseFilesForWorkspace(
+      wkspUri,
+      {} as never,
+      {} as vscode.TestController,
+      'unit-test',
+      false,
+    );
+
+    assert.strictEqual(fileParser.hasFatalSettings(), true,
+      'guard must record this workspace as having fatal settings so the status item shows Error severity');
+  });
+
   test('fires status-change(false) so the "Behave: Parsing..." spinner clears', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const notifyStub = sinon.stub(fileParser as any, '_notifyStatusChange');
