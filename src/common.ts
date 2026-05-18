@@ -88,6 +88,41 @@ export class WkspError extends Error {
 }
 
 
+// Returns workspaceFolders that have explicit gs-behave-bdd.projectPath or
+// gs-behave-bdd.featuresPaths set in their settings but are MISSING from
+// `discoveredUris` — i.e. the user opted in to behave for that folder, but
+// discovery filtered the folder out (typically: projectPath dir doesn't exist).
+// extension.ts uses this to flag those workspaces on the parser so the language
+// status item flips to Error severity even though no parseFilesForWorkspace call
+// will fire for them.
+export function getConfiguredButExcludedWorkspaceFolders(
+  workspaceFolders: readonly vscode.WorkspaceFolder[] | undefined,
+  discoveredUris: vscode.Uri[],
+): vscode.Uri[] {
+  if (!workspaceFolders || workspaceFolders.length === 0) return [];
+  const discoveredSet = new Set(discoveredUris.map(u => u.path));
+  return workspaceFolders
+    .filter(f => !discoveredSet.has(f.uri.path))
+    .filter(f => {
+      const cfg = vscode.workspace.getConfiguration("gs-behave-bdd", f.uri);
+      const projInspect = cfg.inspect<string>("projectPath");
+      const featInspect = cfg.inspect<string[]>("featuresPaths");
+      const projectPathSet = !!(projInspect && (
+        projInspect.workspaceValue !== undefined ||
+        projInspect.workspaceFolderValue !== undefined ||
+        projInspect.globalValue !== undefined
+      ));
+      const featuresPathsSet = !!(featInspect && (
+        (Array.isArray(featInspect.workspaceValue) && featInspect.workspaceValue.length > 0) ||
+        (Array.isArray(featInspect.workspaceFolderValue) && featInspect.workspaceFolderValue.length > 0) ||
+        (Array.isArray(featInspect.globalValue) && featInspect.globalValue.length > 0)
+      ));
+      return projectPathSet || featuresPathsSet;
+    })
+    .map(f => f.uri);
+}
+
+
 // Wraps a reloadSettings call so a thrown WkspError surfaces a user-facing
 // notification with workspace context instead of bubbling up and aborting the
 // caller's loop. Returns true if reload succeeded, false if it failed.

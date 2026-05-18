@@ -72,6 +72,20 @@ export class FileParser {
     return this._wkspsWithFatalSettings.size > 0;
   }
 
+  // Marks a workspace as having fatal settings from outside the parse loop —
+  // used when discovery filtering excludes the workspace before parseFilesForWorkspace
+  // is reached (e.g. projectPath dir missing → workspace filtered by hasFeaturesFolder).
+  // Without this seam, the language-status item never flips to "Invalid Settings"
+  // for filtered-out workspaces because the parser's guard is unreachable.
+  public markWorkspaceFatalSettings(wkspUri: vscode.Uri) {
+    this._wkspsWithFatalSettings.add(wkspUri.path);
+    this._notifyStatusChange(false);
+  }
+
+  public clearWorkspaceFatalSettings(wkspUri: vscode.Uri) {
+    this._wkspsWithFatalSettings.delete(wkspUri.path);
+  }
+
   private _notifyStatusChange(busy: boolean) {
     this._statusChangeHandlers.forEach(h => h(busy));
   }
@@ -473,9 +487,16 @@ export class FileParser {
       testData.delete(item);
     }
 
-    for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
+    const wkspsToParse = getUrisOfWkspFoldersWithFeatures();
+    for (const wkspUri of wkspsToParse) {
       this.parseFilesForWorkspace(wkspUri, testData, ctrl, `clearTestItemsAndParseFilesForAllWorkspaces from ${intiator}`,
         firstRun, cancelToken);
+    }
+    // If discovery filtered out every workspace (e.g. all have bad projectPath
+    // settings), no parseFilesForWorkspace runs and the busy spinner — set by
+    // the initial activation block at extension.ts — never clears. Fire it here.
+    if (wkspsToParse.length === 0) {
+      this._notifyStatusChange(false);
     }
   }
 

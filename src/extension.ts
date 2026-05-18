@@ -6,7 +6,7 @@ import {
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, isFeatureFile,
   logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile,
   getDiscoveryEntry, basename, setProjectSwitchInProgress, WkspError,
-  reloadSettingsAndSurfaceError
+  reloadSettingsAndSurfaceError, getConfiguredButExcludedWorkspaceFolders
 } from './common';
 import { setConfigParseErrorDiagnostic, clearConfigParseErrorDiagnostic } from './handlers/configDiagnostics';
 import { StepFileStep } from './parsers/stepsParser';
@@ -255,6 +255,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       projectStatusBar.show();
     };
     updateProjectStatusBarFn = updateProjectStatusBar;
+    // Flag workspaces that opted in to behave (have explicit projectPath/featuresPaths)
+    // but were filtered out of discovery (typically: configured path doesn't exist on disk).
+    // Without this, the parser's guard is unreachable for those workspaces and the
+    // language-status item never flips to "Invalid Settings".
+    const excludedAtActivation = getConfiguredButExcludedWorkspaceFolders(
+      vscode.workspace.workspaceFolders, getUrisOfWkspFoldersWithFeatures());
+    excludedAtActivation.forEach(uri => parser.markWorkspaceFatalSettings(uri));
     parser.clearTestItemsAndParseFilesForAllWorkspaces(testData, ctrl, "activate", true);
 
     const cleanExtensionTempDirectoryCancelSource = new vscode.CancellationTokenSource();
@@ -1188,7 +1195,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         // (also, when a workspace is added/removed/renamed (forceRefresh), we need to clear down and reparse all test nodes to rebuild the top level nodes)
 
         // Phase 3: Re-surface discovery results after config change
-        updateDiscoveryUX(getUrisOfWkspFoldersWithFeatures(), !!forceFullRefresh);
+        const discoveredAfterChange = getUrisOfWkspFoldersWithFeatures();
+        updateDiscoveryUX(discoveredAfterChange, !!forceFullRefresh);
+
+        // Re-evaluate the configured-but-excluded set after the config change.
+        // First clear any prior fatal markers for workspaces that are now valid,
+        // then mark the current excluded set. Order matters: clear before mark
+        // so a fix-then-break edit cycle settles to the correct final state.
+        const allFolders = vscode.workspace.workspaceFolders ?? [];
+        const discoveredSet = new Set(discoveredAfterChange.map(u => u.path));
+        for (const folder of allFolders) {
+          if (discoveredSet.has(folder.uri.path)) {
+            parser.clearWorkspaceFatalSettings(folder.uri);
+          }
+        }
+        const excludedNow = getConfiguredButExcludedWorkspaceFolders(allFolders, discoveredAfterChange);
+        excludedNow.forEach(uri => parser.markWorkspaceFatalSettings(uri));
 
         parser.clearTestItemsAndParseFilesForAllWorkspaces(testData, ctrl, "configurationChangedHandler", false);
       }
