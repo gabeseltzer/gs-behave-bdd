@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { config } from './configuration';
-import { getUrisOfWkspFoldersWithFeatures } from './common';
+import { getUrisOfWkspFoldersWithFeatures, WkspError, WkspErrorAction } from './common';
 
 
 export class Logger {
@@ -124,11 +124,15 @@ export class Logger {
       text = `${error}`;
     }
 
-    this._show(text, wkspUri, run, DiagLogType.error);
+    // If the source error is a WkspError carrying actions, render them as toast buttons
+    // instead of the default "OK". Sentinel command "__showOutput" routes to logger.show().
+    const actions = error instanceof WkspError ? error.actions : undefined;
+    this._show(text, wkspUri, run, DiagLogType.error, actions);
   }
 
 
-  private _show = (text: string, wkspUri: vscode.Uri | undefined, run: vscode.TestRun | undefined, logType: DiagLogType) => {
+  private _show = (text: string, wkspUri: vscode.Uri | undefined, run: vscode.TestRun | undefined, logType: DiagLogType,
+                   actions?: WkspErrorAction[]) => {
 
     diagLog(text, wkspUri, logType);
 
@@ -167,7 +171,23 @@ export class Logger {
         vscode.window.showWarningMessage(winText, "OK");
         break;
       case DiagLogType.error:
-        vscode.window.showErrorMessage(winText, "OK");
+        if (actions && actions.length > 0) {
+          const labels = actions.map(a => a.label);
+          // capture wkspUri locally so the .then() closure routes [Show Details] correctly
+          const targetUri = wkspUri;
+          void Promise.resolve(vscode.window.showErrorMessage(winText, ...labels)).then(picked => {
+            if (!picked) return;
+            const action = actions.find(a => a.label === picked);
+            if (!action) return;
+            if (action.command === "__showOutput") {
+              if (targetUri) this.show(targetUri);
+              return;
+            }
+            void vscode.commands.executeCommand(action.command, ...(action.args ?? []));
+          });
+        } else {
+          vscode.window.showErrorMessage(winText, "OK");
+        }
         break;
     }
 
