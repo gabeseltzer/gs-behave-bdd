@@ -526,6 +526,16 @@ export class FileParser {
         this._finishedStepsParseForWorkspace[wkspPath] = true;
         this._cancelTokenSources[wkspPath].dispose();
         delete this._cancelTokenSources[wkspPath];
+        // Without this, the "Behave: Parsing..." status item spins forever when
+        // every workspace has invalid settings (no other parse completes to flip
+        // the busy flag). Mirror the all-workspaces check from the happy path.
+        const stillParsing = getUrisOfWkspFoldersWithFeatures()
+          .filter(u => !this._finishedFeaturesParseForWorkspace[u.path]);
+        if (stillParsing.length === 0) {
+          this._finishedFeaturesParseForAllWorkspaces = true;
+          this._finishedStepsParseForAllWorkspaces = true;
+          this._notifyStatusChange(false);
+        }
         return undefined;
       }
 
@@ -622,6 +632,10 @@ export class FileParser {
         this._errored = true;
         config.logger.showError(e, wkspUri);
       }
+      // Clear the "Behave: Parsing..." status item — the happy path's status
+      // notification at line 575 is unreachable when we throw, and prior code
+      // left the spinner running indefinitely on parse failure.
+      this._notifyStatusChange(false);
 
       return;
     }
