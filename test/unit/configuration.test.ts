@@ -95,6 +95,41 @@ suite('configuration: workspaceSettings getter failure caching (260518-hyz)', ()
     assert.strictEqual(ctorSpy.callCount, 2,
       'after reloadSettings fails, the getter must short-circuit on the re-cached failure');
   });
+
+  test('isWorkspaceSettingsFailed reflects the cache state', () => {
+    // Before any access: not failed.
+    assert.strictEqual(configModule.config.isWorkspaceSettingsFailed(badUri), false,
+      'precondition: workspace is not marked failed before first access');
+
+    // Trigger failure via getter — ctor throws, cache populates.
+    void configModule.config.workspaceSettings;
+
+    assert.strictEqual(configModule.config.isWorkspaceSettingsFailed(badUri), true,
+      'after a failed ctor, isWorkspaceSettingsFailed must return true so callers (e.g. Phase 21 migrations) ' +
+      'can skip a redundant reloadSettings — preventing duplicate settings dumps in the output channel');
+  });
+
+  test('isWorkspaceSettingsFailed flips back to false after a successful reloadSettings', () => {
+    // Trigger initial failure + cache.
+    void configModule.config.workspaceSettings;
+    assert.strictEqual(configModule.config.isWorkspaceSettingsFailed(badUri), true);
+
+    // Now restore the real ctor so reloadSettings can succeed for the same uri.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (settingsModule as any).WorkspaceSettings = function NonThrowingCtor(this: unknown) {
+      // minimal shape — the test only cares about the cache flag, not the instance contents
+      return {} as never;
+    };
+
+    try {
+      configModule.config.reloadSettings(badUri);
+    } catch {
+      // shouldn't throw with the non-throwing ctor, but be defensive
+    }
+
+    assert.strictEqual(configModule.config.isWorkspaceSettingsFailed(badUri), false,
+      'after a successful reloadSettings the failure flag must clear (fix-then-reload cycle)');
+  });
 });
 
 

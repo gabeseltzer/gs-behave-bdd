@@ -12,6 +12,7 @@ export interface Configuration {
   readonly workspaceSettings: { [wkspUriPath: string]: WorkspaceSettings };
   readonly globalSettings: WindowSettings;
   reloadSettings(wkspUri: vscode.Uri, testConfig?: vscode.WorkspaceConfiguration): void;
+  isWorkspaceSettingsFailed(wkspUri: vscode.Uri): boolean;
   getPythonExecutable(wkspUri: vscode.Uri, wkspName: string): Promise<string>;
   dispose(): void;
 }
@@ -56,6 +57,10 @@ class ExtensionConfiguration implements Configuration {
       return ExtensionConfiguration._configuration;
     ExtensionConfiguration._configuration = new ExtensionConfiguration();
     return ExtensionConfiguration._configuration;
+  }
+
+  public isWorkspaceSettingsFailed(wkspUri: vscode.Uri): boolean {
+    return this._failedSettingsWorkspaces.has(wkspUri.path);
   }
 
   // called by onDidChangeConfiguration

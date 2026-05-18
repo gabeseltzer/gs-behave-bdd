@@ -370,6 +370,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     // Pitfall 8: reloadSettings is synchronous — do NOT await.
     await Promise.all(
       getUrisOfWkspFoldersWithFeatures().map(async (wkspUri) => {
+        // Skip workspaces that already failed settings construction in the activation
+        // parser pass — re-attempting reloadSettings would re-run the WorkspaceSettings
+        // ctor, re-dump settings to the output channel, and re-throw the same FATAL.
+        // The failure is already cached + the user-facing toast already fired.
+        if (config.isWorkspaceSettingsFailed(wkspUri)) return;
         try {
           const hits: ConsentHit[] = [];
           await evaluateAllMigrations(wkspUri, {
