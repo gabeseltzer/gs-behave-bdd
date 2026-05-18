@@ -516,6 +516,18 @@ export class FileParser {
       this._cancelTokenSources[wkspPath] = new vscode.CancellationTokenSource();
       const wkspSettings: WorkspaceSettings = config.workspaceSettings[wkspUri.path];
 
+      // Guard: if WorkspaceSettings construction threw a FATAL error, the configuration getter has already
+      // surfaced exactly one user-facing notification and left _resourceSettings[wkspUri.path] unpopulated.
+      // Silently no-op here — mark parse state as finished and dispose the cancel token so other waiters
+      // don't hang and so a subsequent call (after the user fixes their settings) is not poisoned.
+      if (!wkspSettings) {
+        diagLog(`parseFilesForWorkspace: skipping ${wkspUri.path} — workspace settings unavailable (fatal config error already reported)`);
+        this._finishedFeaturesParseForWorkspace[wkspPath] = true;
+        this._finishedStepsParseForWorkspace[wkspPath] = true;
+        this._cancelTokenSources[wkspPath].dispose();
+        delete this._cancelTokenSources[wkspPath];
+        return undefined;
+      }
 
       const start = performance.now();
       const featureFileCount = await this._parseFeatureFiles(wkspSettings, testData, ctrl, this._cancelTokenSources[wkspPath].token,
