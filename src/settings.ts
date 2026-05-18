@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   findHighestTargetParentDirectorySync, findSubdirectorySync, getUrisOfWkspFoldersWithFeatures,
-  getWorkspaceFolder, uriId, urisMatch, WkspError,
+  getWorkspaceFolder, uriId, urisMatch, WkspError, WkspErrorAction,
   DiscoverySource, DiscoveryEntry, getDiscoveryEntry, hasExplicitSetting,
   normalizeFeaturesPathEntry,
 } from './common';
@@ -150,7 +150,11 @@ export class WorkspaceSettings {
     if (this.workspaceRelativeProjectPath) {
       this.projectUri = vscode.Uri.joinPath(wkspUri, this.workspaceRelativeProjectPath);
       if (!fs.existsSync(this.projectUri.fsPath)) {
-        this._fatalErrors.push(`project path ${this.projectUri.fsPath} not found.`);
+        // 260518-hyz: quote the workspace-relative value and include the resolved path
+        // so users can see both what they typed and where it resolved.
+        this._fatalErrors.push(
+          `project path "${this.workspaceRelativeProjectPath}" (resolved to ${this.projectUri.fsPath}) not found.`
+        );
       }
     } else if (!hasExplicitSetting(wkspConfig, "projectPath")
                && entry?.source === 'config-file' && entry.configFileUri) {
@@ -210,9 +214,14 @@ export class WorkspaceSettings {
     );
 
     // D-06 per-entry existence check
-    for (const u of this.featuresUris) {
+    // 260518-hyz: include the project-relative value (quoted) alongside the
+    // resolved path so the user sees both their setting and where it pointed.
+    for (let idx = 0; idx < this.featuresUris.length; idx++) {
+      const u = this.featuresUris[idx];
       if (!fs.existsSync(u.fsPath)) {
-        this._fatalErrors.push(`features path ${u.fsPath} not found.`);
+        this._fatalErrors.push(
+          `features path "${projectRelativeFeaturesPaths[idx]}" (resolved to ${u.fsPath}) not found.`
+        );
       }
     }
 
@@ -222,6 +231,10 @@ export class WorkspaceSettings {
     );
 
     // stepsSearchUris: per-entry via existing helpers
+    // 260518-hyz Task 4: defer the "No steps folder" warn until AFTER all fatal-error
+    // collectors have run so we can suppress it when the real problem is a broken
+    // projectPath/featuresPaths (which makes the missing-steps complaint derivative).
+    let noStepsFolder = false;
     this.stepsSearchUris = this.featuresUris.map(featUri => {
       let stepsSearchUri = vscode.Uri.joinPath(featUri);
       if (!findSubdirectorySync(stepsSearchUri.fsPath, "steps")) {
@@ -231,7 +244,7 @@ export class WorkspaceSettings {
         if (stepsSearchFsPath) {
           stepsSearchUri = vscode.Uri.file(stepsSearchFsPath);
         } else {
-          logger.showWarn(`No "steps" folder found.`, this.uri);
+          noStepsFolder = true;
         }
       }
       return stepsSearchUri;
@@ -283,7 +296,32 @@ export class WorkspaceSettings {
     }
 
 
+    // 260518-hyz Task 4: only emit the steps-folder warn when no fatal config errors
+    // exist. Otherwise the derivative warn piles on top of the genuine FATAL toast.
+    if (noStepsFolder && this._fatalErrors.length === 0) {
+      logger.showWarn(`No "steps" folder found.`, this.uri);
+    }
+
     this.logSettings(logger, winSettings);
+  }
+
+  /**
+   * 260518-hyz Task 3: derives the short, user-facing toast text from the first
+   * fatal error. The verbose multi-line context is logged separately to the
+   * output channel; only this concise sentence appears on the notification.
+   */
+  private buildFatalToast(): string {
+    const first = this._fatalErrors[0] ?? '';
+    // Extract the quoted setting value (the first "..." token) from the per-error
+    // sentences emitted above so the toast reads naturally.
+    const quotedMatch = first.match(/^(project path|features path) "([^"]+)"/);
+    if (this._fatalErrors.length === 1 && quotedMatch) {
+      const kind = quotedMatch[1]; // "project path" | "features path"
+      const value = quotedMatch[2];
+      return `Behave BDD: ${kind} "${value}" not found in workspace "${this.name}". Tests cannot load.`;
+    }
+    // Multiple fatals OR an unrecognized shape → fall back to a generic message.
+    return `Behave BDD: workspace "${this.name}" has invalid settings. Tests cannot load.`;
   }
 
 
@@ -352,9 +390,23 @@ export class WorkspaceSettings {
     logger.logInfo(`\n${this.name} workspace settings:\n${JSON.stringify(rscSettingsDic, null, 2)}`, this.uri);
 
     if (this._fatalErrors.length > 0) {
-      throw new WkspError(`\nFATAL error due to invalid workspace setting in workspace "${this.name}". Extension cannot continue. ` +
+      // 260518-hyz Task 3: write the verbose context to the output channel BEFORE
+      // throwing so the user can find the full list of failures via [Show Details],
+      // while the toast itself carries only a single short sentence.
+      logger.logInfo(
+        `\nFATAL error due to invalid workspace setting in workspace "${this.name}". Extension cannot continue.\n` +
         `${this._fatalErrors.join("\n")}\n` +
-        `NOTE: fatal errors may require you to restart vscode after correcting the problem.) `, this.uri);
+        `NOTE: fatal errors may require you to restart vscode after correcting the problem.`,
+        this.uri,
+      );
+
+      const shortMsg = this.buildFatalToast();
+      const actions: WkspErrorAction[] = [
+        { label: "Open Settings", command: "workbench.action.openSettings", args: ["gs-behave-bdd.projectPath"] },
+        { label: "Show Details", command: "__showOutput" },
+        { label: "Reload Window", command: "workbench.action.reloadWindow" },
+      ];
+      throw new WkspError(shortMsg, this.uri, undefined, actions);
     }
   }
 
