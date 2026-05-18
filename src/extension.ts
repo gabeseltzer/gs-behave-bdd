@@ -1152,7 +1152,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
             continue;
           }
 
-          config.reloadSettings(wkspUri);
+          // Per-workspace try/catch: reloadSettings throws WkspError when the
+          // user breaks their settings mid-session (e.g. types a bad projectPath).
+          // Without this, the throw bubbles out of the loop and skips the parse
+          // call below, so the language-status item never flips to "Invalid Settings".
+          // The thrown error is surfaced here with workspace context; the parser's
+          // guard will set the fatal-settings marker on the next parseFilesForWorkspace.
+          try {
+            config.reloadSettings(wkspUri);
+          } catch (e: unknown) {
+            config.logger.showError(e, wkspUri);
+          }
           const oldWatchers = wkspWatchers.get(wkspUri);
           if (oldWatchers)
             oldWatchers.forEach(w => w.dispose());
