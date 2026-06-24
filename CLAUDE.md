@@ -50,7 +50,7 @@ An enhancement to the gs-behave-bdd VS Code extension that automatically discove
 - Python 3.10.15+ - Step discovery and behave integration via `src/python/discover.py`
 - JavaScript - Configuration files and build scripts
 ## Runtime
-- Node.js 18.17.1 - Extension runtime (required by VSCode API)
+- Node.js 22.21.0 - Dev/build/test toolchain runtime (managed via .tool-versions)
 - Python 3.10.15+ - For behave test execution and step discovery
 - npm (with package-lock.json) - Node dependencies
 - uv - Python package manager (`uv pip install` for dependencies, configured in `pyproject.toml`)
@@ -86,14 +86,14 @@ An enhancement to the gs-behave-bdd VS Code extension that automatically discove
 - `tsconfig.json` - TypeScript compiler options (target ES2021, strict mode)
 - `.eslintrc.js` - ESLint rules (extends recommended + @typescript-eslint)
 - `webpack.config.js` - Entry: `src/extension.ts`, output: `dist/extension.js`
-- `.tool-versions` - Node.js 18.17.1 (for asdf/mise version managers)
+- `.tool-versions` - Node.js 22.21.0 (for asdf/mise version managers)
 - `pyproject.toml` - Python project metadata and tool configuration
 - `dist/extension.js` - Bundled and minified extension (webpack output)
 - `bundled/libs/` - Bundled behave 1.3.3 installed via `uv pip install --target`
 ## Platform Requirements
 - Operating System: Windows, macOS, Linux
 - VSCode: ^1.82.0
-- Node.js: 18.17.1 (managed via .tool-versions)
+- Node.js: 22.21.0 (managed via .tool-versions)
 - Python: 3.10.15+ (for step discovery and running tests)
 - VSCode: ^1.82.0
 - VSCode Python Extension (ms-python.python) - **REQUIRED** dependency
