@@ -3,12 +3,13 @@ import { WorkspaceSettings } from "../settings";
 import { uriId, sepr, basename, getLines, getWorkspaceUriForFile } from '../common';
 import { diagLog } from '../logger';
 import { config } from '../configuration';
-import { featureRe, featureMultiLineRe, scenarioRe, scenarioOutlineRe, examplesRe, featureFileStepRe, tagRe, textBlockDelimiterRe, tableRowRe } from './gherkinPatterns';
+import { featureRe, featureMultiLineRe, backgroundRe, scenarioRe, scenarioOutlineRe, examplesRe, featureFileStepRe, ruleRe, tagRe, textBlockDelimiterRe, tableRowRe } from './gherkinPatterns';
 
 const commentedFeatureMultilineReStr = /^\s*#.*Feature:(.*)$/im;
 
 const featureFileSteps = new Map<string, FeatureFileStep>();
 const featureTags = new Map<string, FeatureTag>();
+const featureParseErrors = new Map<string, FeatureParseError>();
 
 export class FeatureTag {
   constructor(
@@ -32,6 +33,20 @@ export class FeatureFileStep {
   ) { }
 }
 
+// Represents a Gherkin structural problem found while parsing a feature file (e.g. an
+// And/But step with no preceding Given/When/Then to inherit a step type from). behave
+// itself rejects such files with a ParserError; we record them so a diagnostic can flag
+// them to the user instead of silently swallowing the file.
+export class FeatureParseError {
+  constructor(
+    public readonly key: string,
+    public readonly uri: vscode.Uri,
+    public readonly fileName: string,
+    public readonly range: vscode.Range,
+    public readonly message: string,
+  ) { }
+}
+
 export const getFeatureFileSteps = (featuresUri: vscode.Uri) => {
   const featuresUriMatchString = uriId(featuresUri);
   return [...featureFileSteps].filter(([k,]) => k.startsWith(featuresUriMatchString));
@@ -40,6 +55,16 @@ export const getFeatureFileSteps = (featuresUri: vscode.Uri) => {
 export const getFeatureTags = (featuresUri: vscode.Uri) => {
   const featuresUriMatchString = uriId(featuresUri);
   return [...featureTags.values()].filter(t => t.key.startsWith(featuresUriMatchString));
+}
+
+export const getFeatureParseErrors = (featuresUri: vscode.Uri) => {
+  const featuresUriMatchString = uriId(featuresUri);
+  return [...featureParseErrors.values()].filter(e => e.key.startsWith(featuresUriMatchString));
+}
+
+const recordParseError = (uri: vscode.Uri, fileName: string, range: vscode.Range, message: string) => {
+  const key = `${uriId(uri)}${sepr}${range.start.line}`;
+  featureParseErrors.set(key, new FeatureParseError(key, uri, fileName, range, message));
 }
 
 export const getFeatureTagByPosition = (uri: vscode.Uri, position: vscode.Position): FeatureTag | undefined => {
@@ -64,6 +89,12 @@ export const deleteFeatureFileSteps = (featuresUri: vscode.Uri) => {
   for (const [key,] of featureTags) {
     if (key.startsWith(featuresUriMatchString)) {
       featureTags.delete(key);
+    }
+  }
+
+  for (const [key,] of featureParseErrors) {
+    if (key.startsWith(featuresUriMatchString)) {
+      featureParseErrors.delete(key);
     }
   }
 }
@@ -104,7 +135,20 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
   const lines = getLines(content);
   let fileScenarios = 0;
   let fileSteps = 0;
-  let lastStepType = "given";
+  // Step-type tracking mirrors behave's parser (bundled/libs/behave/parser.py):
+  // `last_step_type` is None at the start of every container (Background/Scenario) and is
+  // only consulted mid-sequence; an And/But step with no in-container predecessor falls
+  // back to the enclosing Background's last step type. We use `undefined` for behave's None
+  // so we can detect the invalid "And/But with nothing to inherit from" case (which behave
+  // rejects with a ParserError).
+  let lastStepType: string | undefined = undefined;
+  // Feature-level and Rule-level Backgrounds are tracked separately: a Rule without its own
+  // Background inherits the feature Background (behave's background.inherited_steps), NOT a
+  // previous Rule's Background. See parser.py _select_last_background_step_type().
+  let featureBackgroundLastStepType: string | undefined = undefined;
+  let ruleBackgroundLastStepType: string | undefined = undefined;
+  let inBackground = false;
+  let inRule = false;
   let insideStepTextBlock = false;
 
   // Scenario Outline / Examples tracking
@@ -121,6 +165,12 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
   for (const [key, featureFileStep] of featureFileSteps) {
     if (uriId(featureFileStep.uri) === fileUriMatchString)
       featureFileSteps.delete(key);
+  }
+
+  // clear all existing parse errors for this feature file
+  for (const [key, featureParseError] of featureParseErrors) {
+    if (uriId(featureParseError.uri) === fileUriMatchString)
+      featureParseErrors.delete(key);
   }
 
   // clear all existing tags for this feature file
@@ -206,22 +256,97 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
       inExamplesSection = false;
       const text = step[0].trim();
       const matchText = step[2].trim();
-
-      let stepType = step[1].trim().toLowerCase();
-      if (stepType === "and" || stepType === "but")
-        stepType = lastStepType;
-      else
-        lastStepType = stepType;
-
+      const keyword = step[1].trim();
       const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + step[0].length));
+
+      // Resolve the step type, mirroring behave's parse_step().
+      //  - And/But inherit the previous step's type. With no in-container predecessor they
+      //    fall back to the enclosing Background's last step type; when there is none behave
+      //    raises a ParserError — we record a diagnostic and fall back to "given" so
+      //    navigation/mappings keep working instead of discarding the file.
+      //  - `*` (generic bullet) also inherits the previous step's type, but as the first
+      //    step it defaults to "given" and does NOT consult the Background (unlike And/But).
+      //  - Given/When/Then set their own type.
+      let stepType: string;
+      const keywordLower = keyword.toLowerCase();
+      // The Background a leading And/But inherits from: the enclosing Rule's own Background
+      // if it has one, otherwise the feature Background.
+      const inheritedBackgroundStepType = inRule
+        ? (ruleBackgroundLastStepType ?? featureBackgroundLastStepType)
+        : featureBackgroundLastStepType;
+      if (keywordLower === "and" || keywordLower === "but") {
+        if (lastStepType !== undefined) {
+          stepType = lastStepType;
+        }
+        else if (inheritedBackgroundStepType !== undefined) {
+          stepType = inheritedBackgroundStepType;
+          lastStepType = inheritedBackgroundStepType;
+        }
+        else {
+          recordParseError(uri, fileName, range,
+            `'${keyword}' step has no preceding Given/When/Then step (and no Background step to inherit from). behave will fail to parse this feature.`);
+          stepType = "given";
+        }
+      }
+      else if (keywordLower === "*") {
+        if (lastStepType !== undefined) {
+          stepType = lastStepType;
+        }
+        else {
+          stepType = "given";
+          lastStepType = "given";
+        }
+      }
+      else {
+        stepType = keywordLower;
+        lastStepType = keywordLower;
+      }
+
+      // Remember the Background's last (resolved) step type so a leading And/But in a
+      // following scenario inherits from it, matching behave. Track feature- and
+      // Rule-level Backgrounds separately.
+      if (inBackground) {
+        if (inRule)
+          ruleBackgroundLastStepType = stepType;
+        else
+          featureBackgroundLastStepType = stepType;
+      }
+
       const key = `${uriId(uri)}${sepr}${range.start.line}`;
       featureFileSteps.set(key, new FeatureFileStep(key, uri, fileName, range, text, matchText, stepType));
       fileSteps++;
       continue;
     }
 
+    const background = backgroundRe.exec(line);
+    if (background) {
+      inBackground = true;
+      // A Background starts a fresh step sequence (behave tracks last_step_type from its
+      // first step).
+      lastStepType = undefined;
+      continue;
+    }
+
+    const rule = ruleRe.exec(line);
+    if (rule) {
+      // Entering a Rule: its scenarios inherit the Rule's own Background if present, else
+      // the feature Background. Reset the Rule-level Background tracker so a previous Rule's
+      // Background does not leak into this one.
+      inRule = true;
+      inBackground = false;
+      ruleBackgroundLastStepType = undefined;
+      lastStepType = undefined;
+      continue;
+    }
+
     const scenario = scenarioRe.exec(line);
     if (scenario) {
+      // Each scenario starts a fresh step-type context (behave resets last_step_type to
+      // None). A leading And/But then inherits the enclosing Background's last step type
+      // (resolved when the step is parsed), or — when there's no Background — has nothing to
+      // inherit (the invalid case flagged above).
+      inBackground = false;
+      lastStepType = undefined;
       const scenarioName = scenario[2].trim();
       const isOutline = scenarioOutlineRe.exec(line) !== null;
       const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + scenario[0].length));

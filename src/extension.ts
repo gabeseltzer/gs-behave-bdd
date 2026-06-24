@@ -39,6 +39,7 @@ import { StepCodeLensProvider } from './handlers/codeLensProvider';
 import { validateFixtureTags } from './handlers/fixtureDiagnostics';
 import { validateStepDefinitions } from './handlers/stepDiagnostics';
 import { validateExecuteSteps } from './handlers/executeStepsDiagnostics';
+import { validateGherkinStructure } from './handlers/gherkinStructureDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
 import { startWatchingConfigFiles, clearConfigDebounceTimers } from './watchers/configWatcher';
 import { scanForBehaveConfig, setCachedScanResult, getCachedScanResult, clearScanResultCache, ScanResultEntry, ScanResult } from './discovery/configScanner';
@@ -475,6 +476,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         if (isFeatureFile(document.uri)) {
           validateFixtureTags(document);
           validateStepDefinitions(document);
+          validateGherkinStructure(document);
         }
         else if (couldBePythonStepsFile(document.uri)) {
           // step defs changed - re-validate execute_steps strings in open .py files
@@ -911,6 +913,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           await parser.stepsParseComplete(5000, "onDidOpenTextDocument");
           validateFixtureTags(document);
           validateStepDefinitions(document);
+          validateGherkinStructure(document);
         }
         else if (couldBePythonStepsFile(document.uri)) {
           if (!initialParsingComplete) {
@@ -935,6 +938,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           validateFixtureTags(document);
           validateStepDefinitions(document);
           validateExecuteSteps(document);
+          validateGherkinStructure(document);
         }
         refreshAllExecuteStepsParamDecorations();
       }
@@ -1082,6 +1086,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
             if (urisMatch(editor.document.uri, event.document.uri))
               updateExecuteStepsParamDecorations(editor);
           }
+          // flag invalid leading And/But steps in feature files
+          validateGherkinStructure(event.document);
 
           // If enviroment file changes, re-validate fixtures in all open feature files
           if (isEnvFile) {

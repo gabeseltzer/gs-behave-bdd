@@ -8,7 +8,9 @@ export const scenarioOutlineRe = /^\s*(Scenario Outline|Scenario Template):(.*)$
 export const examplesRe = /^\s*(Examples|Scenarios):(.*)$/i;
 export const ruleRe = /^\s*Rule:(.*)$/i;
 export const stepRe = /^\s*(Given|When|Then|And|But|\*)(.*)$/i;
-export const featureFileStepRe = /^\s*(Given |When |Then |And |But )(.*)/i;
+// Leading step keywords. `* ` is behave's generic bullet keyword (valid for any step
+// type — it inherits the previous step's type, defaulting to "given" as the first step).
+export const featureFileStepRe = /^\s*(Given |When |Then |And |But |\* )(.*)/i;
 export const tagRe = /^\s*@(\S+)/;
 
 // Keyword pattern for embedded execute_steps() call-site scanning.
