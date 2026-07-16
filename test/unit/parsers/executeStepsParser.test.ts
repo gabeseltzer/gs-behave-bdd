@@ -556,6 +556,34 @@ suite('executeStepsParser', () => {
       assert.strictEqual(getExecuteStepsCallSteps(featuresUri).length, 0);
     });
 
+    test('sibling features roots where one URI is a string-prefix of the other are isolated (WR-04)', () => {
+      const featuresUriA = vscode.Uri.file('c:/exec-cache-test-5/features');
+      const featuresUriB = vscode.Uri.file('c:/exec-cache-test-5/features2');
+      const fileUriA = vscode.Uri.file('c:/exec-cache-test-5/features/steps/steps.py');
+      const fileUriB = vscode.Uri.file('c:/exec-cache-test-5/features2/steps/steps.py');
+      deleteExecuteStepsCallSteps(featuresUriA);
+      deleteExecuteStepsCallSteps(featuresUriB);
+
+      const content = [
+        'context.execute_steps("""',
+        '    Given a sibling-root thing',
+        '""")',
+      ].join('\n');
+      parseExecuteStepsFileContent(featuresUriA, content, fileUriA, 'test');
+      parseExecuteStepsFileContent(featuresUriB, content, fileUriB, 'test');
+
+      assert.strictEqual(getExecuteStepsCallSteps(featuresUriA).length, 1,
+        'root A must not see root B\'s call steps despite the string-prefix relationship');
+      assert.strictEqual(getExecuteStepsCallSteps(featuresUriB).length, 1);
+
+      deleteExecuteStepsCallSteps(featuresUriA);
+      assert.strictEqual(getExecuteStepsCallSteps(featuresUriA).length, 0);
+      assert.strictEqual(getExecuteStepsCallSteps(featuresUriB).length, 1,
+        'deleting root A\'s cache must not delete sibling root B\'s cache');
+
+      deleteExecuteStepsCallSteps(featuresUriB);
+    });
+
     test('getExecuteStepsCallStepAtLine returns the record at a known line and undefined off-line', () => {
       const featuresUri = vscode.Uri.file('c:/exec-cache-test-4/features');
       const fileUri = vscode.Uri.file('c:/exec-cache-test-4/features/steps/steps.py');

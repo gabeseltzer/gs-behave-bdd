@@ -326,14 +326,17 @@ export function parseExecuteStepsFileContent(featuresUri: vscode.Uri, content: s
 }
 
 export function getExecuteStepsCallSteps(featuresUri: vscode.Uri): ExecuteStepsCallStep[] {
-  const featuresUriMatchString = uriId(featuresUri);
+  // include the trailing separator so one features root that is a string-prefix of another
+  // (e.g. ".../features" vs ".../features2") can never match the sibling's cache keys (WR-04)
+  const featuresUriMatchString = uriId(featuresUri) + sepr;
   return [...executeStepsCallSteps]
     .filter(([k,]) => k.startsWith(featuresUriMatchString))
     .map(([, v]) => v);
 }
 
 export function deleteExecuteStepsCallSteps(featuresUri: vscode.Uri): void {
-  const featuresUriMatchString = uriId(featuresUri);
+  // trailing separator: see getExecuteStepsCallSteps (WR-04)
+  const featuresUriMatchString = uriId(featuresUri) + sepr;
   for (const [key,] of executeStepsCallSteps) {
     if (key.startsWith(featuresUriMatchString))
       executeStepsCallSteps.delete(key);
