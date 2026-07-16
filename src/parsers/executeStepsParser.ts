@@ -203,6 +203,15 @@ export function scanExecuteSteps(content: string, fileUri: vscode.Uri): { callSt
   callSiteRe.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = callSiteRe.exec(content)) !== null) {
+    // Skip likely commented-out call sites: a "#" anywhere between the start of the match's
+    // physical line and the match itself. This heuristic can rarely false-SKIP (a "#" inside an
+    // enclosing string on the same line), which is always safe under the skip-on-uncertainty
+    // policy - whereas emitting a call step for commented-out code is a guaranteed false positive.
+    const matchLineIdx = lineIndexFromOffset(lineStarts, match.index);
+    const beforeMatch = content.slice(lineStarts[matchLineIdx], match.index);
+    if (beforeMatch.includes('#'))
+      continue; // likely commented-out call site: skip silently
+
     const prefix = match[1] ?? '';
     const delim = match[2];
 
@@ -232,16 +241,22 @@ export function scanExecuteSteps(content: string, fileUri: vscode.Uri): { callSt
       if (closeCol === -1)
         continue; // unterminated single-line literal: skip silently
 
-      const body = lineText.substring(colOpenEnd, closeCol);
-      if (/\\n/.test(body))
-        continue; // backslash-n escape inside a single-line literal: skip silently (ambiguous multi-step content)
-
       bodyEndLine = openLineIdx;
       colCloseStart = closeCol;
       closeIndex = lineStarts[openLineIdx] + closeCol;
     }
 
     const afterDelimIndex = closeIndex + delim.length;
+    // Advance the scan position past the consumed literal so the next iteration never re-matches
+    // an "execute_steps(" occurrence INSIDE a literal body we already processed (CR-01).
+    callSiteRe.lastIndex = afterDelimIndex;
+
+    if (!isTriple) {
+      const body = lines[openLineIdx].substring(colOpenEnd, colCloseStart);
+      if (/\\n/.test(body))
+        continue; // backslash-n escape inside a single-line literal: skip silently (ambiguous multi-step content)
+    }
+
     const tail = findCallTail(content, afterDelimIndex).trim();
 
     if (tail.startsWith('+'))

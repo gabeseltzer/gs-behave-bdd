@@ -293,6 +293,54 @@ suite('executeStepsParser', () => {
       assert.strictEqual(invalidLines.length, 0);
     });
 
+    test('commented-out call site produces zero records (CR-01)', () => {
+      const content = '# context.execute_steps("Given a thing")';
+      const { callSteps, invalidLines } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0, 'commented-out call sites must not produce call steps');
+      assert.strictEqual(invalidLines.length, 0);
+    });
+
+    test('indented commented-out multi-line call site produces zero records (CR-01)', () => {
+      const content = [
+        'def helper(context):',
+        '    # context.execute_steps("""',
+        '    #     Given a thing',
+        '    # """)',
+      ].join('\n');
+      const { callSteps, invalidLines } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0);
+      assert.strictEqual(invalidLines.length, 0);
+    });
+
+    test('call site after a # on the same line produces zero records (CR-01)', () => {
+      const content = 'x = 1  # see also context.execute_steps("Given a thing")';
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0);
+    });
+
+    test('literal body mentioning execute_steps( is not rescanned as a nested call site (CR-01)', () => {
+      const content = [
+        'context.execute_steps("""',
+        '    Given a step that itself mentions execute_steps("Given nested")',
+        '""")',
+      ].join('\n');
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 1, 'the consumed literal body must not be rescanned for call sites');
+      assert.ok(callSteps[0].text.startsWith('Given a step that itself mentions'));
+    });
+
+    test('KNOWN LIMITATION: execute_steps example inside an enclosing docstring is still emitted (CR-01)', () => {
+      // Fully eliminating this false positive needs a string-aware pre-pass over the .py file.
+      // This test documents the current, known-limitation behavior so that any change to it
+      // (fix or regression) is caught and the test updated deliberately.
+      const content = [
+        'def helper(context):',
+        '    """Example: context.execute_steps("Given something")"""',
+      ].join('\n');
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 1, 'docstring-enclosed examples are a documented false-positive limitation');
+    });
+
     test('non-blank/non-comment/non-table/non-docstring line matching no keyword is an invalid-content record', () => {
       const content = [
         "context.execute_steps('''",
