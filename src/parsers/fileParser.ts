@@ -228,8 +228,16 @@ export class FileParser {
     for (const pyFile of allPyFiles) {
       if (cancelToken.isCancellationRequested)
         break;
-      const pyContent = await getContentFromFilesystem(pyFile);
-      execCallSitesFound += parseExecuteStepsFileContent(wkspSettings.featuresUri, pyContent, pyFile, caller);
+      try {
+        const pyContent = await getContentFromFilesystem(pyFile);
+        execCallSitesFound += parseExecuteStepsFileContent(wkspSettings.featuresUri, pyContent, pyFile, caller);
+      }
+      catch {
+        // a transient read failure for one file (deleted/renamed between findFiles and the
+        // read, e.g. branch switch or build clean) must never abort the whole workspace parse -
+        // the scanner is designed to never throw, so honour that here too (WR-05)
+        diagLog(`${caller}: could not read ${pyFile.path} for execute_steps scan, skipping`);
+      }
     }
     diagLog(`${caller}: _parseStepsFiles execute_steps scan took ${Math.round(performance.now() - execScanStart)}ms, found ${execCallSitesFound} call sites across ${allPyFiles.length} .py files`);
 
