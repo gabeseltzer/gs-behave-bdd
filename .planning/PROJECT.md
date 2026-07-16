@@ -21,9 +21,20 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 - v1.5.0: Migration registry (17 entries), per-scope evaluator with case 1/2/3 dispatch, consent UX, `behave-vsc` silent-read removal, Migrations Panel Webview, `activeProjectCache` invalidation paired with scan-shaping settings (5 phases, 20 plans)
 - 852 unit tests passing; 20 integration suites passing
 
+## Current Milestone: v1.6.0 execute_steps IDE Support
+
+**Goal:** Give behave's `context.execute_steps("...")` calls in Python files the same IDE support feature-file steps already have — validation, navigation, and reference counting.
+
+**Target features:**
+- Validation: Problems-pane diagnostic when an embedded step matches no step definition (Warning) or a line is invalid execute_steps content that would ParserError at runtime (Error)
+- Go-to-definition: ctrl+click/F12 on a step line inside an execute_steps string jumps to the step definition
+- Reference counting: execute_steps call sites count in the step CodeLens and all find-references surfaces
+
+**Key context:** No IDE anywhere supports this (research-confirmed differentiator). Scan scope: every `.py` under watched roots (the `allPyFiles` set), user-confirmed. False positives are the cardinal sin — f-strings/non-literal args are skipped silently. Branch `execute_steps-implementation`.
+
 ## Next Milestone Goals
 
-**v1.6.0 (TBD)** — focus area: duplicate-scenario detection rework. Today the extension uses local regex to find duplicate scenarios and surfaces them in the Problems pane; the regex over-reports false positives and misses the real duplicates that behave itself catches at runtime. Goal: rip out the regex detector and instead parse behave's own duplicate-scenario errors (with their locations) into Problems-pane diagnostics. Requirements + roadmap to be defined via `/gsd-new-milestone`.
+**v1.7.0 (TBD)** — focus area: duplicate-scenario detection rework. Today the extension uses local regex to find duplicate scenarios and surfaces them in the Problems pane; the regex over-reports false positives and misses the real duplicates that behave itself catches at runtime. Goal: rip out the regex detector and instead parse behave's own duplicate-scenario errors (with their locations) into Problems-pane diagnostics.
 
 ## Requirements
 
@@ -109,9 +120,9 @@ Zero-configuration project discovery: tests appear in the Test Explorer without 
 
 ### Active
 
-(Requirements for v1.6.0 — to be defined in REQUIREMENTS.md via `/gsd-new-milestone`.)
+(v1.6.0 execute_steps IDE Support — see REQUIREMENTS.md for scoped REQ-IDs: VALID, NAV, REFS, TEST categories.)
 
-Seed: duplicate-scenario detection rework — replace local regex detector with parser that lifts duplicate-scenario errors (and their file:line locations) directly from behave's output, surfaced in the Problems pane.
+Seed for v1.7.0: duplicate-scenario detection rework — replace local regex detector with parser that lifts duplicate-scenario errors (and their file:line locations) directly from behave's output, surfaced in the Problems pane.
 
 ### Out of Scope
 
@@ -200,4 +211,4 @@ Seed: duplicate-scenario detection rework — replace local regex detector with 
 This document evolves at phase transitions and milestone boundaries.
 
 ---
-*Last updated: 2026-05-15 — v1.5.0 Migration Consent & `behave-vsc` Cleanup shipped*
+*Last updated: 2026-07-15 — v1.6.0 execute_steps IDE Support milestone started*

@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.5.0
-milestone_name: Migration Consent & behave-vsc Cleanup
-status: Awaiting next milestone
-last_updated: "2026-05-15T19:09:20.891Z"
-last_activity: 2026-05-15 — Milestone v1.5.0 completed and archived
+milestone: v1.6.0
+milestone_name: execute_steps IDE Support
+status: planning
+last_updated: "2026-07-16T00:06:12.567Z"
+last_activity: 2026-07-16
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 20
-  completed_plans: 20
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-15 — v1.5.0 shipped)
 
 ## Current Position
 
-Phase: Milestone v1.5.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-05-15 — Milestone v1.5.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-16 — Milestone v1.6.0 started
 
 ## Performance Metrics
 
