@@ -64,6 +64,46 @@ suite('executeStepsParser', () => {
       assert.strictEqual(invalidLines.length, 0);
     });
 
+    test('non-raw literal containing an escaped quote is skipped silently (WR-03)', () => {
+      // source text (\") diverges from runtime text (") - emitting it would produce a step
+      // text that never matches the real step definition
+      const content = 'context.execute_steps("Given a \\"quoted\\" thing")';
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0);
+    });
+
+    test('non-raw triple-quoted literal containing a tab escape is skipped silently (WR-03)', () => {
+      const content = [
+        'context.execute_steps("""',
+        '    Given a\\tthing',
+        '""")',
+      ].join('\n');
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0);
+    });
+
+    test('backslash line-continuation inside a triple-quoted literal skips the whole call site (WR-03)', () => {
+      // one runtime step wrapped with "\" - emitting a truncated call step plus an invalid-line
+      // record for the continuation would be a false Phase-25 Error on valid code
+      const content = [
+        'context.execute_steps("""',
+        '    Given a thing \\',
+        '    that continues',
+        '""")',
+      ].join('\n');
+      const { callSteps, invalidLines } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0, 'the truncated step must not be emitted');
+      assert.strictEqual(invalidLines.length, 0, 'the continuation line must not become a false invalid-line record');
+    });
+
+    test('raw literal containing backslashes is scanned verbatim (WR-03)', () => {
+      // raw strings are safe: source text equals runtime text
+      const content = 'context.execute_steps(r"Given a path C:\\\\temp\\\\thing")';
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 1);
+      assert.strictEqual(callSteps[0].textWithoutType, 'a path C:\\\\temp\\\\thing');
+    });
+
     test('f-string prefix is skipped silently (lowercase)', () => {
       const content = [
         'name = "world"',

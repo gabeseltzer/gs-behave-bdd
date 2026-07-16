@@ -199,9 +199,10 @@ function scanBody(
  * the embedded Given/When/Then/And/But/* steps as ExecuteStepsCallStep records, plus any
  * non-recognisable content lines as ExecuteStepsInvalidLine records.
  *
- * Anything dynamic or unparseable (f-strings, b-prefix, non-literal args, `+` concatenation,
- * unterminated strings, `\n`-escaped single-line literals) is skipped SILENTLY - this is the
- * zero-false-positive guarantee the whole feature depends on. Never throws.
+ * Anything dynamic or unparseable (f-strings, b-prefix, non-literal args, concatenation or
+ * other non-formatting suffixes, unterminated strings, backslashes in non-raw literals) is
+ * skipped SILENTLY - this is the zero-false-positive guarantee the whole feature depends on.
+ * Never throws.
  */
 export function scanExecuteSteps(content: string, fileUri: vscode.Uri): { callSteps: ExecuteStepsCallStep[]; invalidLines: ExecuteStepsInvalidLine[] } {
   const callSteps: ExecuteStepsCallStep[] = [];
@@ -265,10 +266,14 @@ export function scanExecuteSteps(content: string, fileUri: vscode.Uri): { callSt
     // an "execute_steps(" occurrence INSIDE a literal body we already processed (CR-01).
     callSiteRe.lastIndex = afterDelimIndex;
 
-    if (!isTriple) {
-      const body = lines[openLineIdx].substring(colOpenEnd, colCloseStart);
-      if (/\\n/.test(body))
-        continue; // backslash-n escape inside a single-line literal: skip silently (ambiguous multi-step content)
+    // Non-raw literal containing ANY backslash: escape sequences (\n, \t, \") and backslash
+    // line-continuations make the source text diverge from the runtime text, so skip silently
+    // rather than emit step text behave will never see (WR-03). Raw-prefixed literals are safe:
+    // their source text IS their runtime text.
+    if (!/[rR]/.test(prefix)) {
+      const body = content.substring(openEndIndex, closeIndex);
+      if (body.includes('\\'))
+        continue; // escape sequence or line continuation in a non-raw literal: skip silently
     }
 
     const tailScan = findCallTail(content, afterDelimIndex);
