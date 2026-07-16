@@ -87,7 +87,7 @@ Audit: [milestones/v1.5.0-MILESTONE-AUDIT.md](milestones/v1.5.0-MILESTONE-AUDIT.
 
 ### 🚧 v1.6.0 execute_steps IDE Support (Phases 24-27) — IN PROGRESS
 
-- [ ] **Phase 24: Scanner + Mapping Funnel** - Discover execute_steps call sites across watched `.py` files and union them into reference-counting mappings
+- [x] **Phase 24: Scanner + Mapping Funnel** - Discover execute_steps call sites across watched `.py` files and union them into reference-counting mappings (completed 2026-07-16)
 - [ ] **Phase 25: Validation Diagnostics** - Problems-pane diagnostics for invalid/unmatched embedded steps, live-tracking the document
 - [ ] **Phase 26: Go-to-Definition** - Ctrl+click/F12 navigation from embedded steps to their step-definition function
 - [ ] **Phase 27: Integration Tests, Fixture & Docs** - End-to-end integration suite, dedicated fixture, and user-facing documentation
@@ -116,7 +116,7 @@ Audit: [milestones/v1.5.0-MILESTONE-AUDIT.md](milestones/v1.5.0-MILESTONE-AUDIT.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 24-03-PLAN.md — parse-cycle wiring (scan allPyFiles + per-workspace rebuild in initial-parse and debounced paths)
+- [x] 24-03-PLAN.md — parse-cycle wiring (scan allPyFiles + per-workspace rebuild in initial-parse and debounced paths)
 
 ### Phase 25: Validation Diagnostics
 
@@ -163,7 +163,7 @@ Audit: [milestones/v1.5.0-MILESTONE-AUDIT.md](milestones/v1.5.0-MILESTONE-AUDIT.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 24. Scanner + Mapping Funnel | 2/3 | In Progress|  |
+| 24. Scanner + Mapping Funnel | 3/3 | Complete   | 2026-07-16 |
 | 25. Validation Diagnostics | 0/? | Not started | - |
 | 26. Go-to-Definition | 0/? | Not started | - |
 | 27. Integration Tests, Fixture & Docs | 0/? | Not started | - |

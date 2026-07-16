@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: execute_steps IDE Support
-status: executing
-last_updated: "2026-07-16T15:26:52.808Z"
+status: verifying
+last_updated: "2026-07-16T15:34:54.128Z"
 last_activity: 2026-07-16
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 0
+  completed_plans: 3
+  percent: 25
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-15 — v1.6.0 milestone started)
 
 Phase: 24 (Scanner + Mapping Funnel) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-16
 
 ## Performance Metrics
@@ -73,6 +73,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - [Phase 16]: Plan 06: atomic mock surgery + 8-file fixture cascade. Singular featuresPath surface removed from TestWorkspaceConfig (D-17/DEP-06); 11 obsolete tests deleted, helper edge-case tests retargeted from featuresPath to projectPath to preserve coverage. 4 deferred Plan-05 failures resolved. Full unit suite 696 passing 0 failing. 34 migration tests preserved (D-MOD regression bar GREEN). Phase 16 functionally complete.
 - [Phase 24]: Plan 01: scanExecuteSteps pure scanner + cached parseExecuteStepsFileContent shipped in executeStepsParser.ts; executeStepsKeywordRe net-new *-aware export in gherkinPatterns.ts. Skips silently on f/b prefixes, non-literal args, + concatenation, unterminated strings, backslash-n escapes. Leading And/But/* with no prior step marked isAmbiguousType=true (raw keyword preserved for Plan 02 bucket-fallback matching). 27 new unit tests; 948 passing (7 pre-existing unrelated gherkinStructureDiagnostics failures confirmed out of scope).
 - [Phase 24]: Plan 02: parallel executeStepsMappings array + union edit in getStepMappingsForStepsFileFunction ships REFS-01/02/03 with zero consumer changes; getStepMappings stays exec-free (REFS-04 regression guard passing). rebuildExecuteStepsMappings/getStepFileStepForExecuteStep/matchExecuteStepsContent added; ambiguous-type (leading And/But/*) call steps resolved via given/when/then bucket fallback. 956 unit tests passing (up from 948).
+- [Phase 24]: Plan 03: wired allPyFiles execute_steps scan into _parseStepsFiles (independent of behave subprocess) and rebuildExecuteStepsMappings once per workspace at both the initial-parse and debounced-reparse rebuild insertion points; debounced path rescans the edited .py (any watched file, not just isStepsFile) before rebuild. Full existing unit suite stays green (956 passing) proving REFS-04 zero-behavior-change.
 
 ### v1.4.0 Decisions
 
@@ -165,6 +166,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 | Phase 021 P01 | 25min | 3 tasks | 3 files |
 | Phase 24 P01 | 45min | 2 tasks | 3 files |
 | Phase 24 P02 | 35min | 2 tasks | 2 files |
+| Phase 24 P03 | 20min | 2 tasks | 1 files |
 
 ## Session Continuity
 
