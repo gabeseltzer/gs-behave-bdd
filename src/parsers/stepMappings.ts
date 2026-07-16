@@ -4,7 +4,7 @@ import { parser } from '../extension';
 import { diagLog, DiagLogType } from '../logger';
 import { getStepFileSteps, parseRepWildcard, StepFileStep } from './stepsParser';
 import { FeatureFileStep, getFeatureFileSteps } from './featureParser';
-import { ExecuteStepsCallStep, getExecuteStepsCallSteps, scanExecuteSteps } from './executeStepsParser';
+import { ExecuteStepsCallStep, ExecuteStepsInvalidLine, getExecuteStepsCallSteps, scanExecuteSteps } from './executeStepsParser';
 import { refreshStepReferencesView } from '../handlers/findStepReferencesHandler';
 import { performance } from 'perf_hooks';
 import { retriggerSemanticHighlighting } from '../handlers/semHighlightProvider';
@@ -176,17 +176,21 @@ export function getStepFileStepForExecuteStep(fileUri: vscode.Uri, lineNo: numbe
 }
 
 
-// Live-text matching for Phase 25's diagnostics: scans content for execute_steps() call sites
+// Live-text matching for execute_steps diagnostics: scans content for execute_steps() call sites
 // and matches each against the current step definitions WITHOUT persisting to
 // executeStepsMappings and WITHOUT touching any cache - a pure read-only match.
-export function matchExecuteStepsContent(featuresUri: vscode.Uri, content: string): { callStep: ExecuteStepsCallStep; stepFileStep: StepFileStep | null }[] {
+// fileUri is the document being scanned (call step ranges/keys are built from it); featuresUri
+// selects which workspace's step definitions to match against.
+export function matchExecuteStepsContent(featuresUri: vscode.Uri, fileUri: vscode.Uri, content: string):
+  { matches: { callStep: ExecuteStepsCallStep; stepFileStep: StepFileStep | null }[]; invalidLines: ExecuteStepsInvalidLine[] } {
   const { exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes } = _getCompiledStepDefs(featuresUri);
-  const { callSteps } = scanExecuteSteps(content, featuresUri);
+  const { callSteps, invalidLines } = scanExecuteSteps(content, fileUri);
 
-  return callSteps.map(callStep => ({
+  const matches = callSteps.map(callStep => ({
     callStep,
     stepFileStep: _getStepFileStepMatch(callStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes),
   }));
+  return { matches, invalidLines };
 }
 
 

@@ -4,16 +4,18 @@
 
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { sepr, uriId } from '../../../src/common';
-import { StepFileStep, parseRepWildcard, getStepFileSteps } from '../../../src/parsers/stepsParser';
-import { FeatureFileStep, getFeatureFileSteps } from '../../../src/parsers/featureParser';
-import { ExecuteStepsCallStep, getExecuteStepsCallSteps } from '../../../src/parsers/executeStepsParser';
+import { sepr, uriId, urisMatch } from '../../../src/common';
+import { StepFileStep, parseRepWildcard, getStepFileSteps, parseStepsFileContent, deleteStepFileSteps } from '../../../src/parsers/stepsParser';
+import { FeatureFileStep, getFeatureFileSteps, parseFeatureContent, deleteFeatureFileSteps } from '../../../src/parsers/featureParser';
+import { ExecuteStepsCallStep, getExecuteStepsCallSteps, parseExecuteStepsFileContent, deleteExecuteStepsCallSteps } from '../../../src/parsers/executeStepsParser';
+import { WorkspaceSettings } from '../../../src/settings';
 import {
   _getStepFileStepMatch,
   getStepMappings,
   getStepMappingsForStepsFileFunction,
   getStepFileStepForExecuteStep,
   deleteExecuteStepsMappings,
+  deleteStepMappings,
   rebuildExecuteStepsMappings,
   rebuildStepMappings,
   matchExecuteStepsContent,
@@ -112,35 +114,58 @@ suite('executeStepsMappings', () => {
 
   suite('rebuildExecuteStepsMappings + union + REFS-04 regression guard', () => {
 
-    test('rebuildExecuteStepsMappings produces mappings that surface through getStepMappingsForStepsFileFunction, and getStepMappings stays exec-free', () => {
+    test('end-to-end: seeded def + feature step + exec call step surface through the union, and getStepMappings stays exec-free', async () => {
       const featuresUri = vscode.Uri.file('c:/execute-steps-mappings-test-rebuild/features');
-      deleteExecuteStepsMappings(featuresUri);
-
       const stepFileUri = vscode.Uri.file('c:/execute-steps-mappings-test-rebuild/features/steps/steps.py');
       const libUri = vscode.Uri.file('c:/execute-steps-mappings-test-rebuild/features/steps/lib.py');
+      const featureUri = vscode.Uri.file('c:/execute-steps-mappings-test-rebuild/features/test.feature');
+      const wkspSettings = { uri: vscode.Uri.file('c:/execute-steps-mappings-test-rebuild') } as WorkspaceSettings;
 
-      // Seed real caches via the module's own storage mechanisms is out of scope here (those are
-      // exercised by executeStepsParser.test.ts / stepsParser.test.ts); instead assert the
-      // rebuild function runs cleanly against empty caches (no call steps registered for this
-      // featuresUri) and returns 0 processed with zero mappings created.
-      const processed = rebuildExecuteStepsMappings(featuresUri);
-      assert.strictEqual(processed, 0, 'no execute_steps call steps registered for this featuresUri yet');
+      try {
+        // Seed the REAL module caches through their own parse entry points:
+        // one step definition, one feature step that matches it, one execute_steps call site that matches it.
+        await parseStepsFileContent(featuresUri, '@given("a precondition")\ndef step_impl(context):\n    pass\n', stepFileUri, 'test');
+        parseFeatureContent(wkspSettings, featureUri, 'Feature: T\n  Scenario: S\n    Given a precondition\n', 'test', () => undefined, () => undefined);
+        parseExecuteStepsFileContent(featuresUri, 'def helper(context):\n    context.execute_steps("Given a precondition")\n', libUri, 'test');
 
-      const unionResult = getStepMappingsForStepsFileFunction(stepFileUri, 0);
-      assert.strictEqual(unionResult.length, 0);
+        rebuildStepMappings(featuresUri, featuresUri);
+        const processed = rebuildExecuteStepsMappings(featuresUri);
+        assert.strictEqual(processed, 1, 'exactly one execute_steps call step should be processed');
 
-      // REFS-04 regression guard: getStepMappings must NEVER include execute_steps rows, even
-      // after a full rebuild cycle for both flat and parallel arrays.
-      rebuildStepMappings(featuresUri, featuresUri);
-      rebuildExecuteStepsMappings(featuresUri);
-      const flatMappings = getStepMappings(featuresUri);
-      assert.ok(
-        flatMappings.every(m => !(m.featureFileStep instanceof ExecuteStepsCallStep)),
-        'getStepMappings must not include execute_steps mappings (REFS-04)',
-      );
+        const stepFileSteps = getStepFileSteps(featuresUri);
+        assert.strictEqual(stepFileSteps.length, 1, 'precondition: the seeded step def must be in the cache');
+        const fnLine = stepFileSteps[0][1].functionDefinitionRange.start.line;
 
-      // silence unused-var lint on libUri (kept for readability/documentation of intent)
-      void libUri;
+        // The union: getStepMappingsForStepsFileFunction must return BOTH the feature-file mapping
+        // and the execute_steps mapping for the same step-def function line. Dropping the
+        // .concat(executeStepsMappings...) union edit would fail this assertion.
+        const union = getStepMappingsForStepsFileFunction(stepFileUri, fnLine);
+        const execRows = union.filter(m => m.featureFileStep instanceof ExecuteStepsCallStep);
+        const featureRows = union.filter(m => !(m.featureFileStep instanceof ExecuteStepsCallStep));
+        assert.strictEqual(execRows.length, 1, 'union must include the execute_steps call site');
+        assert.ok(urisMatch(execRows[0].featureFileStep.uri, libUri), 'exec row must point at the calling .py file');
+        assert.strictEqual(featureRows.length, 1, 'union must still include the feature-file mapping');
+
+        // getStepFileStepForExecuteStep resolves the call site (line 1 of lib.py) to the step def
+        const resolved = getStepFileStepForExecuteStep(libUri, 1);
+        assert.strictEqual(resolved, stepFileSteps[0][1]);
+
+        // REFS-04 regression guard against a NON-empty flat table: the feature mapping is present,
+        // the exec mapping is not.
+        const flatMappings = getStepMappings(featuresUri);
+        assert.ok(flatMappings.length >= 1, 'guard must run against a non-empty flat table');
+        assert.ok(
+          flatMappings.every(m => !(m.featureFileStep instanceof ExecuteStepsCallStep)),
+          'getStepMappings must not include execute_steps mappings (REFS-04)',
+        );
+      }
+      finally {
+        deleteStepMappings(featuresUri);
+        deleteExecuteStepsMappings(featuresUri);
+        deleteStepFileSteps(featuresUri);
+        deleteFeatureFileSteps(featuresUri);
+        deleteExecuteStepsCallSteps(featuresUri);
+      }
     });
 
     test('rebuild does not double counts when called twice for the same featuresUri (per-workspace, not per-root)', () => {
@@ -201,9 +226,14 @@ suite('executeStepsMappings', () => {
       const before = getStepMappingsForStepsFileFunction(stepFileUri, 0);
 
       const content = 'def some_helper(context):\n    context.execute_steps("""\n        Given a precondition\n    """)\n';
-      const results = matchExecuteStepsContent(featuresUri, content);
+      const results = matchExecuteStepsContent(featuresUri, stepFileUri, content);
 
-      assert.ok(Array.isArray(results));
+      assert.ok(Array.isArray(results.matches));
+      assert.ok(Array.isArray(results.invalidLines));
+      // The returned call steps must carry the scanned document's uri, not the features directory
+      assert.strictEqual(results.matches.length, 1);
+      assert.ok(urisMatch(results.matches[0].callStep.uri, stepFileUri),
+        'call step uri must be the scanned file, not the features directory');
       // No step defs registered for this featuresUri, so every result's stepFileStep is null -
       // but the important assertion is that nothing was persisted to executeStepsMappings.
       const after = getStepMappingsForStepsFileFunction(stepFileUri, 0);
@@ -212,10 +242,11 @@ suite('executeStepsMappings', () => {
 
     test('does not mutate the executeStepsCallSteps cache (pure read path)', () => {
       const featuresUri = vscode.Uri.file('c:/execute-steps-mappings-test-livematch-cache/features');
+      const fileUri = vscode.Uri.file('c:/execute-steps-mappings-test-livematch-cache/features/steps/steps.py');
       const before = getExecuteStepsCallSteps(featuresUri).length;
 
       const content = 'context.execute_steps("""\n    Given a step\n""")\n';
-      matchExecuteStepsContent(featuresUri, content);
+      matchExecuteStepsContent(featuresUri, fileUri, content);
 
       const after = getExecuteStepsCallSteps(featuresUri).length;
       assert.strictEqual(after, before, 'matchExecuteStepsContent must not write to the executeStepsParser cache');
@@ -238,18 +269,35 @@ suite('executeStepsMappings', () => {
 
   suite('getStepMappings excludes execute_steps rows (REFS-04)', () => {
 
-    test('getStepMappings excludes execute_steps rows', () => {
+    test('getStepMappings excludes execute_steps rows even when exec mappings exist', async () => {
       const featuresUri = vscode.Uri.file('c:/execute-steps-regression-test/features');
-      deleteExecuteStepsMappings(featuresUri);
+      const stepFileUri = vscode.Uri.file('c:/execute-steps-regression-test/features/steps/steps.py');
+      const libUri = vscode.Uri.file('c:/execute-steps-regression-test/features/steps/lib.py');
 
-      rebuildStepMappings(featuresUri, featuresUri);
-      rebuildExecuteStepsMappings(featuresUri);
+      try {
+        // Seed ONLY a step def and an exec call site (no feature steps), so the parallel array is
+        // genuinely non-empty while the flat table has no rows for this featuresUri.
+        await parseStepsFileContent(featuresUri, '@when("something occurs")\ndef step_impl(context):\n    pass\n', stepFileUri, 'test');
+        parseExecuteStepsFileContent(featuresUri, 'context.execute_steps("When something occurs")\n', libUri, 'test');
 
-      const mappings = getStepMappings(featuresUri);
-      assert.ok(
-        mappings.every(m => !(m.featureFileStep instanceof ExecuteStepsCallStep)),
-        'getStepMappings must not include execute_steps mappings',
-      );
+        rebuildStepMappings(featuresUri, featuresUri);
+        const processed = rebuildExecuteStepsMappings(featuresUri);
+        assert.strictEqual(processed, 1, 'precondition: one exec mapping must actually exist');
+
+        const fnLine = getStepFileSteps(featuresUri)[0][1].functionDefinitionRange.start.line;
+        assert.strictEqual(getStepMappingsForStepsFileFunction(stepFileUri, fnLine).length, 1,
+          'precondition: the exec mapping is reachable through the union');
+
+        const mappings = getStepMappings(featuresUri);
+        assert.strictEqual(mappings.length, 0,
+          'getStepMappings must not include execute_steps mappings (only exec rows exist for this featuresUri)');
+      }
+      finally {
+        deleteStepMappings(featuresUri);
+        deleteExecuteStepsMappings(featuresUri);
+        deleteStepFileSteps(featuresUri);
+        deleteExecuteStepsCallSteps(featuresUri);
+      }
     });
   });
 });
