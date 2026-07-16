@@ -30,7 +30,6 @@ suite('executeStepsMappings', () => {
   function makeExecuteStepsCallStep(stepType: string, textWithoutType: string, opts?: {
     uri?: vscode.Uri;
     line?: number;
-    isAmbiguousType?: boolean;
     hasFormatPlaceholders?: boolean;
   }): ExecuteStepsCallStep {
     const uri = opts?.uri ?? vscode.Uri.file('c:/execute-steps-mappings-test/features/steps/lib.py');
@@ -40,7 +39,7 @@ suite('executeStepsMappings', () => {
     return new ExecuteStepsCallStep(
       key, uri, 'lib.py', range,
       `${stepType} ${textWithoutType}`, textWithoutType, stepType,
-      opts?.isAmbiguousType ?? false, opts?.hasFormatPlaceholders ?? false,
+      opts?.hasFormatPlaceholders ?? false,
     );
   }
 
@@ -154,47 +153,32 @@ suite('executeStepsMappings', () => {
     });
   });
 
-  suite('ambiguous-type bucket matching', () => {
+  suite('leading */And/But funnel semantics (WR-02)', () => {
 
-    test('leading And/But/* ambiguous call step matches by trying given/when/then buckets in order', () => {
-      const sfs = makeStepFileStep('when', 'something happens');
-      const { exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes } = buildMaps([sfs]);
+    test('leading * resolves to given and must NOT match a when/then-only step def', () => {
+      // behave resolves a leading "*" deterministically to "given"
+      // (bundled/libs/behave/parser.py:847,860,876-877; i18n.py:264), so the funnel must never
+      // map it to a @when/@then definition that behave's registry would not resolve.
+      const whenOnlySfs = makeStepFileStep('when', 'something happens');
+      const { exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes } = buildMaps([whenOnlySfs]);
 
-      // Ambiguous call step: raw stepType is "and" (the leading keyword), isAmbiguousType=true.
-      // Exercise the bucket-fallback behavior via rebuildExecuteStepsMappings against a real
-      // featuresUri with a single ambiguous call step registered through the parser's own cache.
-      const featuresUri = vscode.Uri.file('c:/execute-steps-mappings-test-ambiguous/features');
-      deleteExecuteStepsMappings(featuresUri);
-
-      const ambiguousCallStep = makeExecuteStepsCallStep('and', 'something happens', { isAmbiguousType: true });
-
-      // Directly exercise the internal bucket-matching contract via the exported matching
-      // primitives: given/when/then buckets are tried in order, each falling back to "step".
-      const whenMatch = _getStepFileStepMatch(
-        new ExecuteStepsCallStep(ambiguousCallStep.key, ambiguousCallStep.uri, ambiguousCallStep.fileName,
-          ambiguousCallStep.range, ambiguousCallStep.text, ambiguousCallStep.textWithoutType, 'when', false, false),
-        exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
-      assert.strictEqual(whenMatch, sfs, 'the "when" bucket should match since only a when-typed step def exists');
-
-      const givenMatch = _getStepFileStepMatch(
-        new ExecuteStepsCallStep(ambiguousCallStep.key, ambiguousCallStep.uri, ambiguousCallStep.fileName,
-          ambiguousCallStep.range, ambiguousCallStep.text, ambiguousCallStep.textWithoutType, 'given', false, false),
-        exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
-      assert.strictEqual(givenMatch, null, 'the "given" bucket should not match a when-only step def');
+      const starCallStep = makeExecuteStepsCallStep('given', 'something happens'); // scanner resolves * -> given
+      const match = _getStepFileStepMatch(starCallStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
+      assert.strictEqual(match, null, 'a *-resolved given step must not match a when-only step def');
     });
 
-    test('ambiguous call step with no matching bucket in any of given/when/then/step yields no mapping', () => {
-      const sfs = makeStepFileStep('given', 'a completely different step');
-      const { exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes } = buildMaps([sfs]);
+    test('leading * resolved to given matches a given step def (and falls back to the step bucket)', () => {
+      const givenSfs = makeStepFileStep('given', 'something happens');
+      const { exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes } = buildMaps([givenSfs]);
 
-      const ambiguousCallStep = makeExecuteStepsCallStep('but', 'nothing matches this at all', { isAmbiguousType: true });
+      const starCallStep = makeExecuteStepsCallStep('given', 'something happens');
+      const match = _getStepFileStepMatch(starCallStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
+      assert.strictEqual(match, givenSfs);
 
-      for (const bucket of ['given', 'when', 'then']) {
-        const candidate = new ExecuteStepsCallStep(ambiguousCallStep.key, ambiguousCallStep.uri, ambiguousCallStep.fileName,
-          ambiguousCallStep.range, ambiguousCallStep.text, ambiguousCallStep.textWithoutType, bucket, false, false);
-        const match = _getStepFileStepMatch(candidate, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
-        assert.strictEqual(match, null, `bucket "${bucket}" should not match an unrelated step def`);
-      }
+      const stepSfs = makeStepFileStep('step', 'something happens');
+      const maps2 = buildMaps([stepSfs]);
+      const match2 = _getStepFileStepMatch(starCallStep, maps2.exactSteps, maps2.paramsSteps, maps2.compiledExactRegexes, maps2.compiledParamsRegexes);
+      assert.strictEqual(match2, stepSfs, 'the generic "step" bucket fallback still applies');
     });
   });
 

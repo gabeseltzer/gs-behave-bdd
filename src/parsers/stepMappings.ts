@@ -135,30 +135,6 @@ function _getFilteredSteps(featureStepsUri: vscode.Uri, stepDefsUri: vscode.Uri)
 }
 
 
-// execute_steps call steps with a leading And/But/* and no prior step in the same call are
-// isAmbiguousType=true (the scanner can't resolve given/when/then on its own). Try each bucket
-// in order - each bucket lookup already falls back to the "step" bucket internally via
-// _getStepFileStepMatch - and take the first match; no match across all buckets -> no mapping.
-function _matchExecuteStepsCallStep(callStep: ExecuteStepsCallStep,
-  exactSteps: Map<string, StepFileStep>, paramsSteps: Map<string, StepFileStep>,
-  compiledExactRegexes: Map<string, RegExp>, compiledParamsRegexes: Map<string, RegExp>): StepFileStep | null {
-
-  if (!callStep.isAmbiguousType)
-    return _getStepFileStepMatch(callStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
-
-  for (const bucket of ["given", "when", "then"]) {
-    const candidate = new ExecuteStepsCallStep(
-      callStep.key, callStep.uri, callStep.fileName, callStep.range,
-      callStep.text, callStep.textWithoutType, bucket, false, callStep.hasFormatPlaceholders);
-    const match = _getStepFileStepMatch(candidate, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
-    if (match)
-      return match;
-  }
-
-  return null;
-}
-
-
 // Rebuilds the parallel executeStepsMappings array for a workspace (per-workspace, NOT per-root
 // - called once per featuresUri, unlike rebuildStepMappings which loops wkspSettings.featuresUris).
 // Calls refreshStepReferencesView() (NOT retriggerSemanticHighlighting - exec call sites live in
@@ -174,7 +150,10 @@ export function rebuildExecuteStepsMappings(featuresUri: vscode.Uri): number {
   let processed = 0;
   const matchLoopStart = performance.now();
   for (const callStep of callSteps) {
-    const stepFileStep = _matchExecuteStepsCallStep(callStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
+    // scanExecuteSteps resolves every call step to a concrete given/when/then type (matching
+    // behave's own parse_steps() semantics), so the standard matcher applies directly - it
+    // already falls back to the "step" bucket internally.
+    const stepFileStep = _getStepFileStepMatch(callStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
     if (stepFileStep)
       executeStepsMappings.push(new StepMapping(featuresUri, stepFileStep, callStep));
     processed++;
@@ -206,7 +185,7 @@ export function matchExecuteStepsContent(featuresUri: vscode.Uri, content: strin
 
   return callSteps.map(callStep => ({
     callStep,
-    stepFileStep: _matchExecuteStepsCallStep(callStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes),
+    stepFileStep: _getStepFileStepMatch(callStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes),
   }));
 }
 

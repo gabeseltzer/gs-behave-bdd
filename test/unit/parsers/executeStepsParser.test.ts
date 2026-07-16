@@ -258,7 +258,6 @@ suite('executeStepsParser', () => {
       const { callSteps } = scanExecuteSteps(content, fileUri);
       assert.strictEqual(callSteps.length, 2);
       assert.strictEqual(callSteps[1].stepType, 'given');
-      assert.strictEqual(callSteps[1].isAmbiguousType, false);
     });
 
     test('But inherits the previous step type within the same call', () => {
@@ -271,29 +270,68 @@ suite('executeStepsParser', () => {
       const { callSteps } = scanExecuteSteps(content, fileUri);
       assert.strictEqual(callSteps.length, 2);
       assert.strictEqual(callSteps[1].stepType, 'when');
-      assert.strictEqual(callSteps[1].isAmbiguousType, false);
     });
 
-    test('leading And with no prior step in the call is marked isAmbiguousType', () => {
+    test('leading And with no prior step in the call is an invalid line, not a call step (WR-02)', () => {
+      // behave's parse_steps() resets the parser state, so a leading And/But has nothing to
+      // inherit from and raises ParserError at runtime (bundled/libs/behave/parser.py:864-871).
       const content = [
         'context.execute_steps("""',
         '    And a leading and step',
         '""")',
       ].join('\n');
-      const { callSteps } = scanExecuteSteps(content, fileUri);
-      assert.strictEqual(callSteps.length, 1);
-      assert.strictEqual(callSteps[0].isAmbiguousType, true);
+      const { callSteps, invalidLines } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0, 'a leading And is a guaranteed runtime ParserError, never a call step');
+      assert.strictEqual(invalidLines.length, 1);
+      assert.strictEqual(invalidLines[0].text, 'And a leading and step');
     });
 
-    test('leading * with no prior step in the call is marked isAmbiguousType', () => {
+    test('leading But with no prior step in the call is an invalid line, not a call step (WR-02)', () => {
+      const content = [
+        'context.execute_steps("""',
+        '    But a leading but step',
+        '""")',
+      ].join('\n');
+      const { callSteps, invalidLines } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0);
+      assert.strictEqual(invalidLines.length, 1);
+    });
+
+    test('leading * with no prior step resolves deterministically to given (WR-02)', () => {
+      // behave's parse_step() checks the "given" keyword list first ("* " is one of its
+      // aliases) and, with no last_step_type, sets step_type to "given"
+      // (bundled/libs/behave/parser.py:847,860,876-877; i18n.py:264).
       const content = [
         'context.execute_steps("""',
         '    * a leading star step',
         '""")',
       ].join('\n');
-      const { callSteps } = scanExecuteSteps(content, fileUri);
+      const { callSteps, invalidLines } = scanExecuteSteps(content, fileUri);
       assert.strictEqual(callSteps.length, 1);
-      assert.strictEqual(callSteps[0].isAmbiguousType, true);
+      assert.strictEqual(callSteps[0].stepType, 'given');
+      assert.strictEqual(invalidLines.length, 0);
+    });
+
+    test('* after a prior step inherits that step type; And after a leading * inherits given (WR-02)', () => {
+      const content = [
+        'context.execute_steps("""',
+        '    When something happens',
+        '    * another thing happens',
+        '""")',
+      ].join('\n');
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 2);
+      assert.strictEqual(callSteps[1].stepType, 'when', '* inherits the previous step type');
+
+      const content2 = [
+        'context.execute_steps("""',
+        '    * a leading star step',
+        '    And a follow-up step',
+        '""")',
+      ].join('\n');
+      const { callSteps: callSteps2 } = scanExecuteSteps(content2, fileUri);
+      assert.strictEqual(callSteps2.length, 2);
+      assert.strictEqual(callSteps2[1].stepType, 'given', 'And inherits the given type that the leading * resolved to');
     });
 
     test('blank lines inside the literal are skipped', () => {

@@ -21,7 +21,6 @@ export class ExecuteStepsCallStep {
     public readonly text: string,
     public readonly textWithoutType: string,
     public readonly stepType: string,
-    public readonly isAmbiguousType: boolean,
     public readonly hasFormatPlaceholders: boolean,
   ) { }
 }
@@ -146,17 +145,31 @@ function scanBody(
       const text = step[0].trim();
       const textWithoutType = step[2].trim();
       let stepType = step[1].trim().toLowerCase();
-      let isAmbiguousType = false;
 
-      if (stepType === "and" || stepType === "but" || stepType === "*") {
+      // Keyword resolution matches behave 1.3.3's parse_steps()/parse_step() semantics exactly
+      // (bundled/libs/behave/parser.py:846-883,909-940 - execute_steps() calls parse_steps(),
+      // which calls reset(), so there is never a prior scenario/background to inherit from):
+      // - "*" with a prior step inherits its type; with NO prior step it deterministically
+      //   resolves to "given" ("* " is an alias in the "given" keyword list, which parse_step
+      //   checks first, and with last_step_type unset it falls through to the else branch that
+      //   sets step_type - parser.py:847,860,876-877; i18n.py:264).
+      // - And/But with a prior step inherits its type; with NO prior step behave raises
+      //   ParserError("AND-STEP REQUIRES: An previous Given/When/Then step.") (parser.py:864-871
+      //   via _select_last_background_step_type() returning None), i.e. the content is a
+      //   GUARANTEED runtime crash - record it as invalid content, never as a call step.
+      if (stepType === "*") {
+        stepType = lastStepType ?? "given";
+        lastStepType = stepType;
+      } else if (stepType === "and" || stepType === "but") {
         if (lastStepType === undefined) {
-          // leading And/But/* with no prior step in this call - never an error, but the exact
-          // bucket (given/when/then) can't be resolved here; leave stepType as the raw keyword
-          // for the mapping funnel (Plan 02) to try given/when/then buckets in order.
-          isAmbiguousType = true;
-        } else {
-          stepType = lastStepType;
+          const invalidRange = new vscode.Range(
+            new vscode.Position(lineIdx, indentSize),
+            new vscode.Position(lineIdx, indentSize + trimmed.length),
+          );
+          invalidLines.push(new ExecuteStepsInvalidLine(fileUri, invalidRange, trimmed));
+          continue;
         }
+        stepType = lastStepType;
       } else {
         lastStepType = stepType;
       }
@@ -166,7 +179,7 @@ function scanBody(
         new vscode.Position(lineIdx, indentSize + step[0].length),
       );
       const key = `${uriId(fileUri)}${sepr}${lineIdx}`;
-      callSteps.push(new ExecuteStepsCallStep(key, fileUri, fileName, range, text, textWithoutType, stepType, isAmbiguousType, hasFormatPlaceholders));
+      callSteps.push(new ExecuteStepsCallStep(key, fileUri, fileName, range, text, textWithoutType, stepType, hasFormatPlaceholders));
       continue;
     }
 
