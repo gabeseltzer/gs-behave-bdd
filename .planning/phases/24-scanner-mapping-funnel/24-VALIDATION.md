@@ -1,9 +1,9 @@
 ---
 phase: 24
 slug: scanner-mapping-funnel
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-16
 ---
 
@@ -38,7 +38,12 @@ created: 2026-07-16
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled by planner) | | | REFS-01..04 | — | N/A (local parsing, no untrusted input execution) | unit | `npm run test:unit` | ❌ W0 | ⬜ pending |
+| 24-01-01 | 01 | 1 | REFS-01..03 (foundation) | T-24-01 | Scanner regexes are linear (no catastrophic backtracking) | unit | `npm run test:unit` | ❌ W0 (test file created in-plan) | ⬜ pending |
+| 24-01-02 | 01 | 1 | REFS-01..03 (foundation) | — | N/A | unit | `npm run test:unit` | ❌ W0 (test file created in-plan) | ⬜ pending |
+| 24-02-01 | 02 | 2 | REFS-01, REFS-02, REFS-03, REFS-04 | — | N/A | unit | `npm run test:unit` | ❌ W0 (test file created in-plan) | ⬜ pending |
+| 24-02-02 | 02 | 2 | REFS-01..03 | — | N/A | unit | `npm run test:unit` | ❌ W0 (test file created in-plan) | ⬜ pending |
+| 24-03-01 | 03 | 3 | REFS-01..04 (wiring) | — | N/A | unit | `npm run test:unit` (full existing suite green = REFS-04) | ✅ | ⬜ pending |
+| 24-03-02 | 03 | 3 | REFS-01..04 (wiring) | — | N/A | unit | `npm run test:unit` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -60,11 +65,11 @@ Existing infrastructure covers all phase requirements — Mocha/Sinon unit tier 
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (new test files are created within their own plans' tasks)
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-07-16 (plan-checker pass: 0 blockers; warnings resolved)

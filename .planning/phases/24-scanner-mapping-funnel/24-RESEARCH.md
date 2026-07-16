@@ -335,12 +335,12 @@ this.onStepMappingsRebuilt?.(wkspSettings.featuresUri);
 
 **If this table is empty:** N/A — see A1 above; all other claims in this research were verified directly against the working tree (`grep`/`Read` of exact files) or the bundled behave source, and are tagged `[VERIFIED: local source]` implicitly throughout via inline file:line citations.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Exact behave `en` i18n keyword table entry for `*`**
    - What we know: `parser.py:847-860` shows `*` matched inside the same keyword-table loop as `given`/`when`/`then`/`and`/`but`, with `kw.startswith("*")` as a special case inside that loop.
    - What's unclear: Whether `i18n.py`'s "en" locale registers `*` once per step-type list (so it appears in all five) or as a single global entry consulted first. This affects only comment/documentation precision in the scanner, not its required behavior (which is already fully pinned by `24-CONTEXT.md`'s locked decisions and independently confirmed by the Background-fallback logic).
-   - Recommendation: Not blocking — the locked decision ("leading `*` → given" simplified, refined here to "leading `*`/And/But with no context → `isAmbiguousType`, try given/when/then/step in order") is sufficient to implement and test. If a planner task wants full precision, `grep '"\*"' bundled/libs/behave/i18n.py` resolves it in under a minute.
+   - RESOLVED: Not blocking — the locked decision ("leading `*` → given" simplified, refined here to "leading `*`/And/But with no context → `isAmbiguousType`, try given/when/then/step in order") is sufficient to implement and test. If a planner task wants full precision, `grep '"\*"' bundled/libs/behave/i18n.py` resolves it in under a minute.
 
 ## Environment Availability
 
