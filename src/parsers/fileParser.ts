@@ -42,6 +42,11 @@ export class FileParser {
   private _errored = false;
   private _reparsingFile = false;
   private _pythonReparseTimers: Map<string, NodeJS.Timeout> = new Map();
+  // Python files edited during the current debounce window, per workspace. The debounce timer
+  // is per-workspace and its closure only captures the LATEST edit's fileUri/content, so the
+  // execute_steps rescan must accumulate and process EVERY file edited in the window - not just
+  // the last one - or earlier-edited files' call-site caches go stale (WR-06).
+  private _pendingExecScanFiles: Map<string, Map<string, { uri: vscode.Uri; content: string }>> = new Map();
   private static readonly PYTHON_REPARSE_DEBOUNCE_MS = 500;
   private _statusChangeHandlers: ((busy: boolean) => void)[] = [];
   private _stepLoadErrorHandlers: ((error: string | undefined) => void)[] = [];
@@ -754,6 +759,15 @@ export class FileParser {
       clearTimeout(existingTimer);
     }
 
+    // Record this file for the execute_steps rescan - keyed per file so rapid edits to
+    // DIFFERENT files in the same workspace all get rescanned when the timer fires (WR-06)
+    let pendingFiles = this._pendingExecScanFiles.get(wkspKey);
+    if (!pendingFiles) {
+      pendingFiles = new Map();
+      this._pendingExecScanFiles.set(wkspKey, pendingFiles);
+    }
+    pendingFiles.set(uriId(fileUri), { uri: fileUri, content });
+
     const timer = setTimeout(async () => {
       this._pythonReparseTimers.delete(wkspKey);
       try {
@@ -831,11 +845,16 @@ export class FileParser {
           this._showStepLoadWarning(errMsg, wkspSettings.uri);
         }
 
-        // Rescan the edited .py file for execute_steps() call sites (any watched .py file,
-        // not just step definition files - helper modules/environment.py count too) before
-        // rebuilding exec mappings. parseExecuteStepsFileContent clears fileUri's prior
-        // entries itself, so this refreshes only the one edited file's cache entries.
-        parseExecuteStepsFileContent(wkspSettings.featuresUri, content, fileUri, "[reparseFile]");
+        // Rescan EVERY .py file edited during this debounce window for execute_steps() call
+        // sites (any watched .py file, not just step definition files - helper modules/
+        // environment.py count too) before rebuilding exec mappings (WR-06).
+        // parseExecuteStepsFileContent clears each fileUri's prior entries itself, so this
+        // refreshes only the edited files' cache entries.
+        const pendingFilesForWksp = this._pendingExecScanFiles.get(wkspKey);
+        this._pendingExecScanFiles.delete(wkspKey);
+        for (const pendingFile of pendingFilesForWksp?.values() ?? []) {
+          parseExecuteStepsFileContent(wkspSettings.featuresUri, pendingFile.content, pendingFile.uri, "[reparseFile]");
+        }
 
         for (const root of wkspSettings.featuresUris) {
           rebuildStepMappings(root, wkspSettings.featuresUri);
@@ -872,6 +891,7 @@ export class FileParser {
       clearTimeout(timer);
     }
     this._pythonReparseTimers.clear();
+    this._pendingExecScanFiles.clear();
     this._reparsingFile = false;
   }
 
