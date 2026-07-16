@@ -11,6 +11,11 @@ export const stepRe = /^\s*(Given|When|Then|And|But|\*)(.*)$/i;
 export const featureFileStepRe = /^\s*(Given |When |Then |And |But )(.*)/i;
 export const tagRe = /^\s*@(\S+)/;
 
+// Keyword pattern for embedded execute_steps() call-site scanning.
+// Unlike featureFileStepRe, this also recognises a leading "*" (behave's
+// generic step keyword), which can appear inside an execute_steps() literal.
+export const executeStepsKeywordRe = /^(Given|When|Then|And|But|\*)\s+(.*)/i;
+
 // Patterns for text block and table detection
 export const textBlockDelimiterRe = /^\s*("""|''')\s*$/;
 export const tableRowRe = /^\s*\|/;
