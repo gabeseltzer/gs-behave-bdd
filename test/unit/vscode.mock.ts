@@ -103,6 +103,17 @@ export class Range {
       this.end = endOrChar as Position;
     }
   }
+
+  // mirrors vscode.Range.contains(position) semantics: start <= position <= end (inclusive)
+  contains(position: Position): boolean {
+    if (position.line < this.start.line || position.line > this.end.line)
+      return false;
+    if (position.line === this.start.line && position.character < this.start.character)
+      return false;
+    if (position.line === this.end.line && position.character > this.end.character)
+      return false;
+    return true;
+  }
 }
 
 export class Position {
