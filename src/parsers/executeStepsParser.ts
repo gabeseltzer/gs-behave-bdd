@@ -80,8 +80,9 @@ function findUnescapedQuote(line: string, fromCol: number, quoteChar: string): n
 
 // Scans forward from fromIndex until it hits the first unbalanced ")" (the closing paren of
 // the execute_steps(...) call, or of a textwrap.dedent(...) wrapper). Returns the text in
-// between so callers can detect string concatenation (+) or .format(...)/% suffixes.
-function findCallTail(content: string, fromIndex: number): string {
+// between so callers can detect string concatenation (+) or .format(...)/% suffixes, plus the
+// index of the unbalanced ")" itself so callers can continue scanning past a wrapper's close.
+function findCallTail(content: string, fromIndex: number): { text: string; endIndex: number } {
   let depth = 0;
   let i = fromIndex;
   for (; i < content.length; i++) {
@@ -94,7 +95,7 @@ function findCallTail(content: string, fromIndex: number): string {
       depth--;
     }
   }
-  return content.slice(fromIndex, i);
+  return { text: content.slice(fromIndex, i), endIndex: i };
 }
 
 // Scans the physical lines making up one execute_steps() literal body (from bodyStartLine/
@@ -257,7 +258,15 @@ export function scanExecuteSteps(content: string, fileUri: vscode.Uri): { callSt
         continue; // backslash-n escape inside a single-line literal: skip silently (ambiguous multi-step content)
     }
 
-    const tail = findCallTail(content, afterDelimIndex).trim();
+    const tailScan = findCallTail(content, afterDelimIndex);
+    let tail = tailScan.text.trim();
+
+    // When the literal is wrapped in textwrap.dedent(...), an empty tail only means we stopped
+    // at dedent's own closing paren - the call's REAL tail (e.g. ".format(x)" or "+ x") sits
+    // after that paren, so re-collect from one char past it (WR-01). A non-empty inner tail
+    // (e.g. dedent('''...'''.format(x))) is already the correct tail and is used as-is.
+    if (tail === '' && match[0].includes('dedent'))
+      tail = findCallTail(content, tailScan.endIndex + 1).text.trim();
 
     // Whitelist of known-static tails: empty (plain literal), ".format(...)" or "% ..."
     // (formatting placeholders, surfaced downstream via hasFormatPlaceholders). ANY other

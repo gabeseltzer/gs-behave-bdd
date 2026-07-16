@@ -150,6 +150,38 @@ suite('executeStepsParser', () => {
       assert.strictEqual(callSteps[0].textWithoutType, 'dedented step');
     });
 
+    test('.format(...) after the textwrap.dedent wrapper sets hasFormatPlaceholders (WR-01)', () => {
+      const content = [
+        'context.execute_steps(textwrap.dedent("""',
+        '    Given a {0} thing',
+        '""").format(x))',
+      ].join('\n');
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 1);
+      assert.strictEqual(callSteps[0].hasFormatPlaceholders, true, 'the tail after dedent\'s closing paren must be visible');
+    });
+
+    test('.format(...) inside the textwrap.dedent wrapper sets hasFormatPlaceholders (WR-01)', () => {
+      const content = [
+        'context.execute_steps(textwrap.dedent("""',
+        '    Given a {0} thing',
+        '""".format(x)))',
+      ].join('\n');
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 1);
+      assert.strictEqual(callSteps[0].hasFormatPlaceholders, true);
+    });
+
+    test('+ concatenation after the textwrap.dedent wrapper is skipped silently (WR-01)', () => {
+      const content = [
+        'context.execute_steps(textwrap.dedent("""',
+        '    Given a thing',
+        '""") + extra)',
+      ].join('\n');
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0, 'concatenation after the wrapper means dynamic content');
+    });
+
     test('+ concatenation after the literal is skipped silently', () => {
       const content = 'context.execute_steps("Given a" + " thing")';
       const { callSteps } = scanExecuteSteps(content, fileUri);
