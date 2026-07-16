@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: execute_steps IDE Support
 status: planning
-last_updated: "2026-07-16T00:06:12.567Z"
+last_updated: "2026-07-16T00:12:28.000Z"
 last_activity: 2026-07-16
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-15 — v1.5.0 shipped)
+See: .planning/PROJECT.md (updated 2026-07-15 — v1.6.0 milestone started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Planning v1.6.0 — duplicate-scenario detection rework
+**Current focus:** v1.6.0 execute_steps IDE Support — ROADMAP.md written (Phases 24-27), ready for `/gsd-plan-phase 24`
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 24 (Scanner + Mapping Funnel) — not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-16 — Milestone v1.6.0 started
+Status: Roadmap created; awaiting phase planning
+Last activity: 2026-07-16 — v1.6.0 ROADMAP.md, STATE.md, REQUIREMENTS.md traceability written (18/18 requirements mapped across Phases 24-27)
 
 ## Performance Metrics
 
@@ -40,17 +40,18 @@ Last activity: 2026-07-16 — Milestone v1.6.0 started
 
 ## Accumulated Context
 
-### v1.5.0 Decisions
+### v1.6.0 Decisions
 
-- Coarse granularity → 4 phases for v1.5.0 (resisted per-task splits seen in v1.4.0).
-- Phase numbering continues from v1.4.0 (last phase 18) → v1.5.0 starts at phase 19.
-- `activeProjectCache` invalidation (CLEANUP-02) lands in Phase 19 alongside foundation work — independent of migration UX, eliminates v1.4.0 carry-forward regression risk early.
-- `CLEANUP-01` (silent-fallback removal) deferred to Phase 22, after the new migration flow has shipped and been bedded in by the integration suite — most user-visible behaviour change in v1.5.0.
-- v1.4.0's two migrations (`migrateLegacyFeaturesPath`, `migrateLegacySuppressMultiConfig`) both refactor through the new registry in Phase 20, alongside the new `behave-vsc` entries — single coherent landing point for all registry work.
-- All migrations continue to route through the v1.4.0 `migrateScopedSetting<TSrc, TDest>` primitive — no parallel implementations.
+- Coarse granularity → 4 phases for v1.6.0, matching the research-suggested build order exactly (scanner/mapping funnel → validation diagnostics → go-to-definition → integration/fixture/docs).
+- Phase numbering continues from v1.5.0 (last phase 23) → v1.6.0 starts at phase 24.
+- REFS-01..04 (reference counting) assigned to Phase 24 alongside the scanner: the research confirms reference counting "falls out" of the parallel `executeStepsMappings` union with zero consumer-side changes, so it ships as soon as the scanner + mapping funnel exist.
+- Phase 25 (validation diagnostics) and Phase 26 (go-to-definition) both depend only on Phase 24 and are parallel-safe with each other.
+- TEST-01 (unit suites) is satisfied incrementally across Phases 24-26 as each module ships, but is formally tracked against Phase 27 as the milestone-closing confirmation point — avoids double-counting a requirement across phases while acknowledging the real delivery timeline.
+- Phase 27 bundles the new `example-projects/execute-steps/` integration fixture, the integration suite, and README/AI_INSTRUCTIONS/CHANGELOG docs together as the milestone-closing phase.
 
 ### Roadmap Evolution
 
+- v1.6.0 added: Phases 24-27 for execute_steps IDE Support (2026-07-15) — Scanner + Mapping Funnel, Validation Diagnostics, Go-to-Definition, Integration Tests/Fixture/Docs.
 - Phase 18 added: Address v1.4.0 tech debt: artifact rollups, mock cleanup
 - v1.5.0 added: Phases 19-22 for Migration Consent & `behave-vsc` Cleanup (2026-05-07)
 
@@ -163,9 +164,9 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 
 ## Session Continuity
 
-**Last action:** v1.5.0 milestone archived (audit passed 29/29 requirements). PROJECT.md / ROADMAP.md / MILESTONES.md / STATE.md updated. REQUIREMENTS.md archived to milestones/v1.5.0-REQUIREMENTS.md.
-**Next action:** Create branch `gabes/fix-duplicate-scenario-regex` off main; run `/gsd-new-milestone` to define v1.6.0 (duplicate-scenario detection rework).
-**Loaded context:** PROJECT.md, MILESTONES.md, ROADMAP.md, config.json.
+**Last action:** v1.6.0 ROADMAP.md written (Phases 24-27, 18/18 requirements mapped, 0 orphans), STATE.md updated, REQUIREMENTS.md traceability filled.
+**Next action:** Run `/gsd-plan-phase 24` to plan the Scanner + Mapping Funnel phase.
+**Loaded context:** PROJECT.md, REQUIREMENTS.md, research/SUMMARY.md, config.json, MILESTONES.md, ROADMAP.md.
 
 ## Deferred Items
 
@@ -188,5 +189,6 @@ Most quick-tasks above are completed work (commits already in git); their artifa
 
 ## Operator Next Steps
 
-- Create branch `gabes/fix-duplicate-scenario-regex` off main
-- Run /gsd-new-milestone to define v1.6.0 (duplicate-scenario detection)
+- Review `.planning/ROADMAP.md` Phases 24-27 for v1.6.0 execute_steps IDE Support
+- Run `/gsd-plan-phase 24` to begin planning Phase 24: Scanner + Mapping Funnel
+</content>

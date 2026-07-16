@@ -50,4 +50,26 @@
 
 ## Traceability
 
-(Filled by roadmap.)
+| Requirement | Phase | Status |
+|--------------|-------|--------|
+| REFS-01 | Phase 24 | Pending |
+| REFS-02 | Phase 24 | Pending |
+| REFS-03 | Phase 24 | Pending |
+| REFS-04 | Phase 24 | Pending |
+| VALID-01 | Phase 25 | Pending |
+| VALID-02 | Phase 25 | Pending |
+| VALID-03 | Phase 25 | Pending |
+| VALID-04 | Phase 25 | Pending |
+| VALID-05 | Phase 25 | Pending |
+| VALID-06 | Phase 25 | Pending |
+| VALID-07 | Phase 25 | Pending |
+| VALID-08 | Phase 25 | Pending |
+| NAV-01 | Phase 26 | Pending |
+| NAV-02 | Phase 26 | Pending |
+| NAV-03 | Phase 26 | Pending |
+| TEST-01 | Phase 27 | Pending |
+| TEST-02 | Phase 27 | Pending |
+| TEST-03 | Phase 27 | Pending |
+
+Coverage: 18/18 v1.6.0 requirements mapped.
+</content>
