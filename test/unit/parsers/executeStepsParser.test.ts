@@ -156,6 +156,43 @@ suite('executeStepsParser', () => {
       assert.strictEqual(callSteps.length, 0);
     });
 
+    test('implicit adjacent-string concatenation on the same line is skipped silently (CR-02)', () => {
+      const content = 'context.execute_steps(\'Given a thing \' \'with more text\')';
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0, 'adjacent-string concatenation would truncate the runtime step text');
+    });
+
+    test('implicit adjacent-string concatenation wrapped across lines is skipped silently (CR-02)', () => {
+      const content = [
+        "context.execute_steps('Given a thing '",
+        "                      'with more text')",
+      ].join('\n');
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0, 'wrapped adjacent-string concatenation would truncate the runtime step text');
+    });
+
+    test('.join( suffix after the literal is skipped silently (CR-02)', () => {
+      const content = 'context.execute_steps("Given a thing".join(parts))';
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0);
+    });
+
+    test('.replace( suffix after the literal is skipped silently (CR-02)', () => {
+      const content = [
+        'context.execute_steps("""',
+        '    Given a PLACEHOLDER thing',
+        '""".replace("PLACEHOLDER", value))',
+      ].join('\n');
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0);
+    });
+
+    test('stray second argument after the literal is skipped silently (CR-02)', () => {
+      const content = 'context.execute_steps("Given a thing", extra_arg)';
+      const { callSteps } = scanExecuteSteps(content, fileUri);
+      assert.strictEqual(callSteps.length, 0);
+    });
+
     test('unterminated triple-quote literal is skipped silently', () => {
       const content = [
         'context.execute_steps("""',

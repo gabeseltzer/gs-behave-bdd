@@ -259,10 +259,14 @@ export function scanExecuteSteps(content: string, fileUri: vscode.Uri): { callSt
 
     const tail = findCallTail(content, afterDelimIndex).trim();
 
-    if (tail.startsWith('+'))
-      continue; // string concatenation after the literal: dynamic content, skip silently
-
+    // Whitelist of known-static tails: empty (plain literal), ".format(...)" or "% ..."
+    // (formatting placeholders, surfaced downstream via hasFormatPlaceholders). ANY other
+    // suffix - "+" concatenation, implicit adjacent-string concatenation, text-mutating
+    // method calls (.replace/.join/.strip), stray extra arguments - means the runtime text
+    // diverges from the literal we scanned, so skip silently (CR-02).
     const hasFormatPlaceholders = /^\.format\s*\(/.test(tail) || tail.startsWith('%');
+    if (tail !== '' && !hasFormatPlaceholders)
+      continue; // unrecognised suffix after the literal: dynamic content, skip silently
 
     scanBody(lines, openLineIdx, colOpenEnd, bodyEndLine, colCloseStart, fileUri, fileName, hasFormatPlaceholders, callSteps, invalidLines);
   }
