@@ -103,7 +103,10 @@ Audit: [milestones/v1.5.0-MILESTONE-AUDIT.md](milestones/v1.5.0-MILESTONE-AUDIT.
   2. "Find All Step References" tree view lists execute_steps call sites grouped by their containing `.py` file, with working click-through navigation
   3. Native Find All References (invoked from a step definition or a feature step) includes execute_steps call-site locations
   4. A workspace with zero execute_steps calls shows unchanged mapping counts, unchanged diagnostics, and passes every pre-existing test suite unmodified
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 24-01-PLAN.md — execute_steps call-site scanner (scanExecuteSteps + cached parseExecuteStepsFileContent + keyword regex)
+- [ ] 24-02-PLAN.md — mapping funnel (parallel executeStepsMappings array, rebuild, union point, lookup/live-match helpers, REFS-04 guard)
+- [ ] 24-03-PLAN.md — parse-cycle wiring (scan allPyFiles + per-workspace rebuild in initial-parse and debounced paths)
 
 ### Phase 25: Validation Diagnostics
 **Goal**: Users see Problems-pane diagnostics for embedded steps that would fail at runtime, with zero false positives on dynamic or unparseable content, updating live as they type.
@@ -141,8 +144,7 @@ Audit: [milestones/v1.5.0-MILESTONE-AUDIT.md](milestones/v1.5.0-MILESTONE-AUDIT.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 24. Scanner + Mapping Funnel | 0/? | Not started | - |
+| 24. Scanner + Mapping Funnel | 0/3 | Not started | - |
 | 25. Validation Diagnostics | 0/? | Not started | - |
 | 26. Go-to-Definition | 0/? | Not started | - |
 | 27. Integration Tests, Fixture & Docs | 0/? | Not started | - |
-</content>
