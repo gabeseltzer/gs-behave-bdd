@@ -15,7 +15,8 @@ import { storeBehaveStepDefinitions } from './stepsParserBehaveAdapter';
 import { TestData, TestFile } from './testFile';
 import { diagLog } from '../logger';
 import * as path from 'path';
-import { deleteStepMappings, rebuildStepMappings, getStepMappings } from './stepMappings';
+import { deleteStepMappings, rebuildStepMappings, getStepMappings, rebuildExecuteStepsMappings } from './stepMappings';
+import { parseExecuteStepsFileContent, deleteExecuteStepsCallSteps } from './executeStepsParser';
 import { getBundledBehavePath } from '../bundledBehave';
 import { setDuplicateStepDiagnostics, clearDuplicateStepDiagnostics } from '../handlers/duplicateStepDiagnostics';
 
@@ -216,6 +217,21 @@ export class FileParser {
     const seenPy = new Set<string>();
     allPyFiles = allPyFiles.filter(f => { const id = uriId(f); if (seenPy.has(id)) return false; seenPy.add(id); return true; });
     diagLog(`${caller}: _parseStepsFiles findFiles took ${Math.round(performance.now() - findFilesStart)}ms, found ${allPyFiles.length} .py files`);
+
+    // Scan every watched .py file for embedded execute_steps() call sites (helper modules and
+    // environment.py included, not just step definition files - REFS-01/02/03). This is pure
+    // in-memory scanning independent of the behave subprocess below, so it must run even if
+    // the behave load fails.
+    deleteExecuteStepsCallSteps(wkspSettings.featuresUri);
+    const execScanStart = performance.now();
+    let execCallSitesFound = 0;
+    for (const pyFile of allPyFiles) {
+      if (cancelToken.isCancellationRequested)
+        break;
+      const pyContent = await getContentFromFilesystem(pyFile);
+      execCallSitesFound += parseExecuteStepsFileContent(wkspSettings.featuresUri, pyContent, pyFile, caller);
+    }
+    diagLog(`${caller}: _parseStepsFiles execute_steps scan took ${Math.round(performance.now() - execScanStart)}ms, found ${execCallSitesFound} call sites across ${allPyFiles.length} .py files`);
 
     const stepFiles = allPyFiles.filter(uri => isStepsFile(uri));
 
@@ -608,6 +624,7 @@ export class FileParser {
       for (const root of wkspSettings.featuresUris) {
         mappingsCount += rebuildStepMappings(root, wkspSettings.featuresUri);
       }
+      rebuildExecuteStepsMappings(wkspSettings.featuresUri);
       buildMappingsTime = performance.now() - updateMappingsStart;
       diagLog(`${callName}: stepmappings built`);
 
