@@ -112,7 +112,7 @@ Audit: [milestones/v1.5.0-MILESTONE-AUDIT.md](milestones/v1.5.0-MILESTONE-AUDIT.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 24-02-PLAN.md — mapping funnel (parallel executeStepsMappings array, rebuild, union point, lookup/live-match helpers, REFS-04 guard)
+- [x] 24-02-PLAN.md — mapping funnel (parallel executeStepsMappings array, rebuild, union point, lookup/live-match helpers, REFS-04 guard)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -163,7 +163,7 @@ Audit: [milestones/v1.5.0-MILESTONE-AUDIT.md](milestones/v1.5.0-MILESTONE-AUDIT.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 24. Scanner + Mapping Funnel | 1/3 | In Progress|  |
+| 24. Scanner + Mapping Funnel | 2/3 | In Progress|  |
 | 25. Validation Diagnostics | 0/? | Not started | - |
 | 26. Go-to-Definition | 0/? | Not started | - |
 | 27. Integration Tests, Fixture & Docs | 0/? | Not started | - |

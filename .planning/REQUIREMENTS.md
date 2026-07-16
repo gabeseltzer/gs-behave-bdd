@@ -27,7 +27,7 @@
 - [x] **REFS-01**: Step-definition CodeLens reference counts include execute_steps call sites
 - [x] **REFS-02**: "Find All Step References" tree view includes execute_steps call sites, grouped by their `.py` file, with working click-through navigation
 - [x] **REFS-03**: Native Find All References (from the step def or a feature step) includes execute_steps call-site locations
-- [ ] **REFS-04**: Zero behavior change when a workspace contains no execute_steps calls — existing mappings counts, diagnostics, and all existing test suites pass unchanged
+- [x] **REFS-04**: Zero behavior change when a workspace contains no execute_steps calls — existing mappings counts, diagnostics, and all existing test suites pass unchanged
 
 ### Testing & Docs (TEST)
 
@@ -55,7 +55,7 @@
 | REFS-01 | Phase 24 | Complete |
 | REFS-02 | Phase 24 | Complete |
 | REFS-03 | Phase 24 | Complete |
-| REFS-04 | Phase 24 | Pending |
+| REFS-04 | Phase 24 | Complete |
 | VALID-01 | Phase 25 | Pending |
 | VALID-02 | Phase 25 | Pending |
 | VALID-03 | Phase 25 | Pending |

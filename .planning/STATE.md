@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: execute_steps IDE Support
 status: executing
-last_updated: "2026-07-16T15:12:55.975Z"
+last_updated: "2026-07-16T15:26:52.808Z"
 last_activity: 2026-07-16
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-07-15 — v1.6.0 milestone started)
 ## Current Position
 
 Phase: 24 (Scanner + Mapping Funnel) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-16
 
@@ -72,6 +72,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - [Phase 21]: Plan 03: tests — 23 new Mocha/Sinon unit tests in `test/unit/migrations/consent.test.ts` pin the consent UX contract (case-2 actions × 3 + dismissal, case-2 silent modes × 3, case-3 actions × 4 + dismissal, case-3-prompts-when-skip per D-A4.3, grouping × 4, audit-log × 3). Unit suite 826 → 849 passing. Test-only plan; no src changes. No deviations.
 - [Phase 16]: Plan 06: atomic mock surgery + 8-file fixture cascade. Singular featuresPath surface removed from TestWorkspaceConfig (D-17/DEP-06); 11 obsolete tests deleted, helper edge-case tests retargeted from featuresPath to projectPath to preserve coverage. 4 deferred Plan-05 failures resolved. Full unit suite 696 passing 0 failing. 34 migration tests preserved (D-MOD regression bar GREEN). Phase 16 functionally complete.
 - [Phase 24]: Plan 01: scanExecuteSteps pure scanner + cached parseExecuteStepsFileContent shipped in executeStepsParser.ts; executeStepsKeywordRe net-new *-aware export in gherkinPatterns.ts. Skips silently on f/b prefixes, non-literal args, + concatenation, unterminated strings, backslash-n escapes. Leading And/But/* with no prior step marked isAmbiguousType=true (raw keyword preserved for Plan 02 bucket-fallback matching). 27 new unit tests; 948 passing (7 pre-existing unrelated gherkinStructureDiagnostics failures confirmed out of scope).
+- [Phase 24]: Plan 02: parallel executeStepsMappings array + union edit in getStepMappingsForStepsFileFunction ships REFS-01/02/03 with zero consumer changes; getStepMappings stays exec-free (REFS-04 regression guard passing). rebuildExecuteStepsMappings/getStepFileStepForExecuteStep/matchExecuteStepsContent added; ambiguous-type (leading And/But/*) call steps resolved via given/when/then bucket fallback. 956 unit tests passing (up from 948).
 
 ### v1.4.0 Decisions
 
@@ -163,6 +164,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 | Phase 020-migration-registry P04 | 25m | 5 tasks | 6 files |
 | Phase 021 P01 | 25min | 3 tasks | 3 files |
 | Phase 24 P01 | 45min | 2 tasks | 3 files |
+| Phase 24 P02 | 35min | 2 tasks | 2 files |
 
 ## Session Continuity
 
