@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: execute_steps IDE Support
 status: executing
-last_updated: "2026-07-16T14:37:39.311Z"
-last_activity: 2026-07-16 -- Phase 24 execution started
+last_updated: "2026-07-16T15:12:55.975Z"
+last_activity: 2026-07-16
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-07-15 — v1.6.0 milestone started)
 ## Current Position
 
 Phase: 24 (Scanner + Mapping Funnel) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 24
-Last activity: 2026-07-16 -- Phase 24 execution started
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-07-16
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - [Phase 21]: Plan 02: activation-wiring — replaced bare evaluateAllMigrations(wkspUri) call with D-A3.4 collect-then-prompt; `void runConsentFlow(wkspUri, hits, mode)` is fire-and-forget so activation never blocks on prompts. Promise.all parallelism, reloadSettings, and outer try/catch preserved. 826 unit tests passing; 2 structural substring assertions in notifications.test.ts widened to match the new hooks-arg shape (Rule 1).
 - [Phase 21]: Plan 03: tests — 23 new Mocha/Sinon unit tests in `test/unit/migrations/consent.test.ts` pin the consent UX contract (case-2 actions × 3 + dismissal, case-2 silent modes × 3, case-3 actions × 4 + dismissal, case-3-prompts-when-skip per D-A4.3, grouping × 4, audit-log × 3). Unit suite 826 → 849 passing. Test-only plan; no src changes. No deviations.
 - [Phase 16]: Plan 06: atomic mock surgery + 8-file fixture cascade. Singular featuresPath surface removed from TestWorkspaceConfig (D-17/DEP-06); 11 obsolete tests deleted, helper edge-case tests retargeted from featuresPath to projectPath to preserve coverage. 4 deferred Plan-05 failures resolved. Full unit suite 696 passing 0 failing. 34 migration tests preserved (D-MOD regression bar GREEN). Phase 16 functionally complete.
+- [Phase 24]: Plan 01: scanExecuteSteps pure scanner + cached parseExecuteStepsFileContent shipped in executeStepsParser.ts; executeStepsKeywordRe net-new *-aware export in gherkinPatterns.ts. Skips silently on f/b prefixes, non-literal args, + concatenation, unterminated strings, backslash-n escapes. Leading And/But/* with no prior step marked isAmbiguousType=true (raw keyword preserved for Plan 02 bucket-fallback matching). 27 new unit tests; 948 passing (7 pre-existing unrelated gherkinStructureDiagnostics failures confirmed out of scope).
 
 ### v1.4.0 Decisions
 
@@ -161,6 +162,7 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 | Phase 020 P01 | 10m | 2 tasks | 2 files |
 | Phase 020-migration-registry P04 | 25m | 5 tasks | 6 files |
 | Phase 021 P01 | 25min | 3 tasks | 3 files |
+| Phase 24 P01 | 45min | 2 tasks | 3 files |
 
 ## Session Continuity
 

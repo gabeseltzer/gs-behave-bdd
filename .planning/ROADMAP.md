@@ -108,7 +108,7 @@ Audit: [milestones/v1.5.0-MILESTONE-AUDIT.md](milestones/v1.5.0-MILESTONE-AUDIT.
 
 **Wave 1**
 
-- [ ] 24-01-PLAN.md — execute_steps call-site scanner (scanExecuteSteps + cached parseExecuteStepsFileContent + keyword regex)
+- [x] 24-01-PLAN.md — execute_steps call-site scanner (scanExecuteSteps + cached parseExecuteStepsFileContent + keyword regex)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -163,7 +163,7 @@ Audit: [milestones/v1.5.0-MILESTONE-AUDIT.md](milestones/v1.5.0-MILESTONE-AUDIT.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 24. Scanner + Mapping Funnel | 0/3 | Not started | - |
+| 24. Scanner + Mapping Funnel | 1/3 | In Progress|  |
 | 25. Validation Diagnostics | 0/? | Not started | - |
 | 26. Go-to-Definition | 0/? | Not started | - |
 | 27. Integration Tests, Fixture & Docs | 0/? | Not started | - |
