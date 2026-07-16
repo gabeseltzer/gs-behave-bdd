@@ -7,20 +7,20 @@
 
 ### Validation (VALID)
 
-- [ ] **VALID-01**: User sees a Warning diagnostic (`execute-steps-step-not-found`) on an embedded step line inside `execute_steps()` that matches no step definition
-- [ ] **VALID-02**: User sees an Error diagnostic (`execute-steps-invalid-content`) on lines inside the string that are not valid execute_steps content (`@tag`, `Scenario:`, junk — behave ParserError at runtime)
-- [ ] **VALID-03**: Dynamic strings (f-strings, variable args, concatenation, `\n`-escaped single-line literals, unterminated strings) produce no diagnostics, navigation, or references whatsoever — skip means emit nothing
-- [ ] **VALID-04**: Diagnostics track the live document while typing (fresh scan of document text, not the 500ms-debounced cache) and clear when the step is fixed, on open, and when step definitions change in other files
-- [ ] **VALID-05**: `.format(...)`/`%`-formatted literals are supported; placeholder-bearing lines are matched with placeholders as wildcards and never flagged
-- [ ] **VALID-06**: `And`/`But`/`*` resolve to the previous step's type for matching (behave semantics); a leading `And`/`But` is never flagged (legal Background inheritance) and matches against all buckets
-- [ ] **VALID-07**: Docstrings, table rows, full-line comments, and blank lines inside the string are never flagged (valid behave content); inline `#` is treated as step text
-- [ ] **VALID-08**: execute_steps calls are validated in every `.py` the extension enumerates under watched roots (steps files, helper modules, `environment.py`) — not just `steps/` directories
+- [x] **VALID-01**: User sees a Warning diagnostic (`execute-steps-step-not-found`) on an embedded step line inside `execute_steps()` that matches no step definition
+- [x] **VALID-02**: User sees an Error diagnostic (`execute-steps-invalid-content`) on lines inside the string that are not valid execute_steps content (`@tag`, `Scenario:`, junk — behave ParserError at runtime)
+- [x] **VALID-03**: Dynamic strings (f-strings, variable args, concatenation, `\n`-escaped single-line literals, unterminated strings) produce no diagnostics, navigation, or references whatsoever — skip means emit nothing
+- [x] **VALID-04**: Diagnostics track the live document while typing (fresh scan of document text, not the 500ms-debounced cache) and clear when the step is fixed, on open, and when step definitions change in other files
+- [x] **VALID-05**: `.format(...)`/`%`-formatted literals are supported; placeholder-bearing lines are matched with placeholders as wildcards and never flagged
+- [x] **VALID-06**: `And`/`But`/`*` resolve to the previous step's type for matching (behave semantics). *(Superseded during implementation: verified against bundled behave 1.3.3 source — inside `execute_steps`, `parse_steps` resets parser state so there is NO Background inheritance; a leading `And`/`But` is a guaranteed runtime ParserError and is flagged as `execute-steps-invalid-content` (Error). Leading `*` resolves to given.)*
+- [x] **VALID-07**: Docstrings, table rows, full-line comments, and blank lines inside the string are never flagged (valid behave content); inline `#` is treated as step text
+- [x] **VALID-08**: execute_steps calls are validated in every `.py` the extension enumerates under watched roots (steps files, helper modules, `environment.py`) — not just `steps/` directories
 
 ### Navigation (NAV)
 
-- [ ] **NAV-01**: User can ctrl+click / F12 an embedded step line inside an `execute_steps` string to jump to the matching step definition's function
-- [ ] **NAV-02**: The click target (`originSelectionRange`) is exactly the embedded step-text span — not the quotes, indentation, or surrounding code
-- [ ] **NAV-03**: The provider contributes nothing for positions outside execute_steps step text, leaving Pylance definitions unaffected
+- [x] **NAV-01**: User can ctrl+click / F12 an embedded step line inside an `execute_steps` string to jump to the matching step definition's function
+- [x] **NAV-02**: The click target (`originSelectionRange`) is exactly the embedded step-text span — not the quotes, indentation, or surrounding code
+- [x] **NAV-03**: The provider contributes nothing for positions outside execute_steps step text, leaving Pylance definitions unaffected
 
 ### References (REFS)
 
@@ -31,9 +31,9 @@
 
 ### Testing & Docs (TEST)
 
-- [ ] **TEST-01**: Unit suites cover the scanner edge-case checklist, mapping rebuild/union (including a regression guard that `getStepMappings()` excludes execute_steps rows), diagnostics, and the definition provider
-- [ ] **TEST-02**: New integration fixture `example-projects/execute-steps/` and integration suite drive `executeDefinitionProvider` / `executeReferenceProvider` / `executeCodeLensProvider` / `languages.getDiagnostics` end-to-end, including a live-edit staleness test
-- [ ] **TEST-03**: README, AI_INSTRUCTIONS.md, and CHANGELOG document the feature and its known limitations (English keywords only; dynamic strings unsupported; `.py` outside watched roots not scanned)
+- [x] **TEST-01**: Unit suites cover the scanner edge-case checklist, mapping rebuild/union (including a regression guard that `getStepMappings()` excludes execute_steps rows), diagnostics, and the definition provider
+- [x] **TEST-02**: New integration fixture `example-projects/execute-steps/` and integration suite drive `executeDefinitionProvider` / `executeReferenceProvider` / `executeCodeLensProvider` / `languages.getDiagnostics` end-to-end, including a live-edit staleness test
+- [x] **TEST-03**: README, AI_INSTRUCTIONS.md, and CHANGELOG document the feature and its known limitations (English keywords only; dynamic strings unsupported; `.py` outside watched roots not scanned)
 
 ## Future Requirements (deferred)
 
@@ -56,20 +56,20 @@
 | REFS-02 | Phase 24 | Complete |
 | REFS-03 | Phase 24 | Complete |
 | REFS-04 | Phase 24 | Complete |
-| VALID-01 | Phase 25 | Pending |
-| VALID-02 | Phase 25 | Pending |
-| VALID-03 | Phase 25 | Pending |
-| VALID-04 | Phase 25 | Pending |
-| VALID-05 | Phase 25 | Pending |
-| VALID-06 | Phase 25 | Pending |
-| VALID-07 | Phase 25 | Pending |
-| VALID-08 | Phase 25 | Pending |
-| NAV-01 | Phase 26 | Pending |
-| NAV-02 | Phase 26 | Pending |
-| NAV-03 | Phase 26 | Pending |
-| TEST-01 | Phase 27 | Pending |
-| TEST-02 | Phase 27 | Pending |
-| TEST-03 | Phase 27 | Pending |
+| VALID-01 | Phase 25 | Complete |
+| VALID-02 | Phase 25 | Complete |
+| VALID-03 | Phase 25 | Complete |
+| VALID-04 | Phase 25 | Complete |
+| VALID-05 | Phase 25 | Complete |
+| VALID-06 | Phase 25 | Complete |
+| VALID-07 | Phase 25 | Complete |
+| VALID-08 | Phase 25 | Complete |
+| NAV-01 | Phase 26 | Complete |
+| NAV-02 | Phase 26 | Complete |
+| NAV-03 | Phase 26 | Complete |
+| TEST-01 | Phase 27 | Complete |
+| TEST-02 | Phase 27 | Complete |
+| TEST-03 | Phase 27 | Complete |
 
 Coverage: 18/18 v1.6.0 requirements mapped.
 </content>

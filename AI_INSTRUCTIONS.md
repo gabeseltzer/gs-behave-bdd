@@ -238,23 +238,28 @@ Tree: `TestController` → Workspace folders → Feature files → Scenarios
 Two-way navigation requires mapping feature steps to step file definitions:
 
 - `getStepFileStepForFeatureFileStep(featureUri, line)`: Feature → Step file
-- `getStepMappingsForStepsFileFunction(stepsUri, lineNo)`: Step file → Feature usages
+- `getStepMappingsForStepsFileFunction(stepsUri, lineNo)`: Step file → Feature usages AND `execute_steps` call sites (union of the flat `stepMappings` table and the parallel `executeStepsMappings` array)
 
 Step matching is regex-based: `{param}` → `.*`. Limitations: doesn't handle `{param:d}`, `cfparse`, or `re` regex patterns. See README "Known issues".
 
+### execute_steps Support
+
+`context.execute_steps("...")` string literals in watched `.py` files are scanned by `executeStepsParser.ts` (pure `scanExecuteSteps` + module-level cache, mirroring `featureParser`/`stepsParser` conventions). Call sites become `ExecuteStepsCallStep` records (structurally identical to `FeatureFileStep`) held in a parallel `executeStepsMappings` array in `stepMappings.ts` — NEVER in the flat `stepMappings` table (`getStepMappings()` must stay exec-free; integration `WkspParseCounts` assertions depend on it). `rebuildExecuteStepsMappings(featuresUri)` runs once per WORKSPACE after the per-root `rebuildStepMappings` loops in `fileParser.ts`. Scanner semantics are pinned to bundled behave 1.3.3 (`bundled/libs/behave/parser.py`): And/But/`*` inherit the previous step's type, a leading And/But is a guaranteed runtime `ParserError` (recorded as `ExecuteStepsInvalidLine`), leading `*` → given. False-positive rule: f-strings, non-literal args, and `\n`-escaped single-line literals are skipped SILENTLY (no diagnostics, navigation, or references).
+
 ### Diagnostics System
 
-Two types of diagnostics:
+Three types of diagnostics:
 
 1. **Fixture diagnostics** (`fixtureDiagnostics.ts`): Validates `@fixture.xxx` tags against `environment.py`
-2. **Step diagnostics** (`stepDiagnostics.ts`): Highlights undefined steps in feature files
+2. **Step diagnostics** (`stepDiagnostics.ts`): Highlights undefined steps in feature files (`step-not-found`, Warning)
+3. **execute_steps diagnostics** (`executeStepsDiagnostics.ts`): Validates embedded steps in `.py` files — `execute-steps-step-not-found` (Warning) and `execute-steps-invalid-content` (Error). Scans the LIVE document text via `matchExecuteStepsContent` (never the 500ms-debounced cache).
 
-Both validate on:
+All validate on:
 - Document open (`onDidOpenTextDocument`)
 - Document change (`onDidChangeTextDocument`)
-- Related file changes (e.g., environment.py change → re-validate all open features)
+- Related file changes (e.g., environment.py change → re-validate all open features; step-def changes → `onStepMappingsRebuilt` re-validates open feature AND `.py` files)
 
-Clear diagnostics using the helper functions (`clearFixtureDiagnostics`, `clearStepDiagnostics`) to avoid duplication.
+Clear diagnostics using the helper functions (`clearFixtureDiagnostics`, `clearStepDiagnostics`, `clearExecuteStepsDiagnostics`) to avoid duplication. Each validator must filter-preserve other validators' codes when calling `config.diagnostics.set`.
 
 ### Configuration Reloading
 
