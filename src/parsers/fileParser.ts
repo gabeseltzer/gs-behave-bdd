@@ -823,9 +823,16 @@ export class FileParser {
           this._showStepLoadWarning(errMsg, wkspSettings.uri);
         }
 
+        // Rescan the edited .py file for execute_steps() call sites (any watched .py file,
+        // not just step definition files - helper modules/environment.py count too) before
+        // rebuilding exec mappings. parseExecuteStepsFileContent clears fileUri's prior
+        // entries itself, so this refreshes only the one edited file's cache entries.
+        parseExecuteStepsFileContent(wkspSettings.featuresUri, content, fileUri, "[reparseFile]");
+
         for (const root of wkspSettings.featuresUris) {
           rebuildStepMappings(root, wkspSettings.featuresUri);
         }
+        rebuildExecuteStepsMappings(wkspSettings.featuresUri);
         this.onStepMappingsRebuilt?.(wkspSettings.featuresUri);
       }
       catch (e: unknown) {
