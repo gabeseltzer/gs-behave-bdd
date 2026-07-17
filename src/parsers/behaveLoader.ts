@@ -62,6 +62,17 @@ export interface FailedFileInfo {
   column: number;
   errorMessage: string;
   kind: FailedFileKind;
+  /** Full Python traceback (import failures only) - names the real culprit */
+  traceback?: string;
+}
+
+/**
+ * Environment discovery actually ran with. Attached only when something failed,
+ * so the user can compare against a working `behave` invocation.
+ */
+export interface DiscoveryDiagnostics {
+  pythonExecutable: string;
+  sysPath: string[];
 }
 
 /**
@@ -93,6 +104,8 @@ export interface BehaveDiscoveryResult {
   loadedFiles?: string[];
   /** Modules that were not installed and were satisfied with inert stubs */
   mockedModules?: string[];
+  /** Interpreter + sys.path discovery ran with (present only when something failed) */
+  diagnostics?: DiscoveryDiagnostics;
   /** Raw stderr from the Python process (warnings, tracebacks, etc.) */
   stderr?: string;
 }
@@ -159,6 +172,7 @@ export async function loadFromBehave(
       col: number;
       error: string;
       kind: string;
+      traceback?: string;
     }
 
     interface RawOutput {
@@ -170,6 +184,7 @@ export async function loadFromBehave(
       failed_files?: RawFailedFileInfo[];
       loaded_files?: string[];
       mocked_modules?: string[];
+      diagnostics?: { python_executable: string; sys_path: string[] };
     }
 
     let parsed: RawOutput;
@@ -207,8 +222,13 @@ export async function loadFromBehave(
       lineNumber: f.line,
       column: f.col,
       errorMessage: f.error,
-      kind: (f.kind === "syntax" || f.kind === "import" ? f.kind : "error") as FailedFileKind
+      kind: (f.kind === "syntax" || f.kind === "import" ? f.kind : "error") as FailedFileKind,
+      traceback: f.traceback
     }));
+
+    const diagnostics: DiscoveryDiagnostics | undefined = parsed.diagnostics
+      ? { pythonExecutable: parsed.diagnostics.python_executable, sysPath: parsed.diagnostics.sys_path }
+      : undefined;
 
     const errorKind: DiscoveryErrorKind | undefined = parsed.error
       ? (parsed.error_kind === "environmental" ? "environmental" : "code")
@@ -230,6 +250,7 @@ export async function loadFromBehave(
       error: parsed.error, errorKind, duplicates, failedFiles,
       loadedFiles: parsed.loaded_files,
       mockedModules: parsed.mocked_modules,
+      diagnostics,
       stderr: processStderr || undefined
     };
 

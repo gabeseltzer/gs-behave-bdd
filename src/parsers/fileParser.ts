@@ -364,11 +364,34 @@ export class FileParser {
   private _handleWholesaleLoadError(result: BehaveDiscoveryResult, wkspSettings: WorkspaceSettings) {
     diagLog(`behave step loading error: ${result.error}`);
     config.logger.logInfo(`Failed to load step definitions: ${result.error}`, wkspSettings.uri);
+    this._logDiscoveryDiagnostics(result, wkspSettings);
     this._notifyStepLoadError(result.error);
     if (result.errorKind === "environmental")
       this._showStepLoadWarning(result.error ?? "unknown error", wkspSettings.uri);
     if (result.duplicates?.length) {
       setDuplicateStepDiagnostics(result.duplicates);
+    }
+  }
+
+
+  // Logs the interpreter, search paths, and per-file tracebacks to the workspace
+  // output channel whenever discovery hits import problems. This is the ground
+  // truth for "imports that work for behave aren't followed": it shows the exact
+  // interpreter and sys.path used, to compare against a working `behave` run.
+  private _logDiscoveryDiagnostics(result: BehaveDiscoveryResult, wkspSettings: WorkspaceSettings) {
+    if (result.diagnostics) {
+      config.logger.logInfo(
+        `Step discovery ran with:\n` +
+        `  interpreter: ${result.diagnostics.pythonExecutable}\n` +
+        `  sys.path:\n${result.diagnostics.sysPath.map(p => `    ${p}`).join('\n')}\n` +
+        `If an import that works when you run behave is failing here, compare this ` +
+        `interpreter and these paths against your working behave environment ` +
+        `(a different virtualenv, or a path only your shell/PYTHONPATH provides, is the usual cause).`,
+        wkspSettings.uri);
+    }
+    for (const failed of result.failedFiles ?? []) {
+      if (failed.traceback)
+        config.logger.logInfo(`Traceback for ${failed.filePath}:\n${failed.traceback}`, wkspSettings.uri);
     }
   }
 
@@ -393,6 +416,8 @@ export class FileParser {
 
     setStepLoadDiagnostics(failedFiles);
     await setMissingModuleHints(result.mockedModules ?? [], stepFilesForHints);
+    if (failedFiles.length > 0)
+      this._logDiscoveryDiagnostics(result, wkspSettings);
 
     // Snapshot cached definitions BEFORE the delete-all. Retain a cached entry only
     // when the file has NO fresh definitions AND is in a broken state, specifically:

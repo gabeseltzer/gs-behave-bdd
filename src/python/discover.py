@@ -148,6 +148,7 @@ def install_missing_import_stubs() -> None:
 
 def _failure_entry(file_path: str, err: BaseException) -> dict[str, Any]:
   """Build a failed_files entry from an exception, with best-effort line info."""
+  tb = ""
   if isinstance(err, SyntaxError):
     kind = "syntax"
     line = err.lineno or 0
@@ -166,13 +167,19 @@ def _failure_entry(file_path: str, err: BaseException) -> dict[str, Any]:
           line = frame.lineno or 0
       except (OSError, ValueError):
         continue
-  return {
+    # Full traceback: the deepest frame names the real culprit (e.g. the exact
+    # missing module and where it was imported), which the one-line msg can hide.
+    tb = "".join(traceback.format_exception(type(err), err, err.__traceback__))
+  entry = {
     "file": str(Path(file_path).resolve()),
     "line": line,
     "col": col,
     "error": msg,
     "kind": kind,
   }
+  if tb:
+    entry["traceback"] = tb
+  return entry
 
 
 def preflight_syntax_check(py_files: list[str]) -> list[dict[str, Any]]:
@@ -837,6 +844,15 @@ def main() -> None:
 
     if MOCKED_MODULES:
       result["mocked_modules"] = sorted(MOCKED_MODULES)
+    # When anything failed, attach the environment so the user can see exactly
+    # which interpreter and search paths discovery used, and compare against a
+    # working "behave" run - the usual cause is a different interpreter (wrong
+    # virtualenv) or a project path that is not on sys.path.
+    if result.get("failed_files") or result.get("error"):
+      result["diagnostics"] = {
+        "python_executable": sys.executable,
+        "sys_path": [p for p in sys.path if p],
+      }
     print(json.dumps(result))
     sys.exit(0)
 

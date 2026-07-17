@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { execFileSync } from 'child_process';
 
-interface RawFailedFile { file: string; line: number; col: number; error: string; kind: string }
+interface RawFailedFile { file: string; line: number; col: number; error: string; kind: string; traceback?: string }
 interface RawStep { step_type: string; pattern: string; file: string; line: number; regex_pattern: string }
 interface DiscoverOutput {
   steps: RawStep[];
@@ -20,6 +20,7 @@ interface DiscoverOutput {
   loaded_files?: string[];
   mocked_modules?: string[];
   duplicates?: { step_type: string; pattern: string; file: string; line: number }[];
+  diagnostics?: { python_executable: string; sys_path: string[] };
 }
 
 function findProjectRoot(): string {
@@ -353,6 +354,43 @@ suite('discover.py - per-file isolation and import stubbing', function () {
     // the transitive-only missing module must not linger as a "stubbed OK" hint
     assert.ok(!(result.mocked_modules ?? []).includes('cv2_not_installed_xyz'),
       'a module that only broke a failed file should be pruned from mocked_modules');
+  });
+
+  test('on failure, emits diagnostics (interpreter + sys.path) and a full traceback', () => {
+    fs.writeFileSync(path.join(stepsDir, 'broken_import.py'), [
+      'from behave import given',
+      'import totally_absent_pkg_xyz',
+      'BAD = int(totally_absent_pkg_xyz.VERSION)',   // raises at import
+      '@given("a recoverable step")',
+      'def s(context):',
+      '    pass',
+    ].join('\n'));
+
+    const result = runDiscover(tmpDir, [stepsDir]);
+
+    assert.ok(result.diagnostics, 'diagnostics should be present when something fails');
+    assert.ok(result.diagnostics!.python_executable.length > 0, 'names the interpreter used');
+    assert.ok(Array.isArray(result.diagnostics!.sys_path) && result.diagnostics!.sys_path.length > 0,
+      'includes the effective sys.path so the user can compare to a working behave run');
+
+    const failure = result.failed_files?.find(f => path.basename(f.file) === 'broken_import.py');
+    assert.ok(failure, 'the broken file is reported');
+    assert.ok(failure!.traceback && failure!.traceback.includes('totally_absent_pkg_xyz'),
+      'the full traceback names the real culprit module');
+    // and its step is still recovered
+    assert.ok(result.steps.some(s => s.pattern === 'a recoverable step'));
+  });
+
+  test('healthy project omits diagnostics (only attached on failure)', () => {
+    fs.writeFileSync(path.join(stepsDir, 'clean.py'), [
+      'from behave import given',
+      '@given("a clean step")',
+      'def s(context):',
+      '    pass',
+    ].join('\n'));
+
+    const result = runDiscover(tmpDir, [stepsDir]);
+    assert.strictEqual(result.diagnostics, undefined, 'no diagnostics noise on the happy path');
   });
 
   test('fully healthy project: no failed_files, no mocked_modules keys', () => {
