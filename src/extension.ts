@@ -26,6 +26,7 @@ import { DefinitionProvider } from './handlers/definitionProvider';
 import { ExecuteStepsDefinitionProvider } from './handlers/executeStepsDefinitionProvider';
 import { SelectionRangeProvider } from './handlers/selectionRangeProvider';
 import { HoverProvider } from './handlers/hoverProvider';
+import { ExecuteStepsHoverProvider } from './handlers/executeStepsHoverProvider';
 import { FixtureDefinitionProvider, FixtureHoverProvider, FixtureReferenceProvider } from './handlers/fixtureProviders';
 import { StepReferenceProvider } from './handlers/stepReferenceProvider';
 import { StepCodeLensProvider } from './handlers/codeLensProvider';
@@ -507,6 +508,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new DefinitionProvider()),
       vscode.languages.registerDefinitionProvider({ language: "python" }, new ExecuteStepsDefinitionProvider()),
       vscode.languages.registerHoverProvider({ language: "gherkin" }, new HoverProvider()),
+      vscode.languages.registerHoverProvider({ language: "python" }, new ExecuteStepsHoverProvider()),
       vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new FixtureDefinitionProvider()),
       vscode.languages.registerHoverProvider({ language: "gherkin" }, new FixtureHoverProvider()),
       vscode.languages.registerReferenceProvider(["gherkin", "python"], new StepReferenceProvider()),

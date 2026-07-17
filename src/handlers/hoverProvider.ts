@@ -1,7 +1,47 @@
 import * as vscode from "vscode";
 import { getContentFromFilesystem, isStepsFile, getWorkspaceUriForFile } from "../common";
 import { validateAndGetStepInfo, handleProviderError } from "./providerHelpers";
-import { stepFileDecoratorPattern } from "../parsers/stepsParser";
+import { StepFileStep, stepFileDecoratorPattern } from "../parsers/stepsParser";
+
+
+// Builds the markdown hover content for a step definition: the decorator pattern as a
+// python code block, the function docstring (if any), and a library-source indicator when
+// the definition lives outside a /steps/ directory. Shared by the gherkin HoverProvider
+// and the python ExecuteStepsHoverProvider so both surfaces show identical hover info.
+export async function buildStepHoverContent(stepFileStep: StepFileStep, hoveredDocUri: vscode.Uri): Promise<vscode.MarkdownString | undefined> {
+  // Read the Python file content
+  const pythonContent = await getContentFromFilesystem(stepFileStep.uri);
+
+  // Extract step decorator and docstring
+  const functionInfo = extractStepDecoratorAndDocstring(pythonContent, stepFileStep.functionDefinitionRange.start.line);
+
+  if (!functionInfo) {
+    return undefined;
+  }
+
+  // Build hover content - show the step pattern decorator, not the function signature
+  const hoverContent = new vscode.MarkdownString();
+
+  // Show the decorator pattern
+  hoverContent.appendCodeblock(functionInfo.decorator, 'python');
+
+  if (functionInfo.docstring) {
+    hoverContent.appendMarkdown('\n\n---\n\n');
+    hoverContent.appendMarkdown(functionInfo.docstring);
+  }
+
+  // Add library source indicator if step is from a library file (not in /steps/)
+  const isLibraryStep = !isStepsFile(stepFileStep.uri);
+  if (isLibraryStep) {
+    const wkspUri = getWorkspaceUriForFile(hoveredDocUri);
+    if (wkspUri && stepFileStep.uri.path.startsWith(wkspUri.path)) {
+      const relativePath = stepFileStep.uri.path.substring(wkspUri.path.length + 1);
+      hoverContent.appendMarkdown(`\n\n*from library:* \`${relativePath}\``);
+    }
+  }
+
+  return hoverContent;
+}
 
 
 export class HoverProvider implements vscode.HoverProvider {
@@ -17,35 +57,9 @@ export class HoverProvider implements vscode.HoverProvider {
 
       const { stepFileStep, stepRange } = stepInfo;
 
-      // Read the Python file content
-      const pythonContent = await getContentFromFilesystem(stepFileStep.uri);
-
-      // Extract step decorator and docstring
-      const functionInfo = extractStepDecoratorAndDocstring(pythonContent, stepFileStep.functionDefinitionRange.start.line);
-
-      if (!functionInfo) {
+      const hoverContent = await buildStepHoverContent(stepFileStep, document.uri);
+      if (!hoverContent) {
         return undefined;
-      }
-
-      // Build hover content - show the step pattern decorator, not the function signature
-      const hoverContent = new vscode.MarkdownString();
-
-      // Show the decorator pattern
-      hoverContent.appendCodeblock(functionInfo.decorator, 'python');
-
-      if (functionInfo.docstring) {
-        hoverContent.appendMarkdown('\n\n---\n\n');
-        hoverContent.appendMarkdown(functionInfo.docstring);
-      }
-
-      // Add library source indicator if step is from a library file (not in /steps/)
-      const isLibraryStep = !isStepsFile(stepFileStep.uri);
-      if (isLibraryStep) {
-        const wkspUri = getWorkspaceUriForFile(document.uri);
-        if (wkspUri && stepFileStep.uri.path.startsWith(wkspUri.path)) {
-          const relativePath = stepFileStep.uri.path.substring(wkspUri.path.length + 1);
-          hoverContent.appendMarkdown(`\n\n*from library:* \`${relativePath}\``);
-        }
       }
 
       return new vscode.Hover(hoverContent, stepRange);

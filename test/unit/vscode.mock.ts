@@ -130,6 +130,28 @@ export class Selection {
   ) { }
 }
 
+export class MarkdownString {
+  public value = '';
+  constructor(value?: string) {
+    if (value) this.value = value;
+  }
+  appendMarkdown(text: string): MarkdownString {
+    this.value += text;
+    return this;
+  }
+  appendCodeblock(code: string, language?: string): MarkdownString {
+    this.value += `\n\`\`\`${language ?? ''}\n${code}\n\`\`\`\n`;
+    return this;
+  }
+}
+
+export class Hover {
+  public readonly contents: MarkdownString[];
+  constructor(contents: MarkdownString | MarkdownString[], public readonly range?: Range) {
+    this.contents = Array.isArray(contents) ? contents : [contents];
+  }
+}
+
 export class DiagnosticCollection {
   // 260513-oh5: keep the original Uri object so consumers iterating via
   // forEach get a real Uri (not just the string key). Map keys remain strings
