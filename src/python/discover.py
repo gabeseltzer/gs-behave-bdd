@@ -254,6 +254,54 @@ def recover_literal_steps_via_ast(file_path: str) -> list[dict[str, Any]]:
   return steps
 
 
+def _is_fixture_decorator(decorator: ast.expr) -> bool:
+  """True for @fixture / @fixture(...) / @behave.fixture (with or without a call)."""
+  target = decorator.func if isinstance(decorator, ast.Call) else decorator
+  if isinstance(target, ast.Name):
+    return target.id == "fixture"
+  if isinstance(target, ast.Attribute):
+    return target.attr == "fixture"  # e.g. behave.fixture
+  return False
+
+
+def recover_fixtures_via_ast(file_path: str) -> list[dict[str, Any]]:
+  """
+  Best-effort @fixture recovery for an environment file behave could NOT load
+  (mirrors recover_literal_steps_via_ast). A fixture's name and location are
+  fully known from source, so a missing import at module load no longer hides
+  the file's fixtures from tag validation / navigation.
+  """
+  try:
+    source = Path(file_path).read_text(encoding="utf-8", errors="replace")
+    tree = ast.parse(source, filename=file_path)
+  except (OSError, SyntaxError):
+    return []
+
+  resolved = str(Path(file_path).resolve())
+  fixtures: list[dict[str, Any]] = []
+  seen: set[str] = set()
+  for node in ast.walk(tree):
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+      continue
+    if node.name in seen or not any(
+      _is_fixture_decorator(d) for d in node.decorator_list
+    ):
+      continue
+    seen.add(node.name)
+    decorator_line = next(
+      (d.lineno for d in node.decorator_list if _is_fixture_decorator(d)), node.lineno
+    )
+    fixtures.append(
+      {
+        "function_name": node.name,
+        "file": resolved,
+        "decorator_line": decorator_line,
+        "def_line": node.lineno,  # ast: FunctionDef.lineno is the `def` line (3.8+)
+      }
+    )
+  return fixtures
+
+
 def load_environment_files(
   steps_paths: list[str],
 ) -> tuple[list[types.ModuleType], list[dict[str, Any]], list[str]]:
@@ -790,6 +838,20 @@ def _build_success_result(
     if recovered:
       steps.extend(recovered)
       files_with_steps.add(fp)
+
+  # Same for @fixture functions: an environment file that failed to load (e.g. a
+  # missing import raised at module level) would otherwise hide all its fixtures.
+  # collect_fixtures_from_modules only sees SUCCESSFULLY loaded env modules, so
+  # recover the rest from source.
+  files_with_fixtures = {f["file"] for f in fixtures}
+  for failure in failed_files:
+    fp = failure["file"]
+    if fp in files_with_fixtures:
+      continue
+    recovered_fixtures = recover_fixtures_via_ast(fp)
+    if recovered_fixtures:
+      fixtures.extend(recovered_fixtures)
+      files_with_fixtures.add(fp)
 
   result: dict[str, Any] = {"steps": steps, "fixtures": fixtures}
   if failed_files:

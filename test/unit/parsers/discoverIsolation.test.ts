@@ -11,9 +11,10 @@ import { execFileSync } from 'child_process';
 
 interface RawFailedFile { file: string; line: number; col: number; error: string; kind: string; traceback?: string }
 interface RawStep { step_type: string; pattern: string; file: string; line: number; regex_pattern: string }
+interface RawFixture { function_name: string; file: string; decorator_line: number; def_line: number }
 interface DiscoverOutput {
   steps: RawStep[];
-  fixtures: unknown[];
+  fixtures: RawFixture[];
   error?: string;
   error_kind?: string;
   failed_files?: RawFailedFile[];
@@ -379,6 +380,48 @@ suite('discover.py - per-file isolation and import stubbing', function () {
       'the full traceback names the real culprit module');
     // and its step is still recovered
     assert.ok(result.steps.some(s => s.pattern === 'a recoverable step'));
+  });
+
+  test('fixtures are recovered from an environment.py that fails to load', () => {
+    // Parallel to step recovery: a missing import that raises at module load in
+    // environment.py must not hide its @fixture functions.
+    const featuresDir = path.join(tmpDir, 'features');
+    fs.mkdirSync(featuresDir, { recursive: true });
+    fs.writeFileSync(path.join(featuresDir, 'environment.py'), [
+      'from behave import fixture',
+      'import missing_env_lib',
+      'CFG = int(missing_env_lib.VERSION)',   // raises at import
+      '',
+      '@fixture',                             // line 5
+      'def browser(context):',               // line 6
+      '    yield "b"',
+      '',
+      '@fixture(name="db")',                 // line 9
+      'def database(context):',              // line 10
+      '    yield "d"',
+    ].join('\n'));
+    // environment.py lives beside features/, and steps under features/steps
+    const nestedSteps = path.join(featuresDir, 'steps');
+    fs.mkdirSync(nestedSteps, { recursive: true });
+    fs.writeFileSync(path.join(nestedSteps, 's.py'), [
+      'from behave import given',
+      '@given("a step")',
+      'def s(context):',
+      '    pass',
+    ].join('\n'));
+
+    const result = runDiscover(tmpDir, [nestedSteps]);
+
+    const names = result.fixtures.map(f => f.function_name).sort();
+    assert.deepStrictEqual(names, ['browser', 'database'],
+      `both fixtures should be recovered (got: ${JSON.stringify(names)})`);
+    const browser = result.fixtures.find(f => f.function_name === 'browser');
+    assert.strictEqual(browser!.decorator_line, 5, 'decorator line recovered');
+    assert.strictEqual(browser!.def_line, 6, 'def line recovered');
+
+    assert.ok(result.failed_files?.some(f => path.basename(f.file) === 'environment.py'),
+      'environment.py is still reported as failed');
+    assert.ok(result.steps.some(s => s.pattern === 'a step'), 'steps still load');
   });
 
   test('healthy project omits diagnostics (only attached on failure)', () => {
