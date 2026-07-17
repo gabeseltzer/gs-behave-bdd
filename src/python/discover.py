@@ -7,16 +7,29 @@ Usage: python discover.py <project_path> <steps_paths_json> [--bundled-libs <pat
   --bundled-libs: Optional path to bundled behave libs directory
 
 Outputs JSON object to stdout:
-  {"steps": [...], "fixtures": [...]}
+  {"steps": [...], "fixtures": [...], "failed_files": [...], "mocked_modules": [...]}
+
+Degradation model (quiet-by-design):
+  - Each step file is syntax-checked (ast.parse) and loaded individually, so one
+    broken file only loses its own steps ("failed_files" reports it with a kind).
+  - Imports of modules that are not installed are satisfied with inert stubs
+    ("mocked_modules" reports them), so an uninstalled third-party dependency
+    does not block registration of steps that merely import it at module level.
+  - A wholesale "error" (+ "error_kind") is only reported when loading cannot
+    proceed at all (e.g. behave itself is broken or the fallback path failed).
 """
 
 from __future__ import annotations
 
+import ast
+import importlib.abc
+import importlib.machinery
 import importlib.util
 import inspect
 import json
 import re as _re
 import sys
+import traceback
 import types
 from pathlib import Path
 from typing import Any
@@ -24,39 +37,253 @@ from typing import Any
 # behave imports are deferred to function bodies after sys.path setup
 
 
-def load_environment_files(steps_paths: list[str]) -> list[types.ModuleType]:
-  """Load environment.py files from step directory parents. Returns loaded modules."""
+# ---------------------------------------------------------------------------
+# Missing-import stubbing (G+)
+# ---------------------------------------------------------------------------
+
+# Full names of modules that were satisfied with a stub because they are not
+# installed in the interpreter. Reported to the extension for hint diagnostics.
+MOCKED_MODULES: set[str] = set()
+
+# Never stub these prefixes: behave must fail loudly if absent (the extension
+# falls back to its bundled copy), and stubbing it would silently yield 0 steps.
+_STUB_BLOCKLIST_PREFIXES = ("behave", "_pytest", "pytest")
+
+
+class _StubObject:
+  """An inert attribute-chain stub standing in for anything from a missing module."""
+
+  def __init__(self, name: str) -> None:
+    object.__setattr__(self, "_stub_name", name)
+
+  def __getattr__(self, item: str) -> _StubObject:
+    if item.startswith("__") and item.endswith("__"):
+      raise AttributeError(item)
+    return _StubObject(f"{object.__getattribute__(self, '_stub_name')}.{item}")
+
+  def __call__(self, *args: Any, **kwargs: Any) -> Any:
+    # Decorator passthrough: behave derives a step's file/line from
+    # func.__code__ at registration time, so a stubbed third-party decorator
+    # must hand back the real function it was applied to, not another stub.
+    if len(args) == 1 and not kwargs and callable(args[0]):
+      return args[0]
+    return _StubObject(object.__getattribute__(self, "_stub_name") + "()")
+
+  def __mro_entries__(self, bases: Any) -> tuple[type, ...]:
+    # Allow "class Foo(stub.Base):" at module level
+    return (object,)
+
+  def __getitem__(self, item: Any) -> _StubObject:
+    return _StubObject(object.__getattribute__(self, "_stub_name") + "[...]")
+
+  def __iter__(self) -> Any:
+    return iter(())
+
+  def __repr__(self) -> str:
+    return f"<gs-behave-bdd stub {object.__getattribute__(self, '_stub_name')}>"
+
+
+class _StubModule(types.ModuleType):
+  def __getattr__(self, item: str) -> Any:
+    # Unlike _StubObject, stub even dunder attributes: explicit accesses like
+    # "lib.__version__" are common in top-level version checks, and implicit
+    # protocol lookups go through the type (never this instance __getattr__),
+    # so nothing protocol-critical can be affected. Import-machinery attributes
+    # (__path__, __spec__, __name__...) live in the module __dict__ already and
+    # never reach __getattr__.
+    return _StubObject(f"{self.__name__}.{item}")
+
+
+class _MissingModuleStubFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+  """
+  Appended (never prepended) to sys.meta_path, so it is only consulted after
+  every real finder has failed - it can never shadow an installed package.
+  """
+
+  def find_spec(
+    self, fullname: str, _path: Any = None, _target: Any = None
+  ) -> importlib.machinery.ModuleSpec | None:
+    top_level = fullname.split(".", maxsplit=1)[0]
+    if top_level in _STUB_BLOCKLIST_PREFIXES:
+      return None
+    # is_package=True gives the stub a submodule_search_locations, so
+    # "import matplotlib.pyplot" resolves (the submodule stubs too).
+    return importlib.util.spec_from_loader(fullname, self, is_package=True)
+
+  def create_module(self, spec: importlib.machinery.ModuleSpec) -> types.ModuleType:
+    MOCKED_MODULES.add(spec.name)
+    return _StubModule(spec.name)
+
+  def exec_module(self, module: types.ModuleType) -> None:
+    pass
+
+
+def install_missing_import_stubs() -> None:
+  """
+  Install the stub finder. MUST be called only after every behave import this
+  script needs has already executed (see _import_behave_modules), otherwise a
+  missing behave would be stubbed instead of reported.
+  """
+  if not any(isinstance(f, _MissingModuleStubFinder) for f in sys.meta_path):
+    sys.meta_path.append(_MissingModuleStubFinder())
+
+
+# ---------------------------------------------------------------------------
+# Per-file failure reporting (D + G)
+# ---------------------------------------------------------------------------
+
+
+def _failure_entry(file_path: str, err: BaseException) -> dict[str, Any]:
+  """Build a failed_files entry from an exception, with best-effort line info."""
+  if isinstance(err, SyntaxError):
+    kind = "syntax"
+    line = err.lineno or 0
+    col = err.offset or 0
+    msg = err.msg or str(err)
+  else:
+    kind = "import" if isinstance(err, ImportError) else "error"
+    msg = f"{type(err).__name__}: {err!s}"
+    line = 0
+    col = 0
+    # Find the deepest traceback frame inside the failing file itself
+    resolved = str(Path(file_path).resolve())
+    for frame in traceback.extract_tb(err.__traceback__):
+      try:
+        if str(Path(frame.filename).resolve()) == resolved:
+          line = frame.lineno or 0
+      except (OSError, ValueError):
+        continue
+  return {
+    "file": str(Path(file_path).resolve()),
+    "line": line,
+    "col": col,
+    "error": msg,
+    "kind": kind,
+  }
+
+
+def preflight_syntax_check(py_files: list[str]) -> list[dict[str, Any]]:
+  """ast.parse each file; return failed_files entries for files that don't compile."""
+  failures: list[dict[str, Any]] = []
+  for file_path in py_files:
+    try:
+      source = Path(file_path).read_text(encoding="utf-8", errors="replace")
+      ast.parse(source, filename=file_path)
+    except SyntaxError as e:
+      failures.append(_failure_entry(file_path, e))
+    except OSError:
+      continue  # unreadable file: let the exec stage (or its absence) handle it
+  return failures
+
+
+def load_environment_files(
+  steps_paths: list[str],
+) -> tuple[list[types.ModuleType], list[dict[str, Any]]]:
+  """
+  Load environment.py files from step directory parents.
+  Returns (loaded modules, failed_files entries).
+  """
   loaded_env_files: set[str] = set()
   loaded_modules: list[types.ModuleType] = []
+  failures: list[dict[str, Any]] = []
   for sp in steps_paths:
     env_dir = Path(sp).resolve().parent
     env_file = env_dir / "environment.py"
     if env_file.exists() and str(env_file) not in loaded_env_files:
       loaded_env_files.add(str(env_file))
+      syntax_failures = preflight_syntax_check([str(env_file)])
+      if syntax_failures:
+        failures.extend(syntax_failures)
+        continue
       try:
         spec = importlib.util.spec_from_file_location("environment", env_file)
         if spec and spec.loader:
           env_module = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(env_module)
           loaded_modules.append(env_module)
-      except (ImportError, AttributeError, OSError) as env_err:
-        print(
-          json.dumps({"warning": f"Failed to load environment.py: {env_err!s}"}),
-          file=sys.stderr,
-        )
-  return loaded_modules
+      except Exception as env_err:  # noqa: BLE001  # any env failure is per-file, never fatal
+        failures.append(_failure_entry(str(env_file), env_err))
+  return loaded_modules, failures
 
 
 class StepLoadError(Exception):
-  """Raised when step loading fails, carrying the original error message."""
+  """Raised when step loading fails wholesale, carrying the original error message."""
 
 
-def load_step_directories(steps_paths: list[str]) -> None:
+class _IsolationUnavailable(Exception):
+  """Raised when behave's internals don't match what the isolated loader needs."""
+
+
+def _list_step_files(step_dirs: list[str]) -> list[str]:
+  """Enumerate step files exactly like behave's load_step_modules: *.py in each dir root, sorted."""
+  files: list[str] = []
+  for path in step_dirs:
+    try:
+      # behave sorts os.listdir() names; sorting Path entries by name matches that
+      entries = sorted(Path(path).iterdir(), key=lambda p: p.name)
+    except OSError:
+      continue
+    files.extend(str(p) for p in entries if p.name.endswith(".py"))
+  return files
+
+
+def _load_step_files_isolated(
+  step_dirs: list[str], skip_files: set[str]
+) -> list[dict[str, Any]]:
   """
-  Load step modules from all step directories.
+  Replicate behave's load_step_modules() (behave/runner_util.py) with one
+  change: exec each step file inside try/except so one broken file only loses
+  its own steps. Same decorator globals, same PathManager, same sorted load
+  order, same matcher reset between files.
 
-  Raises StepLoadError instead of exiting, so the caller can attempt
-  duplicate detection before producing output.
+  Raises _IsolationUnavailable if behave's internals have drifted from what
+  this replication needs (caller falls back to the real load_step_modules).
+  """
+  try:
+    from behave import runner_util  # noqa: PLC0415
+    from behave.api.step_matchers import (  # noqa: PLC0415
+      step_matcher,
+      use_default_step_matcher,
+      use_step_matcher,
+    )
+    from behave.matchers import use_current_step_matcher_as_default  # noqa: PLC0415
+    from behave.step_registry import setup_step_decorators  # noqa: PLC0415
+
+    path_manager = runner_util.PathManager
+    exec_file = runner_util.exec_file
+  except (ImportError, AttributeError) as e:
+    raise _IsolationUnavailable(str(e)) from e
+
+  step_globals: dict[str, Any] = {
+    "use_step_matcher": use_step_matcher,
+    "step_matcher": step_matcher,
+  }
+  setup_step_decorators(step_globals)
+
+  failures: list[dict[str, Any]] = []
+  with path_manager(step_dirs):
+    use_current_step_matcher_as_default()
+    for file_path in _list_step_files(step_dirs):
+      if str(Path(file_path).resolve()) in skip_files:
+        use_default_step_matcher()
+        continue
+      try:
+        step_module_globals = step_globals.copy()
+        exec_file(file_path, step_module_globals)
+      except Exception as e:  # noqa: BLE001  # per-file isolation is the whole point
+        failures.append(_failure_entry(file_path, e))
+      finally:
+        use_default_step_matcher()
+  return failures
+
+
+def load_step_directories(steps_paths: list[str]) -> list[dict[str, Any]]:
+  """
+  Load step modules from all step directories, isolating failures per file.
+
+  Returns failed_files entries (syntax pre-flight failures + exec failures).
+  Falls back to behave's own all-or-nothing load_step_modules if the isolated
+  replication is unavailable; in that case a failure raises StepLoadError.
   """
   from behave import runner_util  # noqa: PLC0415  # deferred until sys.path setup
 
@@ -64,16 +291,37 @@ def load_step_directories(steps_paths: list[str]) -> None:
     str(Path(p).resolve()) for p in steps_paths if Path(p).resolve().exists()
   ]
   if not step_dirs:
-    return
+    return []
 
+  # D: syntax pre-flight - precise line/col, and skip exec of files that can't compile
+  syntax_failures = preflight_syntax_check(_list_step_files(step_dirs))
+  skip_files = {f["file"] for f in syntax_failures}
+
+  try:
+    exec_failures = _load_step_files_isolated(step_dirs, skip_files)
+    return syntax_failures + exec_failures
+  except _IsolationUnavailable:
+    pass
+
+  # Fallback: behave API drift - use behave's own loader (all-or-nothing)
   try:
     runner_util.load_step_modules(step_dirs)
   except Exception as load_err:
     raise StepLoadError(str(load_err)) from load_err
+  return syntax_failures
 
 
-def collect_steps_from_registry(registry: Any) -> list[dict[str, Any]]:
-  """Collect all registered steps from the registry."""
+def collect_steps_from_registry(
+  registry: Any, exclude_files: set[str] | None = None
+) -> list[dict[str, Any]]:
+  """
+  Collect all registered steps from the registry.
+
+  exclude_files: resolved paths of files that failed to load - a file that
+  registered some steps and then raised has its partial registrations dropped
+  (the extension keeps that file's cached definitions instead).
+  """
+  exclude_files = exclude_files or set()
   steps: list[dict[str, Any]] = []
   for step_type in ["given", "when", "then", "step"]:
     if step_type not in registry.steps:
@@ -82,6 +330,9 @@ def collect_steps_from_registry(registry: Any) -> list[dict[str, Any]]:
     for matcher in registry.steps[step_type]:
       regex_pat = _get_regex_pattern(matcher)
       file_path = _get_file_path(matcher)
+
+      if file_path in exclude_files:
+        continue
 
       step_info = {
         "step_type": step_type,
@@ -265,6 +516,67 @@ def _parse_bundled_libs() -> str | None:
   return None
 
 
+def _import_behave_modules() -> Any:
+  """
+  Import every behave module this script needs, BEFORE the stub finder is
+  installed - a missing behave must be reported, never stubbed.
+  Returns the step registry module.
+  """
+  from behave import runner_util, step_registry  # noqa: PLC0415, F401
+
+  try:
+    import behave.api.step_matchers  # noqa: PLC0415
+    import behave.matchers  # noqa: PLC0415, F401  # pre-load before stub finder installs
+  except ImportError:
+    pass  # older behave: the isolated loader will fall back to load_step_modules
+
+  return step_registry
+
+
+def _build_wholesale_error_result(
+  load_error: str, steps_paths: list[str]
+) -> dict[str, Any]:
+  """Result for a wholesale load failure (fallback loader path) - scan for duplicates."""
+  result: dict[str, Any] = {
+    "steps": [],
+    "fixtures": [],
+    "error": load_error,
+    "error_kind": "code",
+  }
+  duplicates = find_duplicate_steps(steps_paths)
+  if duplicates:
+    result["duplicates"] = duplicates
+  return result
+
+
+def _build_success_result(
+  step_registry: Any,
+  env_modules: list[types.ModuleType],
+  failed_files: list[dict[str, Any]],
+  steps_paths: list[str],
+) -> dict[str, Any]:
+  """Result for a (possibly partially) successful load."""
+  failed_paths = {f["file"] for f in failed_files}
+  steps = collect_steps_from_registry(
+    step_registry.registry, exclude_files=failed_paths
+  )
+  fixtures = collect_fixtures_from_modules(env_modules)
+
+  result: dict[str, Any] = {"steps": steps, "fixtures": fixtures}
+  if failed_files:
+    result["failed_files"] = failed_files
+    # A failed file may hide a duplicate-definition problem (AmbiguousStep);
+    # the regex scan is cheap and lets the extension keep its duplicates UI.
+    if any(
+      "already" in f["error"].lower() or "ambiguous" in f["error"].lower()
+      for f in failed_files
+    ):
+      duplicates = find_duplicate_steps(steps_paths)
+      if duplicates:
+        result["duplicates"] = duplicates
+  return result
+
+
 def main() -> None:
   """Main entry point for step and fixture discovery."""
   try:
@@ -274,34 +586,25 @@ def main() -> None:
 
     _setup_sys_path(project_path, steps_paths, _parse_bundled_libs())
 
-    from behave import step_registry  # noqa: PLC0415  # deferred until sys.path setup
+    step_registry = _import_behave_modules()
 
-    env_modules = load_environment_files(steps_paths)
+    # G+: from here on, imports of modules that aren't installed resolve to
+    # inert stubs (recorded in MOCKED_MODULES) instead of failing the file.
+    install_missing_import_stubs()
 
-    load_error: str | None = None
+    env_modules, env_failures = load_environment_files(steps_paths)
+
     try:
-      load_step_directories(steps_paths)
+      failed_files = env_failures + load_step_directories(steps_paths)
+      result = _build_success_result(
+        step_registry, env_modules, failed_files, steps_paths
+      )
     except StepLoadError as e:
-      load_error = str(e)
+      result = _build_wholesale_error_result(str(e), steps_paths)
 
-    if load_error is not None:
-      # Step loading failed — scan files to detect duplicates
-      duplicates = find_duplicate_steps(steps_paths)
-      result: dict[str, Any] = {
-        "steps": [],
-        "fixtures": [],
-        "error": load_error,
-      }
-      if duplicates:
-        result["duplicates"] = duplicates
-      print(json.dumps(result))
-      sys.exit(0)
-
-    registry = step_registry.registry
-    steps = collect_steps_from_registry(registry)
-    fixtures = collect_fixtures_from_modules(env_modules)
-
-    print(json.dumps({"steps": steps, "fixtures": fixtures}))
+    if MOCKED_MODULES:
+      result["mocked_modules"] = sorted(MOCKED_MODULES)
+    print(json.dumps(result))
     sys.exit(0)
 
   except ImportError as e:
