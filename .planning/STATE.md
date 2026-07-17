@@ -1,33 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.5.0
-milestone_name: Migration Consent & behave-vsc Cleanup
-status: Awaiting next milestone
-last_updated: "2026-05-15T19:09:20.891Z"
-last_activity: 2026-05-15 — Milestone v1.5.0 completed and archived
+milestone: v1.6.0
+milestone_name: execute_steps IDE Support
+status: verifying
+last_updated: "2026-07-16T15:34:54.128Z"
+last_activity: 2026-07-16
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 20
-  completed_plans: 20
-  percent: 100
+  total_phases: 4
+  completed_phases: 1
+  total_plans: 3
+  completed_plans: 3
+  percent: 25
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-15 — v1.5.0 shipped)
+See: .planning/PROJECT.md (updated 2026-07-15 — v1.6.0 milestone started)
 
 **Core value:** Zero-configuration project discovery: tests appear in the Test Explorer without the user touching settings.json — and stay correct as the config evolves.
-**Current focus:** Planning v1.6.0 — duplicate-scenario detection rework
+**Current focus:** Phase 24 — Scanner + Mapping Funnel
 
 ## Current Position
 
-Phase: Milestone v1.5.0 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-05-15 — Milestone v1.5.0 completed and archived
+Phase: 24 (Scanner + Mapping Funnel) — EXECUTING
+Plan: 3 of 3
+Status: Phase complete — ready for verification
+Last activity: 2026-07-16
 
 ## Performance Metrics
 
@@ -40,17 +40,18 @@ Last activity: 2026-05-15 — Milestone v1.5.0 completed and archived
 
 ## Accumulated Context
 
-### v1.5.0 Decisions
+### v1.6.0 Decisions
 
-- Coarse granularity → 4 phases for v1.5.0 (resisted per-task splits seen in v1.4.0).
-- Phase numbering continues from v1.4.0 (last phase 18) → v1.5.0 starts at phase 19.
-- `activeProjectCache` invalidation (CLEANUP-02) lands in Phase 19 alongside foundation work — independent of migration UX, eliminates v1.4.0 carry-forward regression risk early.
-- `CLEANUP-01` (silent-fallback removal) deferred to Phase 22, after the new migration flow has shipped and been bedded in by the integration suite — most user-visible behaviour change in v1.5.0.
-- v1.4.0's two migrations (`migrateLegacyFeaturesPath`, `migrateLegacySuppressMultiConfig`) both refactor through the new registry in Phase 20, alongside the new `behave-vsc` entries — single coherent landing point for all registry work.
-- All migrations continue to route through the v1.4.0 `migrateScopedSetting<TSrc, TDest>` primitive — no parallel implementations.
+- Coarse granularity → 4 phases for v1.6.0, matching the research-suggested build order exactly (scanner/mapping funnel → validation diagnostics → go-to-definition → integration/fixture/docs).
+- Phase numbering continues from v1.5.0 (last phase 23) → v1.6.0 starts at phase 24.
+- REFS-01..04 (reference counting) assigned to Phase 24 alongside the scanner: the research confirms reference counting "falls out" of the parallel `executeStepsMappings` union with zero consumer-side changes, so it ships as soon as the scanner + mapping funnel exist.
+- Phase 25 (validation diagnostics) and Phase 26 (go-to-definition) both depend only on Phase 24 and are parallel-safe with each other.
+- TEST-01 (unit suites) is satisfied incrementally across Phases 24-26 as each module ships, but is formally tracked against Phase 27 as the milestone-closing confirmation point — avoids double-counting a requirement across phases while acknowledging the real delivery timeline.
+- Phase 27 bundles the new `example-projects/execute-steps/` integration fixture, the integration suite, and README/AI_INSTRUCTIONS/CHANGELOG docs together as the milestone-closing phase.
 
 ### Roadmap Evolution
 
+- v1.6.0 added: Phases 24-27 for execute_steps IDE Support (2026-07-15) — Scanner + Mapping Funnel, Validation Diagnostics, Go-to-Definition, Integration Tests/Fixture/Docs.
 - Phase 18 added: Address v1.4.0 tech debt: artifact rollups, mock cleanup
 - v1.5.0 added: Phases 19-22 for Migration Consent & `behave-vsc` Cleanup (2026-05-07)
 
@@ -70,6 +71,9 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 - [Phase 21]: Plan 02: activation-wiring — replaced bare evaluateAllMigrations(wkspUri) call with D-A3.4 collect-then-prompt; `void runConsentFlow(wkspUri, hits, mode)` is fire-and-forget so activation never blocks on prompts. Promise.all parallelism, reloadSettings, and outer try/catch preserved. 826 unit tests passing; 2 structural substring assertions in notifications.test.ts widened to match the new hooks-arg shape (Rule 1).
 - [Phase 21]: Plan 03: tests — 23 new Mocha/Sinon unit tests in `test/unit/migrations/consent.test.ts` pin the consent UX contract (case-2 actions × 3 + dismissal, case-2 silent modes × 3, case-3 actions × 4 + dismissal, case-3-prompts-when-skip per D-A4.3, grouping × 4, audit-log × 3). Unit suite 826 → 849 passing. Test-only plan; no src changes. No deviations.
 - [Phase 16]: Plan 06: atomic mock surgery + 8-file fixture cascade. Singular featuresPath surface removed from TestWorkspaceConfig (D-17/DEP-06); 11 obsolete tests deleted, helper edge-case tests retargeted from featuresPath to projectPath to preserve coverage. 4 deferred Plan-05 failures resolved. Full unit suite 696 passing 0 failing. 34 migration tests preserved (D-MOD regression bar GREEN). Phase 16 functionally complete.
+- [Phase 24]: Plan 01: scanExecuteSteps pure scanner + cached parseExecuteStepsFileContent shipped in executeStepsParser.ts; executeStepsKeywordRe net-new *-aware export in gherkinPatterns.ts. Skips silently on f/b prefixes, non-literal args, + concatenation, unterminated strings, backslash-n escapes. Leading And/But/* with no prior step marked isAmbiguousType=true (raw keyword preserved for Plan 02 bucket-fallback matching). 27 new unit tests; 948 passing (7 pre-existing unrelated gherkinStructureDiagnostics failures confirmed out of scope).
+- [Phase 24]: Plan 02: parallel executeStepsMappings array + union edit in getStepMappingsForStepsFileFunction ships REFS-01/02/03 with zero consumer changes; getStepMappings stays exec-free (REFS-04 regression guard passing). rebuildExecuteStepsMappings/getStepFileStepForExecuteStep/matchExecuteStepsContent added; ambiguous-type (leading And/But/*) call steps resolved via given/when/then bucket fallback. 956 unit tests passing (up from 948).
+- [Phase 24]: Plan 03: wired allPyFiles execute_steps scan into _parseStepsFiles (independent of behave subprocess) and rebuildExecuteStepsMappings once per workspace at both the initial-parse and debounced-reparse rebuild insertion points; debounced path rescans the edited .py (any watched file, not just isStepsFile) before rebuild. Full existing unit suite stays green (956 passing) proving REFS-04 zero-behavior-change.
 
 ### v1.4.0 Decisions
 
@@ -160,12 +164,15 @@ Full decision log in PROJECT.md Key Decisions table and per-milestone archives:
 | Phase 020 P01 | 10m | 2 tasks | 2 files |
 | Phase 020-migration-registry P04 | 25m | 5 tasks | 6 files |
 | Phase 021 P01 | 25min | 3 tasks | 3 files |
+| Phase 24 P01 | 45min | 2 tasks | 3 files |
+| Phase 24 P02 | 35min | 2 tasks | 2 files |
+| Phase 24 P03 | 20min | 2 tasks | 1 files |
 
 ## Session Continuity
 
-**Last action:** v1.5.0 milestone archived (audit passed 29/29 requirements). PROJECT.md / ROADMAP.md / MILESTONES.md / STATE.md updated. REQUIREMENTS.md archived to milestones/v1.5.0-REQUIREMENTS.md.
-**Next action:** Create branch `gabes/fix-duplicate-scenario-regex` off main; run `/gsd-new-milestone` to define v1.6.0 (duplicate-scenario detection rework).
-**Loaded context:** PROJECT.md, MILESTONES.md, ROADMAP.md, config.json.
+**Last action:** v1.6.0 ROADMAP.md written (Phases 24-27, 18/18 requirements mapped, 0 orphans), STATE.md updated, REQUIREMENTS.md traceability filled.
+**Next action:** Run `/gsd-plan-phase 24` to plan the Scanner + Mapping Funnel phase.
+**Loaded context:** PROJECT.md, REQUIREMENTS.md, research/SUMMARY.md, config.json, MILESTONES.md, ROADMAP.md.
 
 ## Deferred Items
 
@@ -188,5 +195,7 @@ Most quick-tasks above are completed work (commits already in git); their artifa
 
 ## Operator Next Steps
 
-- Create branch `gabes/fix-duplicate-scenario-regex` off main
-- Run /gsd-new-milestone to define v1.6.0 (duplicate-scenario detection)
+- Review `.planning/ROADMAP.md` Phases 24-27 for v1.6.0 execute_steps IDE Support
+- Run `/gsd-plan-phase 24` to begin planning Phase 24: Scanner + Mapping Funnel
+
+</content>

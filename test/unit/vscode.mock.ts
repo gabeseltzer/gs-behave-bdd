@@ -103,6 +103,17 @@ export class Range {
       this.end = endOrChar as Position;
     }
   }
+
+  // mirrors vscode.Range.contains(position) semantics: start <= position <= end (inclusive)
+  contains(position: Position): boolean {
+    if (position.line < this.start.line || position.line > this.end.line)
+      return false;
+    if (position.line === this.start.line && position.character < this.start.character)
+      return false;
+    if (position.line === this.end.line && position.character > this.end.character)
+      return false;
+    return true;
+  }
 }
 
 export class Position {
@@ -117,6 +128,64 @@ export class Selection {
     public readonly start: Position,
     public readonly end: Position
   ) { }
+}
+
+export class MarkdownString {
+  public value = '';
+  constructor(value?: string) {
+    if (value) this.value = value;
+  }
+  appendMarkdown(text: string): MarkdownString {
+    this.value += text;
+    return this;
+  }
+  appendCodeblock(code: string, language?: string): MarkdownString {
+    this.value += `\n\`\`\`${language ?? ''}\n${code}\n\`\`\`\n`;
+    return this;
+  }
+}
+
+export class Hover {
+  public readonly contents: MarkdownString[];
+  constructor(contents: MarkdownString | MarkdownString[], public readonly range?: Range) {
+    this.contents = Array.isArray(contents) ? contents : [contents];
+  }
+}
+
+export enum CompletionItemKind {
+  Text = 0,
+  Function = 2,
+}
+
+export class CompletionItem {
+  public detail?: string;
+  public range?: Range;
+  constructor(
+    public readonly label: string,
+    public readonly kind?: CompletionItemKind
+  ) { }
+}
+
+export class CodeActionKind {
+  static readonly QuickFix = new CodeActionKind('quickfix');
+  constructor(public readonly value: string) { }
+}
+
+export class CodeAction {
+  public diagnostics?: Diagnostic[];
+  public edit?: WorkspaceEdit;
+  public isPreferred?: boolean;
+  constructor(
+    public readonly title: string,
+    public readonly kind?: CodeActionKind
+  ) { }
+}
+
+export class WorkspaceEdit {
+  public readonly inserts: { uri: Uri; position: Position; newText: string }[] = [];
+  insert(uri: Uri, position: Position, newText: string): void {
+    this.inserts.push({ uri, position, newText });
+  }
 }
 
 export class DiagnosticCollection {

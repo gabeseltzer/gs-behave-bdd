@@ -1,8 +1,19 @@
 import * as vscode from 'vscode';
 import { isStepsFile, couldBePythonStepsFile, getWorkspaceSettingsForFile, urisMatch } from '../common';
 import { getStepFileSteps, stepFileDecoratorPattern } from '../parsers/stepsParser';
-import { getStepMappingsForStepsFileFunction } from '../parsers/stepMappings';
+import { getStepMappingsForStepsFileFunction, StepMapping } from '../parsers/stepMappings';
+import { ExecuteStepsCallStep } from '../parsers/executeStepsParser';
 import { parser } from '../extension';
+
+
+// Builds the CodeLens title, distinguishing execute_steps call sites from feature-file
+// references, e.g. "3 references (1 in steps)". Exported for unit tests.
+export function buildReferenceLensTitle(mappings: StepMapping[]): string {
+  const refCount = mappings.length;
+  const execCount = mappings.filter(m => m.featureFileStep instanceof ExecuteStepsCallStep).length;
+  const base = refCount === 1 ? '1 reference' : `${refCount} references`;
+  return execCount > 0 ? `${base} (${execCount} in steps)` : base;
+}
 
 const stepDecoratorRe = new RegExp(stepFileDecoratorPattern, 'i');
 
@@ -86,8 +97,7 @@ export class StepCodeLensProvider implements vscode.CodeLensProvider {
       seenLines.add(funcLine);
 
       const mappings = getStepMappingsForStepsFileFunction(docUri, funcLine);
-      const refCount = mappings.length;
-      const title = refCount === 1 ? '1 reference' : `${refCount} references`;
+      const title = buildReferenceLensTitle(mappings);
 
       const decoratorLine = findDecoratorLine(document, funcLine);
       const lensRange = new vscode.Range(decoratorLine, 0, decoratorLine, 0);

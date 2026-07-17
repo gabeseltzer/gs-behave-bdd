@@ -15,7 +15,8 @@ import { storeBehaveStepDefinitions } from './stepsParserBehaveAdapter';
 import { TestData, TestFile } from './testFile';
 import { diagLog } from '../logger';
 import * as path from 'path';
-import { deleteStepMappings, rebuildStepMappings, getStepMappings } from './stepMappings';
+import { deleteStepMappings, rebuildStepMappings, getStepMappings, rebuildExecuteStepsMappings } from './stepMappings';
+import { parseExecuteStepsFileContent, deleteExecuteStepsCallSteps } from './executeStepsParser';
 import { getBundledBehavePath } from '../bundledBehave';
 import { setDuplicateStepDiagnostics, clearDuplicateStepDiagnostics } from '../handlers/duplicateStepDiagnostics';
 
@@ -41,6 +42,11 @@ export class FileParser {
   private _errored = false;
   private _reparsingFile = false;
   private _pythonReparseTimers: Map<string, NodeJS.Timeout> = new Map();
+  // Python files edited during the current debounce window, per workspace. The debounce timer
+  // is per-workspace and its closure only captures the LATEST edit's fileUri/content, so the
+  // execute_steps rescan must accumulate and process EVERY file edited in the window - not just
+  // the last one - or earlier-edited files' call-site caches go stale (WR-06).
+  private _pendingExecScanFiles: Map<string, Map<string, { uri: vscode.Uri; content: string }>> = new Map();
   private static readonly PYTHON_REPARSE_DEBOUNCE_MS = 500;
   private _statusChangeHandlers: ((busy: boolean) => void)[] = [];
   private _stepLoadErrorHandlers: ((error: string | undefined) => void)[] = [];
@@ -217,6 +223,29 @@ export class FileParser {
     allPyFiles = allPyFiles.filter(f => { const id = uriId(f); if (seenPy.has(id)) return false; seenPy.add(id); return true; });
     diagLog(`${caller}: _parseStepsFiles findFiles took ${Math.round(performance.now() - findFilesStart)}ms, found ${allPyFiles.length} .py files`);
 
+    // Scan every watched .py file for embedded execute_steps() call sites (helper modules and
+    // environment.py included, not just step definition files - REFS-01/02/03). This is pure
+    // in-memory scanning independent of the behave subprocess below, so it must run even if
+    // the behave load fails.
+    deleteExecuteStepsCallSteps(wkspSettings.featuresUri);
+    const execScanStart = performance.now();
+    let execCallSitesFound = 0;
+    for (const pyFile of allPyFiles) {
+      if (cancelToken.isCancellationRequested)
+        break;
+      try {
+        const pyContent = await getContentFromFilesystem(pyFile);
+        execCallSitesFound += parseExecuteStepsFileContent(wkspSettings.featuresUri, pyContent, pyFile, caller);
+      }
+      catch {
+        // a transient read failure for one file (deleted/renamed between findFiles and the
+        // read, e.g. branch switch or build clean) must never abort the whole workspace parse -
+        // the scanner is designed to never throw, so honour that here too (WR-05)
+        diagLog(`${caller}: could not read ${pyFile.path} for execute_steps scan, skipping`);
+      }
+    }
+    diagLog(`${caller}: _parseStepsFiles execute_steps scan took ${Math.round(performance.now() - execScanStart)}ms, found ${execCallSitesFound} call sites across ${allPyFiles.length} .py files`);
+
     const stepFiles = allPyFiles.filter(uri => isStepsFile(uri));
 
     // Load all steps and fixtures using behave's built-in registry (handles imports automatically)
@@ -285,6 +314,32 @@ export class FileParser {
       const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, result.steps);
       storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
       diagLog(`${caller}: _parseStepsFiles storeBehaveStepDefinitions took ${Math.round(performance.now() - storeBehaveStart)}ms`);
+
+      // Behave's registry can pull in step-library files that live OUTSIDE the watched roots
+      // (e.g. lib/ next to features/) - the allPyFiles scan above never saw them, so scan any
+      // step-def file we haven't scanned yet for execute_steps call sites too. In-editor edits
+      // to these files reparse via onDidChangeTextDocument, but on-disk-only changes are not
+      // watched (documented limitation).
+      const libScanStart = performance.now();
+      let libFilesScanned = 0;
+      for (const [, stepDef] of getStepFileSteps(wkspSettings.featuresUri)) {
+        const defUriId = uriId(stepDef.uri);
+        if (seenPy.has(defUriId))
+          continue;
+        seenPy.add(defUriId);
+        if (cancelToken.isCancellationRequested)
+          break;
+        try {
+          const libContent = await getContentFromFilesystem(stepDef.uri);
+          execCallSitesFound += parseExecuteStepsFileContent(wkspSettings.featuresUri, libContent, stepDef.uri, caller);
+          libFilesScanned++;
+        }
+        catch {
+          diagLog(`${caller}: could not read ${stepDef.uri.path} for execute_steps library scan, skipping`);
+        }
+      }
+      if (libFilesScanned > 0)
+        diagLog(`${caller}: _parseStepsFiles execute_steps library scan took ${Math.round(performance.now() - libScanStart)}ms across ${libFilesScanned} library files`);
 
       // Return count of step files (not step definitions)
       // stepFiles was already filtered to exclude non-step files
@@ -608,6 +663,7 @@ export class FileParser {
       for (const root of wkspSettings.featuresUris) {
         mappingsCount += rebuildStepMappings(root, wkspSettings.featuresUri);
       }
+      rebuildExecuteStepsMappings(wkspSettings.featuresUri);
       buildMappingsTime = performance.now() - updateMappingsStart;
       diagLog(`${callName}: stepmappings built`);
 
@@ -729,6 +785,15 @@ export class FileParser {
       clearTimeout(existingTimer);
     }
 
+    // Record this file for the execute_steps rescan - keyed per file so rapid edits to
+    // DIFFERENT files in the same workspace all get rescanned when the timer fires (WR-06)
+    let pendingFiles = this._pendingExecScanFiles.get(wkspKey);
+    if (!pendingFiles) {
+      pendingFiles = new Map();
+      this._pendingExecScanFiles.set(wkspKey, pendingFiles);
+    }
+    pendingFiles.set(uriId(fileUri), { uri: fileUri, content });
+
     const timer = setTimeout(async () => {
       this._pythonReparseTimers.delete(wkspKey);
       try {
@@ -806,9 +871,21 @@ export class FileParser {
           this._showStepLoadWarning(errMsg, wkspSettings.uri);
         }
 
+        // Rescan EVERY .py file edited during this debounce window for execute_steps() call
+        // sites (any watched .py file, not just step definition files - helper modules/
+        // environment.py count too) before rebuilding exec mappings (WR-06).
+        // parseExecuteStepsFileContent clears each fileUri's prior entries itself, so this
+        // refreshes only the edited files' cache entries.
+        const pendingFilesForWksp = this._pendingExecScanFiles.get(wkspKey);
+        this._pendingExecScanFiles.delete(wkspKey);
+        for (const pendingFile of pendingFilesForWksp?.values() ?? []) {
+          parseExecuteStepsFileContent(wkspSettings.featuresUri, pendingFile.content, pendingFile.uri, "[reparseFile]");
+        }
+
         for (const root of wkspSettings.featuresUris) {
           rebuildStepMappings(root, wkspSettings.featuresUri);
         }
+        rebuildExecuteStepsMappings(wkspSettings.featuresUri);
         this.onStepMappingsRebuilt?.(wkspSettings.featuresUri);
       }
       catch (e: unknown) {
@@ -840,6 +917,7 @@ export class FileParser {
       clearTimeout(timer);
     }
     this._pythonReparseTimers.clear();
+    this._pendingExecScanFiles.clear();
     this._reparsingFile = false;
   }
 

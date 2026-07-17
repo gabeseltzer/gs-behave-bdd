@@ -19,17 +19,25 @@ import { diagLog } from './logger';
 import { performance } from 'perf_hooks';
 import { StepMapping, getStepFileStepForFeatureFileStep, getStepMappingsForStepsFileFunction } from './parsers/stepMappings';
 import { autoCompleteProvider } from './handlers/autoCompleteProvider';
+import { executeStepsAutoCompleteProvider } from './handlers/executeStepsAutoCompleteProvider';
+import { ExecuteStepsCodeActionProvider } from './handlers/executeStepsCodeActionProvider';
 import { formatFeatureProvider } from './handlers/formatFeatureProvider';
 import { SemHighlightProvider, semLegend } from './handlers/semHighlightProvider';
 import { DocumentSymbolProvider } from './handlers/documentSymbolProvider';
 import { DefinitionProvider } from './handlers/definitionProvider';
+import { ExecuteStepsDefinitionProvider } from './handlers/executeStepsDefinitionProvider';
 import { SelectionRangeProvider } from './handlers/selectionRangeProvider';
 import { HoverProvider } from './handlers/hoverProvider';
+import { ExecuteStepsHoverProvider } from './handlers/executeStepsHoverProvider';
+import {
+  updateExecuteStepsParamDecorations, refreshAllExecuteStepsParamDecorations, disposeExecuteStepsParamDecorations
+} from './handlers/executeStepsParamHighlighter';
 import { FixtureDefinitionProvider, FixtureHoverProvider, FixtureReferenceProvider } from './handlers/fixtureProviders';
 import { StepReferenceProvider } from './handlers/stepReferenceProvider';
 import { StepCodeLensProvider } from './handlers/codeLensProvider';
 import { validateFixtureTags } from './handlers/fixtureDiagnostics';
 import { validateStepDefinitions } from './handlers/stepDiagnostics';
+import { validateExecuteSteps } from './handlers/executeStepsDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
 import { startWatchingConfigFiles, clearConfigDebounceTimers } from './watchers/configWatcher';
 import { scanForBehaveConfig, setCachedScanResult, getCachedScanResult, clearScanResultCache, ScanResultEntry, ScanResult } from './discovery/configScanner';
@@ -427,12 +435,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     const codeLensProvider = new StepCodeLensProvider();
     parser.onStepMappingsRebuilt = (featuresUri: vscode.Uri) => {
       for (const document of vscode.workspace.textDocuments) {
-        if (!isFeatureFile(document.uri)) continue;
         const wkspSettings = getWorkspaceSettingsForFile(document.uri);
         if (!wkspSettings || !wkspSettings.featuresUris.some(u => urisMatch(u, featuresUri))) continue;
-        validateFixtureTags(document);
-        validateStepDefinitions(document);
+        if (isFeatureFile(document.uri)) {
+          validateFixtureTags(document);
+          validateStepDefinitions(document);
+        }
+        else if (couldBePythonStepsFile(document.uri)) {
+          // step defs changed - re-validate execute_steps strings in open .py files
+          validateExecuteSteps(document);
+        }
       }
+      // step defs changed - parameter spans may have appeared/disappeared
+      refreshAllExecuteStepsParamDecorations();
       // Refresh CodeLens for open .py step files — feature edits change the
       // reference count even though the .py document itself didn't change.
       codeLensProvider.refresh();
@@ -493,17 +508,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.commands.registerCommand(`behave-vsc.stepReferences.prev`, prevStepReferenceHandler),
       vscode.commands.registerCommand(`behave-vsc.stepReferences.next`, nextStepReferenceHandler),
       vscode.languages.registerCompletionItemProvider("gherkin", autoCompleteProvider, ...["  "]),
+      vscode.languages.registerCompletionItemProvider("python", executeStepsAutoCompleteProvider, " "),
       vscode.languages.registerDocumentRangeFormattingEditProvider("gherkin", formatFeatureProvider),
       vscode.languages.registerDocumentSemanticTokensProvider({ language: "gherkin" }, new SemHighlightProvider(), semLegend),
       vscode.languages.registerDocumentSymbolProvider("gherkin", new DocumentSymbolProvider()),
       vscode.languages.registerSelectionRangeProvider("gherkin", new SelectionRangeProvider()),
       vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new DefinitionProvider()),
+      vscode.languages.registerDefinitionProvider({ language: "python" }, new ExecuteStepsDefinitionProvider()),
       vscode.languages.registerHoverProvider({ language: "gherkin" }, new HoverProvider()),
+      vscode.languages.registerHoverProvider({ language: "python" }, new ExecuteStepsHoverProvider()),
       vscode.languages.registerDefinitionProvider({ language: "gherkin" }, new FixtureDefinitionProvider()),
       vscode.languages.registerHoverProvider({ language: "gherkin" }, new FixtureHoverProvider()),
       vscode.languages.registerReferenceProvider(["gherkin", "python"], new StepReferenceProvider()),
       vscode.languages.registerReferenceProvider(["gherkin", "python"], new FixtureReferenceProvider()),
-      vscode.languages.registerCodeLensProvider("python", codeLensProvider)
+      vscode.languages.registerCodeLensProvider("python", codeLensProvider),
+      vscode.languages.registerCodeActionsProvider({ language: "python" }, new ExecuteStepsCodeActionProvider(),
+        { providedCodeActionKinds: ExecuteStepsCodeActionProvider.providedCodeActionKinds }),
+      // execute_steps {parameter} highlights use decorations (a python semantic tokens
+      // provider would displace Pylance's) - refresh when editors become visible
+      vscode.window.onDidChangeVisibleTextEditors(editors => {
+        for (const editor of editors) {
+          updateExecuteStepsParamDecorations(editor);
+        }
+      }),
+      { dispose: disposeExecuteStepsParamDecorations }
     );
 
 
@@ -849,6 +877,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           validateFixtureTags(document);
           validateStepDefinitions(document);
         }
+        else if (couldBePythonStepsFile(document.uri)) {
+          if (!initialParsingComplete) {
+            return;
+          }
+          await parser.stepsParseComplete(5000, "onDidOpenTextDocument");
+          validateExecuteSteps(document);
+        }
       }
       catch (e: unknown) {
         // entry point function (handler) - show error
@@ -864,7 +899,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         for (const document of vscode.workspace.textDocuments) {
           validateFixtureTags(document);
           validateStepDefinitions(document);
+          validateExecuteSteps(document);
         }
+        refreshAllExecuteStepsParamDecorations();
       }
       catch (e: unknown) {
         config.logger.showError(e, undefined);
@@ -1002,6 +1039,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           // Validate fixture tags and step definitions when feature file changes
           validateFixtureTags(event.document);
           validateStepDefinitions(event.document);
+          // Validate execute_steps strings when a .py file changes (scans the live
+          // document text, so results are correct even before the 500ms debounce fires)
+          validateExecuteSteps(event.document);
+          // keep execute_steps parameter highlights in sync with the live text
+          for (const editor of vscode.window.visibleTextEditors) {
+            if (urisMatch(editor.document.uri, event.document.uri))
+              updateExecuteStepsParamDecorations(editor);
+          }
 
           // If enviroment file changes, re-validate fixtures in all open feature files
           if (isEnvFile) {

@@ -4,12 +4,20 @@ import { parser } from '../extension';
 import { diagLog, DiagLogType } from '../logger';
 import { getStepFileSteps, parseRepWildcard, StepFileStep } from './stepsParser';
 import { FeatureFileStep, getFeatureFileSteps } from './featureParser';
+import { ExecuteStepsCallStep, ExecuteStepsInvalidLine, getExecuteStepsCallSteps, scanExecuteSteps } from './executeStepsParser';
 import { refreshStepReferencesView } from '../handlers/findStepReferencesHandler';
 import { performance } from 'perf_hooks';
 import { retriggerSemanticHighlighting } from '../handlers/semHighlightProvider';
 
 
 let stepMappings: StepMapping[] = [];
+
+// Parallel array for execute_steps call-site mappings - NEVER pushed into `stepMappings`
+// (REFS-04 / RESEARCH Pitfall 4: keeping these rows out of the flat table preserves every
+// existing WkspParseCounts integration assertion). ExecuteStepsCallStep is structurally
+// assignable to StepMapping's featureFileStep param - only .uri/.range/.fileName/.text/
+// .textWithoutType/.stepType are read downstream.
+let executeStepsMappings: StepMapping[] = [];
 
 export class StepMapping {
   constructor(
@@ -31,9 +39,11 @@ export function getStepFileStepForFeatureFileStep(featureFileUri: vscode.Uri, li
 
 
 export function getStepMappingsForStepsFileFunction(stepsFileUri: vscode.Uri, lineNo: number): StepMapping[] {
-  return stepMappings.filter(sm =>
+  const matchesFunction = (sm: StepMapping) =>
     sm.stepFileStep && urisMatch(sm.stepFileStep.uri, stepsFileUri) &&
-    sm.stepFileStep.functionDefinitionRange.start.line === lineNo);
+    sm.stepFileStep.functionDefinitionRange.start.line === lineNo;
+
+  return stepMappings.filter(matchesFunction).concat(executeStepsMappings.filter(matchesFunction));
 }
 
 
@@ -44,6 +54,11 @@ export function getStepMappings(featuresUri: vscode.Uri): StepMapping[] {
 
 export function deleteStepMappings(featuresUri: vscode.Uri) {
   stepMappings = stepMappings.filter(sm => !urisMatch(sm.featuresUri, featuresUri));
+}
+
+
+export function deleteExecuteStepsMappings(featuresUri: vscode.Uri) {
+  executeStepsMappings = executeStepsMappings.filter(sm => !urisMatch(sm.featuresUri, featuresUri));
 }
 
 
@@ -94,8 +109,7 @@ export function rebuildStepMappings(featuresUri: vscode.Uri, stepDefsUri?: vscod
 }
 
 
-function _getFilteredSteps(featureStepsUri: vscode.Uri, stepDefsUri: vscode.Uri) {
-  const featureFileSteps = getFeatureFileSteps(featureStepsUri);
+function _getCompiledStepDefs(stepDefsUri: vscode.Uri) {
   const wkspStepFileSteps = getStepFileSteps(stepDefsUri);
   const exactSteps = new Map(wkspStepFileSteps.filter(([k,]) => !k.includes(parseRepWildcard)));
   const paramsSteps = new Map(wkspStepFileSteps.filter(([k,]) => k.includes(parseRepWildcard)));
@@ -110,7 +124,73 @@ function _getFilteredSteps(featureStepsUri: vscode.Uri, stepDefsUri: vscode.Uri)
     compiledParamsRegexes.set(key, new RegExp(key));
   }
 
+  return { exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes };
+}
+
+
+function _getFilteredSteps(featureStepsUri: vscode.Uri, stepDefsUri: vscode.Uri) {
+  const featureFileSteps = getFeatureFileSteps(featureStepsUri);
+  const { exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes } = _getCompiledStepDefs(stepDefsUri);
   return { featureFileSteps, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes };
+}
+
+
+// Rebuilds the parallel executeStepsMappings array for a workspace (per-workspace, NOT per-root
+// - called once per featuresUri, unlike rebuildStepMappings which loops wkspSettings.featuresUris).
+// Calls refreshStepReferencesView() (NOT retriggerSemanticHighlighting - exec call sites live in
+// .py files, there is no gherkin semantic highlighting to refresh for them).
+export function rebuildExecuteStepsMappings(featuresUri: vscode.Uri): number {
+
+  const start = performance.now();
+  deleteExecuteStepsMappings(featuresUri);
+
+  const { exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes } = _getCompiledStepDefs(featuresUri);
+  const callSteps = getExecuteStepsCallSteps(featuresUri);
+
+  let processed = 0;
+  const matchLoopStart = performance.now();
+  for (const callStep of callSteps) {
+    // scanExecuteSteps resolves every call step to a concrete given/when/then type (matching
+    // behave's own parse_steps() semantics), so the standard matcher applies directly - it
+    // already falls back to the "step" bucket internally.
+    const stepFileStep = _getStepFileStepMatch(callStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
+    if (stepFileStep)
+      executeStepsMappings.push(new StepMapping(featuresUri, stepFileStep, callStep));
+    processed++;
+  }
+  const matchLoopTime = Math.round(performance.now() - matchLoopStart);
+
+  refreshStepReferencesView();
+
+  diagLog(`rebuilding execute_steps mappings for ${featuresUri.path} took ${Math.round(performance.now() - start)}ms ` +
+    `(matching loop: ${matchLoopTime}ms, ${processed} call steps processed)`);
+
+  return processed;
+}
+
+
+export function getStepFileStepForExecuteStep(fileUri: vscode.Uri, lineNo: number): StepFileStep | undefined {
+  const stepMappingForExecuteStep = executeStepsMappings.find(sm =>
+    sm.featureFileStep && urisMatch(sm.featureFileStep.uri, fileUri) && sm.featureFileStep.range.start.line === lineNo);
+  return stepMappingForExecuteStep?.stepFileStep;
+}
+
+
+// Live-text matching for execute_steps diagnostics: scans content for execute_steps() call sites
+// and matches each against the current step definitions WITHOUT persisting to
+// executeStepsMappings and WITHOUT touching any cache - a pure read-only match.
+// fileUri is the document being scanned (call step ranges/keys are built from it); featuresUri
+// selects which workspace's step definitions to match against.
+export function matchExecuteStepsContent(featuresUri: vscode.Uri, fileUri: vscode.Uri, content: string):
+  { matches: { callStep: ExecuteStepsCallStep; stepFileStep: StepFileStep | null }[]; invalidLines: ExecuteStepsInvalidLine[] } {
+  const { exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes } = _getCompiledStepDefs(featuresUri);
+  const { callSteps, invalidLines } = scanExecuteSteps(content, fileUri);
+
+  const matches = callSteps.map(callStep => ({
+    callStep,
+    stepFileStep: _getStepFileStepMatch(callStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes),
+  }));
+  return { matches, invalidLines };
 }
 
 

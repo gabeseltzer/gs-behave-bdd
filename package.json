@@ -1,5 +1,17 @@
 {
 	"contributes": {
+		"colors": [
+			{
+				"id": "gsBehaveBdd.executeStepsParameter",
+				"description": "Color of step {parameter} values inside context.execute_steps(\"...\") string literals. Matches the default 'function' semantic token colors used for feature-file step parameters.",
+				"defaults": {
+					"dark": "#DCDCAA",
+					"light": "#795E26",
+					"highContrast": "#DCDCAA",
+					"highContrastLight": "#795E26"
+				}
+			}
+		],
 		"configuration": {
 			"title": "gs-behave-bdd",
 			"properties": {
