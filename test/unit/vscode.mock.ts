@@ -152,6 +152,20 @@ export class Hover {
   }
 }
 
+export enum CompletionItemKind {
+  Text = 0,
+  Function = 2,
+}
+
+export class CompletionItem {
+  public detail?: string;
+  public range?: Range;
+  constructor(
+    public readonly label: string,
+    public readonly kind?: CompletionItemKind
+  ) { }
+}
+
 export class DiagnosticCollection {
   // 260513-oh5: keep the original Uri object so consumers iterating via
   // forEach get a real Uri (not just the string key). Map keys remain strings

@@ -19,6 +19,7 @@ import { diagLog } from './logger';
 import { performance } from 'perf_hooks';
 import { StepMapping, getStepFileStepForFeatureFileStep, getStepMappingsForStepsFileFunction } from './parsers/stepMappings';
 import { autoCompleteProvider } from './handlers/autoCompleteProvider';
+import { executeStepsAutoCompleteProvider } from './handlers/executeStepsAutoCompleteProvider';
 import { formatFeatureProvider } from './handlers/formatFeatureProvider';
 import { SemHighlightProvider, semLegend } from './handlers/semHighlightProvider';
 import { DocumentSymbolProvider } from './handlers/documentSymbolProvider';
@@ -506,6 +507,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.commands.registerCommand(`behave-vsc.stepReferences.prev`, prevStepReferenceHandler),
       vscode.commands.registerCommand(`behave-vsc.stepReferences.next`, nextStepReferenceHandler),
       vscode.languages.registerCompletionItemProvider("gherkin", autoCompleteProvider, ...["  "]),
+      vscode.languages.registerCompletionItemProvider("python", executeStepsAutoCompleteProvider, " "),
       vscode.languages.registerDocumentRangeFormattingEditProvider("gherkin", formatFeatureProvider),
       vscode.languages.registerDocumentSemanticTokensProvider({ language: "gherkin" }, new SemHighlightProvider(), semLegend),
       vscode.languages.registerDocumentSymbolProvider("gherkin", new DocumentSymbolProvider()),

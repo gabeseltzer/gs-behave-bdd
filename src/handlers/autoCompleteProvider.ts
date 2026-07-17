@@ -5,6 +5,32 @@ import { featureFileStepRe } from "../parsers/gherkinPatterns";
 import { getStepFileSteps } from '../parsers/stepsParser';
 
 
+// Builds completion items for step definitions whose keys match either prefix.
+// Shared by the gherkin autoCompleteProvider and the python executeStepsAutoCompleteProvider.
+export function buildStepCompletionItems(
+  featuresUri: vscode.Uri, matchText1: string, matchText2: string, replaceRange: vscode.Range): vscode.CompletionItem[] {
+
+  const stepFileSteps = getStepFileSteps(featuresUri);
+  const items: vscode.CompletionItem[] = [];
+
+  for (const [key, value] of stepFileSteps) {
+    const lcKey = key.toLowerCase();
+    if (lcKey.startsWith(matchText1) || lcKey.startsWith(matchText2)) {
+      let itemText = value.textAsRe.startsWith(".*") ? " " + value.textAsRe.slice(1) : value.textAsRe;
+      itemText = value.textAsRe.replaceAll(".*", "?");
+      // deal with e.g \( escapes in textAsRe
+      itemText = itemText.replaceAll("\\\\", "#@slash@#").replaceAll("\\", "").replaceAll("#@slash@#", "\\");
+      const item = new vscode.CompletionItem(itemText, vscode.CompletionItemKind.Function);
+      item.detail = vscode.workspace.asRelativePath(value.uri);
+      item.range = replaceRange;
+      items.push(item);
+    }
+  }
+
+  return items;
+}
+
+
 export const autoCompleteProvider = {
   provideCompletionItems(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
     try {
@@ -36,9 +62,6 @@ export const autoCompleteProvider = {
         }
       }
 
-      const stepFileSteps = getStepFileSteps(wkspSettings.featuresUri);
-      const items: vscode.CompletionItem[] = [];
-
       // Calculate the range to replace: from after the step keyword to the end of line
       const leadingWhitespace = line.text.length - line.text.trimStart().length;
       const stepKeywordEnd = leadingWhitespace + stepType.length + 1;
@@ -49,21 +72,7 @@ export const autoCompleteProvider = {
         line.text.length
       );
 
-      for (const [key, value] of stepFileSteps) {
-        const lcKey = key.toLowerCase();
-        if (lcKey.startsWith(matchText1) || lcKey.startsWith(matchText2)) {
-          let itemText = value.textAsRe.startsWith(".*") ? " " + value.textAsRe.slice(1) : value.textAsRe;
-          itemText = value.textAsRe.replaceAll(".*", "?");
-          // deal with e.g \( escapes in textAsRe
-          itemText = itemText.replaceAll("\\\\", "#@slash@#").replaceAll("\\", "").replaceAll("#@slash@#", "\\");
-          const item = new vscode.CompletionItem(itemText, vscode.CompletionItemKind.Function);
-          item.detail = vscode.workspace.asRelativePath(value.uri);
-          item.range = replaceRange;
-          items.push(item);
-        }
-      }
-
-      return items;
+      return buildStepCompletionItems(wkspSettings.featuresUri, matchText1, matchText2, replaceRange);
     }
     catch (e: unknown) {
       // entry point function (handler) - show error  
