@@ -20,6 +20,7 @@ import { performance } from 'perf_hooks';
 import { StepMapping, getStepFileStepForFeatureFileStep, getStepMappingsForStepsFileFunction } from './parsers/stepMappings';
 import { autoCompleteProvider } from './handlers/autoCompleteProvider';
 import { executeStepsAutoCompleteProvider } from './handlers/executeStepsAutoCompleteProvider';
+import { ExecuteStepsCodeActionProvider } from './handlers/executeStepsCodeActionProvider';
 import { formatFeatureProvider } from './handlers/formatFeatureProvider';
 import { SemHighlightProvider, semLegend } from './handlers/semHighlightProvider';
 import { DocumentSymbolProvider } from './handlers/documentSymbolProvider';
@@ -521,6 +522,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.languages.registerReferenceProvider(["gherkin", "python"], new StepReferenceProvider()),
       vscode.languages.registerReferenceProvider(["gherkin", "python"], new FixtureReferenceProvider()),
       vscode.languages.registerCodeLensProvider("python", codeLensProvider),
+      vscode.languages.registerCodeActionsProvider({ language: "python" }, new ExecuteStepsCodeActionProvider(),
+        { providedCodeActionKinds: ExecuteStepsCodeActionProvider.providedCodeActionKinds }),
       // execute_steps {parameter} highlights use decorations (a python semantic tokens
       // provider would displace Pylance's) - refresh when editors become visible
       vscode.window.onDidChangeVisibleTextEditors(editors => {

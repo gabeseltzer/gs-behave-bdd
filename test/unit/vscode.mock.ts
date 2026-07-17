@@ -166,6 +166,28 @@ export class CompletionItem {
   ) { }
 }
 
+export class CodeActionKind {
+  static readonly QuickFix = new CodeActionKind('quickfix');
+  constructor(public readonly value: string) { }
+}
+
+export class CodeAction {
+  public diagnostics?: Diagnostic[];
+  public edit?: WorkspaceEdit;
+  public isPreferred?: boolean;
+  constructor(
+    public readonly title: string,
+    public readonly kind?: CodeActionKind
+  ) { }
+}
+
+export class WorkspaceEdit {
+  public readonly inserts: { uri: Uri; position: Position; newText: string }[] = [];
+  insert(uri: Uri, position: Position, newText: string): void {
+    this.inserts.push({ uri, position, newText });
+  }
+}
+
 export class DiagnosticCollection {
   // 260513-oh5: keep the original Uri object so consumers iterating via
   // forEach get a real Uri (not just the string key). Map keys remain strings
