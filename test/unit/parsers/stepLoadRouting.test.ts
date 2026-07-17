@@ -29,6 +29,7 @@ const wkspSettings = {
   stepsSearchUri: stepsUri,
   stepsSearchUris: [stepsUri],
   projectUri: wkspUri,
+  getEffectiveEnvVars: () => ({}),
 } as WorkspaceSettings;
 
 function stubDiagnostics(sandbox: sinon.SinonSandbox): Map<string, vscode.Diagnostic[]> {

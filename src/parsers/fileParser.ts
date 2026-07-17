@@ -18,6 +18,7 @@ import * as path from 'path';
 import { deleteStepMappings, rebuildStepMappings, getStepMappings, rebuildExecuteStepsMappings } from './stepMappings';
 import { parseExecuteStepsFileContent, deleteExecuteStepsCallSteps } from './executeStepsParser';
 import { getBundledBehavePath } from '../bundledBehave';
+import { getBehaveEnv } from '../runners/behaveEnv';
 import { setDuplicateStepDiagnostics, clearDuplicateStepDiagnostics } from '../handlers/duplicateStepDiagnostics';
 import { setStepLoadDiagnostics, setMissingModuleHints } from '../handlers/stepLoadDiagnostics';
 
@@ -276,7 +277,10 @@ export class FileParser {
         wkspSettings.projectUri.fsPath,
         stepsPaths,
         wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined,
-        wkspSettings.stepDefinitionSearchTimeout * 1000
+        wkspSettings.stepDefinitionSearchTimeout * 1000,
+        // Same environment as an actual test run, so discovery resolves the same
+        // imports behave does (user PYTHONPATH, virtualenv, env presets).
+        getBehaveEnv(wkspSettings)
       );
       const loadBehaveElapsed = Math.round(performance.now() - loadBehaveStart);
       diagLog(`${caller}: _parseStepsFiles loadFromBehave took ${loadBehaveElapsed}ms, returned ${result.steps.length} steps and ${result.fixtures.length} fixtures`);
@@ -900,7 +904,10 @@ export class FileParser {
             wkspSettings.projectUri.fsPath,
             [stepsPath],
             wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined,
-            wkspSettings.stepDefinitionSearchTimeout * 1000
+            wkspSettings.stepDefinitionSearchTimeout * 1000,
+            // Same environment as an actual test run, so discovery resolves the same
+            // imports behave does (user PYTHONPATH, virtualenv, env presets).
+            getBehaveEnv(wkspSettings)
           );
 
           if (result.stderr) {

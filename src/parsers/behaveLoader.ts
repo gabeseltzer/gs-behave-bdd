@@ -104,6 +104,12 @@ export interface BehaveDiscoveryResult {
  * @param projectPath Project root directory (used as cwd for subprocess)
  * @param stepsPaths Array of directories containing step files
  * @param bundledLibsPath Optional path to bundled behave libs directory
+ * @param timeoutMs Subprocess timeout in milliseconds
+ * @param env Environment for the subprocess. MUST match the environment used for
+ *   actual test runs (getBehaveEnv) so discovery resolves the same imports behave
+ *   does at run time - e.g. modules reachable only via the user's PYTHONPATH or
+ *   virtualenv. When omitted, the subprocess inherits the extension host's env,
+ *   which typically lacks those, causing spurious "could not import" failures.
  * @returns Combined steps and fixtures discovered by behave
  * @throws Error if behave is not installed or if import errors occur
  */
@@ -112,7 +118,8 @@ export async function loadFromBehave(
   projectPath: string,
   stepsPaths: string[],
   bundledLibsPath?: string,
-  timeoutMs = 10000
+  timeoutMs = 10000,
+  env?: NodeJS.ProcessEnv
 ): Promise<BehaveDiscoveryResult> {
   const startTime = performance.now();
 
@@ -121,7 +128,7 @@ export async function loadFromBehave(
     const args = [projectPath, JSON.stringify(stepsPaths)];
     if (bundledLibsPath)
       args.push('--bundled-libs', bundledLibsPath);
-    const { stdout: output, stderr: processStderr } = await spawnPython(pythonExec, scriptPath, args, projectPath, timeoutMs);
+    const { stdout: output, stderr: processStderr } = await spawnPython(pythonExec, scriptPath, args, projectPath, timeoutMs, env);
 
     // Parse JSON output
     interface RawStepInfo {
@@ -234,7 +241,7 @@ export async function loadFromBehave(
     // If behave is not installed and we weren't already using bundled, fall back to bundled
     if (!bundledLibsPath && isBehaveNotInstalledError(errMsg)) {
       diagLog(`loadFromBehave: behave not found in environment, falling back to bundled behave`);
-      return loadFromBehave(pythonExec, projectPath, stepsPaths, getBundledBehavePath(), timeoutMs);
+      return loadFromBehave(pythonExec, projectPath, stepsPaths, getBundledBehavePath(), timeoutMs, env);
     }
 
     // If bundled was already tried and still failed, give a clearer message than "pip install behave"
@@ -285,7 +292,8 @@ function spawnPython(
   scriptPath: string,
   args: string[],
   cwd: string,
-  timeoutMs = 10000
+  timeoutMs = 10000,
+  env?: NodeJS.ProcessEnv
 ): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     let stdout = '';
@@ -301,7 +309,10 @@ function spawnPython(
     };
 
     const allArgs = [scriptPath, ...args];
-    const cp = spawn(pythonExec, allArgs, { cwd });
+    // Pass env only when provided so callers that don't (tests) keep inheriting
+    // process.env; discovery callers pass getBehaveEnv so imports resolve exactly
+    // as they do for a real behave run (PYTHONPATH, virtualenv, env presets).
+    const cp = spawn(pythonExec, allArgs, env ? { cwd, env } : { cwd });
 
     const timeoutSecs = Math.round(timeoutMs / 1000);
     const timeoutId = setTimeout(() => {

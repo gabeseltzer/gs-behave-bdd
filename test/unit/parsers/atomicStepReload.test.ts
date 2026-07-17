@@ -39,6 +39,7 @@ suite('atomic step reload - reparseFile (debounced Python path)', () => {
     stepsSearchUri: stepsUri,
     stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
+    getEffectiveEnvVars: () => ({}),
   } as WorkspaceSettings;
 
   setup(() => {
@@ -177,6 +178,7 @@ suite('step load error notification', () => {
     stepsSearchUri: stepsUri,
     stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
+    getEffectiveEnvVars: () => ({}),
   } as WorkspaceSettings;
 
   setup(() => {
@@ -412,6 +414,7 @@ suite('duplicate step diagnostics integration (via reparseFile)', () => {
     stepsSearchUri: stepsUri,
     stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
+    getEffectiveEnvVars: () => ({}),
   } as WorkspaceSettings;
 
   setup(() => {
@@ -582,6 +585,7 @@ suite('stderr logging to output channel (via reparseFile)', () => {
     stepsSearchUri: stepsUri,
     stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
+    getEffectiveEnvVars: () => ({}),
   } as WorkspaceSettings;
 
   setup(() => {

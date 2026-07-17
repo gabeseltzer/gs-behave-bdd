@@ -38,6 +38,7 @@ suite('fileParser - reparseFile debouncing', () => {
     stepsSearchUri: stepsUri,
     stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
+    getEffectiveEnvVars: () => ({}),
   } as WorkspaceSettings;
 
   // Second workspace for independent timer tests
@@ -54,6 +55,7 @@ suite('fileParser - reparseFile debouncing', () => {
     stepsSearchUri: stepsUri2,
     stepsSearchUris: [stepsUri2],
     projectUri: wkspUri2,
+    getEffectiveEnvVars: () => ({}),
   } as WorkspaceSettings;
 
   setup(() => {
