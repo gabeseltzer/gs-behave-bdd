@@ -10,6 +10,7 @@ import {
 } from './common';
 import { setConfigParseErrorDiagnostic, clearConfigParseErrorDiagnostic } from './handlers/configDiagnostics';
 import { StepFileStep } from './parsers/stepsParser';
+import type { FailedFileInfo } from './parsers/behaveLoader';
 import { gotoStepHandler } from './handlers/gotoStepHandler';
 import { findStepReferencesHandler, nextStepReferenceHandler as nextStepReferenceHandler, prevStepReferenceHandler, treeView } from './handlers/findStepReferencesHandler';
 import { FileParser } from './parsers/fileParser';
@@ -268,14 +269,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     // parser method that fires _notifyStatusChange/_notifyStepLoadError —
     // otherwise activation-time notifications fire into the void and the item
     // is stuck at its initial "Behave: Parsing..." busy=true state.
-    const statusItem = vscode.languages.createLanguageStatusItem('behave.status', { language: 'gherkin' });
+    // Selector includes python: step-load problems are caused by (and fixed in)
+    // Python files, so the status must be visible while the user is editing them.
+    const statusItem = vscode.languages.createLanguageStatusItem('behave.status',
+      [{ language: 'gherkin' }, { language: 'python' }]);
     statusItem.name = "Behave BDD Status";
     statusItem.text = "Behave: Parsing...";
     statusItem.busy = true;
 
-    parser.onStatusChange((busy: boolean) => {
-      statusItem.busy = busy;
-      if (busy) {
+    // Single state-driven renderer: busy/error/partial events can arrive in any
+    // order during a parse, so each event mutates state and re-renders rather
+    // than writing the item directly (an unconditional "Ready" on parse-complete
+    // used to clobber a step-load error reported moments earlier).
+    const stepLoadStatus: {
+      error: string | undefined,
+      failedFiles: FailedFileInfo[],
+      lastCleanLoadTime: Date | undefined,
+      busy: boolean
+    } = { error: undefined, failedFiles: [], lastCleanLoadTime: undefined, busy: true };
+
+    const renderStatusItem = () => {
+      statusItem.busy = stepLoadStatus.busy;
+      if (stepLoadStatus.busy) {
         statusItem.text = "Behave: Parsing...";
         return;
       }
@@ -288,21 +303,41 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         statusItem.detail = "Tests cannot load — check workspace settings.";
         return;
       }
+      if (stepLoadStatus.error) {
+        const firstLine = stepLoadStatus.error.split('\n')[0];
+        const since = stepLoadStatus.lastCleanLoadTime
+          ? `Step data from ${stepLoadStatus.lastCleanLoadTime.toLocaleTimeString()} — reload blocked: `
+          : `Step definitions could not be loaded: `;
+        statusItem.text = "Behave: Step Load Error";
+        statusItem.severity = vscode.LanguageStatusSeverity.Error;
+        const detail = since + firstLine;
+        statusItem.detail = detail.length > 200 ? detail.substring(0, 200) + "..." : detail;
+        return;
+      }
+      if (stepLoadStatus.failedFiles.length > 0) {
+        const names = stepLoadStatus.failedFiles.map(f => basename(vscode.Uri.file(f.filePath))).join(", ");
+        statusItem.text = `Behave: ${stepLoadStatus.failedFiles.length} file(s) not loaded`;
+        statusItem.severity = vscode.LanguageStatusSeverity.Warning;
+        const detail = `Using previous step definitions for: ${names} — see the Problems pane.`;
+        statusItem.detail = detail.length > 200 ? detail.substring(0, 200) + "..." : detail;
+        return;
+      }
       statusItem.text = "Behave: Ready";
       statusItem.severity = vscode.LanguageStatusSeverity.Information;
       statusItem.detail = undefined;
+    };
+
+    parser.onStatusChange((busy: boolean) => {
+      stepLoadStatus.busy = busy;
+      renderStatusItem();
     });
 
-    parser.onStepLoadError((error: string | undefined) => {
-      if (error) {
-        statusItem.text = "Behave: Step Load Error";
-        statusItem.severity = vscode.LanguageStatusSeverity.Error;
-        statusItem.detail = error.length > 200 ? error.substring(0, 200) + "..." : error;
-      } else {
-        statusItem.text = "Behave: Ready";
-        statusItem.severity = vscode.LanguageStatusSeverity.Information;
-        statusItem.detail = undefined;
-      }
+    parser.onStepLoadError((error: string | undefined, failedFiles?: FailedFileInfo[]) => {
+      stepLoadStatus.error = error;
+      stepLoadStatus.failedFiles = failedFiles ?? [];
+      if (!error && !failedFiles?.length)
+        stepLoadStatus.lastCleanLoadTime = new Date();
+      renderStatusItem();
     });
 
     // Flag workspaces that opted in to behave (have explicit projectPath/featuresPaths)

@@ -43,13 +43,48 @@ export interface DuplicateStepInfo {
 }
 
 /**
+ * How a step file failed to load. "syntax" and "import" are code-shaped
+ * (expected during editing, self-resolving); "error" is any other exception
+ * raised while executing the file's module-level code.
+ */
+export type FailedFileKind = "syntax" | "import" | "error";
+
+/**
+ * A step file (or environment.py) that could not be loaded. Steps from this
+ * file are absent from the fresh results; the extension keeps its cached
+ * definitions instead.
+ */
+export interface FailedFileInfo {
+  filePath: string;
+  /** 1-indexed line of the failure (0 if unknown) */
+  lineNumber: number;
+  /** 1-indexed column of the failure (0 if unknown) */
+  column: number;
+  errorMessage: string;
+  kind: FailedFileKind;
+}
+
+/**
+ * Classifies a wholesale discovery error for notification routing:
+ * "code" errors are quiet (status item + diagnostics), "environmental"
+ * errors (python/behave missing, timeout) keep the warning popup.
+ */
+export type DiscoveryErrorKind = "code" | "environmental";
+
+/**
  * Combined result from the Python discovery subprocess
  */
 export interface BehaveDiscoveryResult {
   steps: BehaveStepDefinition[];
   fixtures: BehaveFixtureDefinition[];
   error?: string;
+  /** Classification of `error` for notification routing */
+  errorKind?: DiscoveryErrorKind;
   duplicates?: DuplicateStepInfo[];
+  /** Per-file load failures (per-file isolation - steps from other files still load) */
+  failedFiles?: FailedFileInfo[];
+  /** Modules that were not installed and were satisfied with inert stubs */
+  mockedModules?: string[];
   /** Raw stderr from the Python process (warnings, tracebacks, etc.) */
   stderr?: string;
 }
@@ -103,11 +138,22 @@ export async function loadFromBehave(
       line: number;
     }
 
+    interface RawFailedFileInfo {
+      file: string;
+      line: number;
+      col: number;
+      error: string;
+      kind: string;
+    }
+
     interface RawOutput {
       steps: RawStepInfo[];
       fixtures: RawFixtureInfo[];
       error?: string;
+      error_kind?: string;
       duplicates?: RawDuplicateInfo[];
+      failed_files?: RawFailedFileInfo[];
+      mocked_modules?: string[];
     }
 
     let parsed: RawOutput;
@@ -140,14 +186,35 @@ export async function loadFromBehave(
       lineNumber: d.line
     }));
 
+    const failedFiles: FailedFileInfo[] | undefined = parsed.failed_files?.map(f => ({
+      filePath: f.file,
+      lineNumber: f.line,
+      column: f.col,
+      errorMessage: f.error,
+      kind: (f.kind === "syntax" || f.kind === "import" ? f.kind : "error") as FailedFileKind
+    }));
+
+    const errorKind: DiscoveryErrorKind | undefined = parsed.error
+      ? (parsed.error_kind === "environmental" ? "environmental" : "code")
+      : undefined;
+
     const elapsed = Math.round(performance.now() - startTime);
     diagLog(`loadFromBehave: loaded ${steps.length} steps and ${fixtures.length} fixtures in ${elapsed}ms`);
     if (parsed.error)
       diagLog(`loadFromBehave: error from Python: ${parsed.error}`);
     if (duplicates?.length)
       diagLog(`loadFromBehave: ${duplicates.length} duplicate step definitions detected`);
+    if (failedFiles?.length)
+      diagLog(`loadFromBehave: ${failedFiles.length} step file(s) failed to load: ${failedFiles.map(f => f.filePath).join(", ")}`);
+    if (parsed.mocked_modules?.length)
+      diagLog(`loadFromBehave: stubbed missing modules: ${parsed.mocked_modules.join(", ")}`);
 
-    return { steps, fixtures, error: parsed.error, duplicates, stderr: processStderr || undefined };
+    return {
+      steps, fixtures,
+      error: parsed.error, errorKind, duplicates, failedFiles,
+      mockedModules: parsed.mocked_modules,
+      stderr: processStderr || undefined
+    };
 
   } catch (e) {
     const elapsed = Math.round(performance.now() - startTime);

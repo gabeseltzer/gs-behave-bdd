@@ -59,6 +59,17 @@ export function storePythonFixtureDefinitions(
   return stored;
 }
 
+/**
+ * Re-inserts previously stored Fixture objects (by their existing keys).
+ * Used by the per-file cache merge: when an environment.py fails to load,
+ * its cached fixtures are snapshotted before the delete-all and restored here.
+ */
+export function restoreFixtures(fixtureList: Fixture[]): void {
+  for (const fixture of fixtureList) {
+    fixtures.set(fixture.key, fixture);
+  }
+}
+
 export function getFixtureByTag(featuresUri: vscode.Uri, tag: string): Fixture | undefined {
   if (!tag.startsWith('fixture.')) {
     return undefined;
