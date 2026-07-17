@@ -315,6 +315,32 @@ export class FileParser {
       storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
       diagLog(`${caller}: _parseStepsFiles storeBehaveStepDefinitions took ${Math.round(performance.now() - storeBehaveStart)}ms`);
 
+      // Behave's registry can pull in step-library files that live OUTSIDE the watched roots
+      // (e.g. lib/ next to features/) - the allPyFiles scan above never saw them, so scan any
+      // step-def file we haven't scanned yet for execute_steps call sites too. In-editor edits
+      // to these files reparse via onDidChangeTextDocument, but on-disk-only changes are not
+      // watched (documented limitation).
+      const libScanStart = performance.now();
+      let libFilesScanned = 0;
+      for (const [, stepDef] of getStepFileSteps(wkspSettings.featuresUri)) {
+        const defUriId = uriId(stepDef.uri);
+        if (seenPy.has(defUriId))
+          continue;
+        seenPy.add(defUriId);
+        if (cancelToken.isCancellationRequested)
+          break;
+        try {
+          const libContent = await getContentFromFilesystem(stepDef.uri);
+          execCallSitesFound += parseExecuteStepsFileContent(wkspSettings.featuresUri, libContent, stepDef.uri, caller);
+          libFilesScanned++;
+        }
+        catch {
+          diagLog(`${caller}: could not read ${stepDef.uri.path} for execute_steps library scan, skipping`);
+        }
+      }
+      if (libFilesScanned > 0)
+        diagLog(`${caller}: _parseStepsFiles execute_steps library scan took ${Math.round(performance.now() - libScanStart)}ms across ${libFilesScanned} library files`);
+
       // Return count of step files (not step definitions)
       // stepFiles was already filtered to exclude non-step files
       // This count is used for test assertions that check stepFilesExceptEmptyOrCommentedOut

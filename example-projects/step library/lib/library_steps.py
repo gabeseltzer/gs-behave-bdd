@@ -9,6 +9,12 @@ def step_calculator_exists(context):
     context.calculator = {'value': 0}
 
 
+@given('the calculator is ready')
+def step_calculator_ready(context):
+    """Compound step: primes the calculator via execute_steps."""
+    context.execute_steps('Given there is a calculator')
+
+
 @when('I add {a:d} and {b:d}')
 def step_add_numbers(context, a, b):
     """Add two numbers using the calculator."""

@@ -37,10 +37,15 @@
 
 ## Future Requirements (deferred)
 
-- Quick-fix to scaffold a missing step definition from an embedded step (PyCharm Alt+Enter model)
-- Hover and autocomplete inside execute_steps strings
-- CodeLens title distinguishing reference sources ("3 references (1 in steps)")
-- Scanning imported step-library files outside watched roots
+All originally-deferred items were delivered post-milestone (2026-07-17), plus parameter
+highlighting inside execute_steps strings (editor decorations — a python semantic tokens
+provider would displace Pylance's):
+
+- [x] Quick-fix to scaffold a missing step definition from an embedded step (PyCharm Alt+Enter model)
+- [x] Hover and autocomplete inside execute_steps strings
+- [x] CodeLens title distinguishing reference sources ("3 references (1 in steps)")
+- [x] Scanning imported step-library files outside watched roots (on-disk-only changes to them still go stale until the next full parse — they aren't file-watched)
+- [x] Parameter highlighting for `{param}` values in embedded steps (`gsBehaveBdd.executeStepsParameter` theme color)
 
 ## Out of Scope
 

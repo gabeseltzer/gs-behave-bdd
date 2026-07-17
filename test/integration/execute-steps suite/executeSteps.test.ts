@@ -174,6 +174,88 @@ suite('execute_steps IDE support', () => {
     assert.ok(count >= 3, `expected at least 3 references from execute_steps call sites, got ${count} ("${primedLens.command?.title}")`);
   });
 
+  test('hover: an embedded step shows the step definition decorator and docstring', async function () {
+    this.timeout(60000);
+
+    const wkspUri = getWorkspaceUri();
+    const stepsUri = vscode.Uri.joinPath(wkspUri, 'features', 'steps', 'steps.py');
+    const document = await vscode.workspace.openTextDocument(stepsUri);
+
+    const embeddedStepLine = findLine(document, 'Given the machine is primed');
+    const embeddedStepCol = document.lineAt(embeddedStepLine).text.indexOf('Given') + 2;
+
+    const hovers = await vscode.commands.executeCommand<vscode.Hover[]>(
+      'vscode.executeHoverProvider', stepsUri, new vscode.Position(embeddedStepLine, embeddedStepCol));
+
+    assert.ok(hovers && hovers.length >= 1, 'expected at least one hover');
+    const allText = hovers.flatMap(h => h.contents.map(c => (c as vscode.MarkdownString).value ?? String(c))).join('\n');
+    assert.ok(allText.includes('@given("the machine is primed")'),
+      `expected the step decorator in hover content, got: ${allText}`);
+  });
+
+  test('completion: typing a step inside an execute_steps literal suggests step definitions', async function () {
+    this.timeout(60000);
+
+    const wkspUri = getWorkspaceUri();
+    const stepsUri = vscode.Uri.joinPath(wkspUri, 'features', 'steps', 'steps.py');
+    const document = await vscode.workspace.openTextDocument(stepsUri);
+
+    // trigger completion at the end of the existing embedded step text
+    const embeddedStepLine = findLine(document, 'Given the machine is primed');
+    const endCol = document.lineAt(embeddedStepLine).text.indexOf('Given the machine is primed') + 'Given the machine'.length;
+
+    const completions = await vscode.commands.executeCommand<vscode.CompletionList>(
+      'vscode.executeCompletionItemProvider', stepsUri, new vscode.Position(embeddedStepLine, endCol));
+
+    assert.ok(completions && completions.items.length > 0, 'expected completion items');
+    const labels = completions.items.map(i => typeof i.label === 'string' ? i.label : i.label.label);
+    assert.ok(labels.some(l => l.includes('the machine is primed')),
+      `expected "the machine is primed" among suggestions, got: ${labels.slice(0, 20).join(' | ')}`);
+  });
+
+  test('quick-fix: an undefined embedded step offers a create-step-definition action', async function () {
+    this.timeout(60000);
+
+    const wkspUri = getWorkspaceUri();
+    const edgeCasesUri = vscode.Uri.joinPath(wkspUri, 'features', 'steps', 'edge_cases.py');
+    const document = await vscode.workspace.openTextDocument(edgeCasesUri);
+    await vscode.window.showTextDocument(document);
+
+    await waitForCondition(
+      () => getDiagnosticsForUri(edgeCasesUri).some(d => d.code === 'execute-steps-step-not-found'), 15000);
+
+    const undefinedLine = findLine(document, 'Given this step does not exist anywhere');
+    const lineText = document.lineAt(undefinedLine).text;
+    const range = new vscode.Range(undefinedLine, lineText.indexOf('Given'), undefinedLine, lineText.length);
+
+    const actions = await vscode.commands.executeCommand<vscode.CodeAction[]>(
+      'vscode.executeCodeActionProvider', edgeCasesUri, range);
+
+    assert.ok(actions, 'expected code actions');
+    const createAction = actions.find(a => a.title === 'Create step definition "this step does not exist anywhere"');
+    assert.ok(createAction, `expected the create-step quick-fix, got: ${actions.map(a => a.title).join(' | ')}`);
+    assert.ok(createAction.edit, 'the quick-fix must carry a WorkspaceEdit');
+  });
+
+  test('CodeLens title distinguishes execute_steps references', async function () {
+    this.timeout(60000);
+
+    const wkspUri = getWorkspaceUri();
+    const stepsUri = vscode.Uri.joinPath(wkspUri, 'features', 'steps', 'steps.py');
+    const document = await vscode.workspace.openTextDocument(stepsUri);
+
+    const lenses = await vscode.commands.executeCommand<vscode.CodeLens[]>(
+      'vscode.executeCodeLensProvider', stepsUri, 20);
+
+    // "the machine is primed" is referenced ONLY from execute_steps call sites, so its
+    // lens must carry the source split, e.g. "4 references (4 in steps)"
+    const decoratorLine = findLine(document, '@given("the machine is primed")');
+    const primedLens = lenses?.find(l => l.range.start.line === decoratorLine && l.command?.title.match(/\d+ reference/));
+    assert.ok(primedLens, 'expected a references CodeLens on the primed decorator');
+    assert.ok(primedLens.command?.title.match(/\(\d+ in steps\)/),
+      `expected the "(N in steps)" split in the lens title, got "${primedLens.command?.title}"`);
+  });
+
   test('live edit: fixing an undefined embedded step clears its Warning before the debounce', async function () {
     this.timeout(60000);
 

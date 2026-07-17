@@ -57,6 +57,35 @@ suite('Step Library Diagnostics Bug Fix', () => {
     await ensureExtensionReady();
   });
 
+  test('execute_steps call sites in library files OUTSIDE watched roots are scanned and mapped', async function () {
+    this.timeout(60000);
+
+    const wkspUri = getWorkspaceUri(projectName);
+    // lib/ sits at the workspace root, outside the features/ watched root - only the
+    // post-behave-load library scan can discover this call site
+    const libUri = vscode.Uri.joinPath(wkspUri, 'lib', 'library_steps.py');
+
+    await testSupport.parser.stepsParseComplete(20000, "test-lib-exec-scan");
+
+    const libDocument = await vscode.workspace.openTextDocument(libUri);
+    let defLine = -1;
+    let callLine = -1;
+    for (let i = 0; i < libDocument.lineCount; i++) {
+      const text = libDocument.lineAt(i).text;
+      if (text.includes('def step_calculator_exists')) defLine = i;
+      if (text.includes("context.execute_steps('Given there is a calculator')")) callLine = i;
+    }
+    assert.notStrictEqual(defLine, -1, 'should find the step_calculator_exists def line');
+    assert.notStrictEqual(callLine, -1, 'should find the execute_steps call line');
+
+    const mappings = testSupport.getStepMappingsForStepsFileFunction(libUri, defLine);
+    const execMappings = mappings.filter(m =>
+      m.featureFileStep.uri.path === libUri.path && m.featureFileStep.range.start.line === callLine);
+    assert.strictEqual(execMappings.length, 1,
+      `expected the execute_steps call site in lib/library_steps.py (line ${callLine}) to be mapped to the ` +
+      `"there is a calculator" step def; mappings found: ${JSON.stringify(mappings.map(m => ({ uri: m.featureFileStep.uri.path, line: m.featureFileStep.range.start.line })))}`);
+  });
+
   test('library steps should remain valid after editing importing step file', async function () {
     this.timeout(60000);
 
