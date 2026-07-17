@@ -34,7 +34,7 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
     - **Go to definition** — Ctrl+Click / F12 on an embedded step jumps straight to its step definition function.
     - **Hover info** — hovering an embedded step shows the same decorator + docstring popup you get for steps in feature files.
     - **Parameter highlighting** — `{parameter}` values in embedded steps are colorized like feature-file step parameters. The color is the `gsBehaveBdd.executeStepsParameter` theme color (override it via `workbench.colorCustomizations`).
-    - **Reference counting** — `execute_steps` call sites are counted in the step definition's CodeLens, in "Find All Step References", and in native Find All References.
+    - **Reference counting** — `execute_steps` call sites are counted in the step definition's CodeLens, in "Find All Step References", and in native Find All References. The CodeLens distinguishes sources, e.g. `3 references (1 in steps)`.
     - Supported string forms: triple-quoted and single-line literals, `u`/`r` prefixes, `textwrap.dedent(...)` wrapping, and `.format(...)`/`%`-formatted literals (placeholder-bearing lines are treated as dynamic and never flagged). f-strings and non-literal arguments (variables, concatenation) are skipped entirely — they produce no diagnostics, navigation, or references. Limitations: English Gherkin keywords only (the invoking feature's `# language:` is unknowable from the Python file), and only `.py` files under the extension's watched roots are scanned.
 
 #### Migrating from `behave-vsc`

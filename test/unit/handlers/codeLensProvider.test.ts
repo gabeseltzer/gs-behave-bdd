@@ -10,7 +10,8 @@ import * as stepsParser from '../../../src/parsers/stepsParser';
 import { StepFileStep } from '../../../src/parsers/stepsParser';
 import { StepMapping } from '../../../src/parsers/stepMappings';
 import { FeatureFileStep } from '../../../src/parsers/featureParser';
-import { StepCodeLensProvider, findDecoratorLine } from '../../../src/handlers/codeLensProvider';
+import { StepCodeLensProvider, findDecoratorLine, buildReferenceLensTitle } from '../../../src/handlers/codeLensProvider';
+import { ExecuteStepsCallStep } from '../../../src/parsers/executeStepsParser';
 import { parser } from '../../../src/extension';
 
 
@@ -343,6 +344,39 @@ suite('codeLensProvider', () => {
 
   });
 
+
+  suite('buildReferenceLensTitle', () => {
+
+    const defUri = vscode.Uri.file('/test/features/steps/steps.py');
+    const featureUri = vscode.Uri.file('/test/features/test.feature');
+    const libUri = vscode.Uri.file('/test/features/steps/lib.py');
+
+    function makeFeatureMapping(): StepMapping {
+      const sfs = makeStepFileStep(defUri, 'given', 'a precondition', 10);
+      return new StepMapping(featureUri, sfs, makeFeatureFileStep(featureUri, 3, 'Given a precondition', 'given'));
+    }
+
+    function makeExecMapping(): StepMapping {
+      const sfs = makeStepFileStep(defUri, 'given', 'a precondition', 10);
+      const callStep = new ExecuteStepsCallStep(
+        'key', libUri, 'lib.py', new vscode.Range(5, 8, 5, 28),
+        'Given a precondition', 'a precondition', 'given', false);
+      return new StepMapping(featureUri, sfs, callStep);
+    }
+
+    test('plain count when there are no execute_steps references', () => {
+      assert.strictEqual(buildReferenceLensTitle([]), '0 references');
+      assert.strictEqual(buildReferenceLensTitle([makeFeatureMapping()]), '1 reference');
+      assert.strictEqual(buildReferenceLensTitle([makeFeatureMapping(), makeFeatureMapping()]), '2 references');
+    });
+
+    test('appends the execute_steps source split when call sites exist', () => {
+      assert.strictEqual(buildReferenceLensTitle([makeExecMapping()]), '1 reference (1 in steps)');
+      assert.strictEqual(
+        buildReferenceLensTitle([makeFeatureMapping(), makeExecMapping(), makeExecMapping()]),
+        '3 references (2 in steps)');
+    });
+  });
 
   suite('findDecoratorLine', () => {
 
