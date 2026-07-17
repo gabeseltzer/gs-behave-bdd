@@ -394,13 +394,16 @@ export class FileParser {
     setStepLoadDiagnostics(failedFiles);
     await setMissingModuleHints(result.mockedModules ?? [], stepFilesForHints);
 
-    // Snapshot cached definitions BEFORE the delete-all. Retain a cached entry when:
-    // (a) its file failed to load (keep the failed file's own definitions), or
+    // Snapshot cached definitions BEFORE the delete-all. Retain a cached entry only
+    // when the file has NO fresh definitions AND is in a broken state, specifically:
+    // (a) its file failed to load and discovery recovered nothing fresh for it, or
     // (b) failures exist AND its file was neither executed by discover.py nor present
     //     in the fresh results — i.e. a step LIBRARY whose steps are missing only
     //     because their importer failed (libraries are never executed directly, so
-    //     they appear in neither loaded_files nor failed_files). A healthy dir-root
-    //     file that genuinely deleted its steps IS in loadedFiles, so it is replaced.
+    //     they appear in neither loaded_files nor failed_files).
+    // Fresh definitions ALWAYS win: a file whose literal steps discovery recovered
+    // from source (despite a failed import) is replaced with those, not the cache;
+    // and a healthy file that genuinely deleted its steps is replaced too.
     const failedIds = new Set(failedFiles.map(f => uriId(vscode.Uri.file(f.filePath))));
     const loadedIds = new Set((result.loadedFiles ?? []).map(f => uriId(vscode.Uri.file(f))));
     const freshStepFileIds = new Set(result.steps.map(s => uriId(vscode.Uri.file(s.filePath))));
@@ -408,7 +411,8 @@ export class FileParser {
 
     const retain = (fileUri: vscode.Uri, freshIds: Set<string>): boolean => {
       const id = uriId(fileUri);
-      return failedIds.has(id) || (!loadedIds.has(id) && !freshIds.has(id));
+      if (freshIds.has(id)) return false; // fresh definitions supersede cache
+      return failedIds.has(id) || !loadedIds.has(id);
     };
 
     const cachedSteps = failedIds.size > 0

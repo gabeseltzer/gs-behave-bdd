@@ -158,15 +158,22 @@ suite('discover.py - per-file isolation and import stubbing', function () {
     assert.ok(result.steps.some(s => s.pattern === 'a version-guarded step'));
   });
 
-  test('a file that registers steps then raises has its partial registrations dropped', () => {
+  test('a file that raises at import still yields its literal steps (recovered from source)', () => {
+    // The whole point of degraded discovery: a broken import (or any module-level
+    // failure) must not cost a file its steps. behave cannot execute this file, but
+    // its step patterns are plain string literals, so they are recovered via AST.
     fs.writeFileSync(path.join(stepsDir, 'partial.py'), [
       'from behave import given',
       '',
-      '@given("registered before the crash")',
+      '@given("first knowable step")',
       'def step_before(context):',
       '    pass',
       '',
-      'raise RuntimeError("boom at import time")',    // line 7
+      'raise RuntimeError("boom at import time")',    // line 7 - aborts exec
+      '',
+      '@given("second knowable step")',               // registered by behave? no - never reached
+      'def step_after(context):',
+      '    pass',
     ].join('\n'));
 
     fs.writeFileSync(path.join(stepsDir, 'healthy.py'), [
@@ -179,16 +186,57 @@ suite('discover.py - per-file isolation and import stubbing', function () {
 
     const result = runDiscover(tmpDir, [stepsDir]);
 
-    assert.ok(result.steps.some(s => s.pattern === 'a healthy step'));
-    assert.ok(!result.steps.some(s => s.pattern === 'registered before the crash'),
-      'partial registrations from the crashed file must be dropped (its cache is kept instead)');
+    assert.ok(result.steps.some(s => s.pattern === 'a healthy step'), 'the healthy file loads normally');
+    // Both steps recovered from source, INCLUDING the one after the raising line
+    // that behave never reached - AST recovery does not depend on execution order.
+    assert.ok(result.steps.some(s => s.pattern === 'first knowable step'),
+      'a literal step before the failure is recovered');
+    assert.ok(result.steps.some(s => s.pattern === 'second knowable step'),
+      'a literal step after the failure is recovered too (AST, not execution)');
+    const recovered = result.steps.find(s => s.pattern === 'first knowable step');
+    assert.strictEqual(path.basename(recovered!.file), 'partial.py');
+    assert.strictEqual(recovered!.line, 3, 'recovered step reports its real decorator line');
 
+    // The file is still reported as failed so the user gets a diagnostic
     assert.strictEqual(result.failed_files?.length, 1);
     const failure = result.failed_files![0];
     assert.strictEqual(path.basename(failure.file), 'partial.py');
     assert.strictEqual(failure.kind, 'error');
-    assert.strictEqual(failure.line, 7, 'traceback should locate the raising line');
     assert.ok(failure.error.includes('boom at import time'));
+    // ...and the file appears in loaded_files so the extension uses the recovered
+    // fresh steps rather than stale cache.
+    assert.ok((result.loaded_files ?? []).some(f => path.basename(f) === 'partial.py') ||
+      result.steps.some(s => path.basename(s.file) === 'partial.py'),
+      'recovered steps are present as fresh results');
+  });
+
+  test('a stubbed pattern step is skipped but its file keeps every valid step', () => {
+    // Regression for the reported bug: one step whose name comes from a missing
+    // import must not cost the file its other, perfectly valid steps.
+    fs.writeFileSync(path.join(stepsDir, 'mixed.py'), [
+      'from behave import given, when',
+      'import missing_sensor_lib',
+      '',
+      '@given("valid step one")',
+      'def s1(context):',
+      '    pass',
+      '@given("valid step two")',
+      'def s2(context):',
+      '    pass',
+      '@when(missing_sensor_lib.SENSOR_STEP)',   // garbage pattern from a stub
+      'def s3(context):',
+      '    pass',
+    ].join('\n'));
+
+    const result = runDiscover(tmpDir, [stepsDir]);
+
+    assert.ok(result.steps.some(s => s.pattern === 'valid step one'), 'valid step one kept');
+    assert.ok(result.steps.some(s => s.pattern === 'valid step two'), 'valid step two kept');
+    assert.ok(!result.steps.some(s => typeof s.pattern !== 'string' || s.pattern.includes('stub')),
+      'the garbage stub-pattern step is not surfaced');
+    const failure = result.failed_files?.find(f => path.basename(f.file) === 'mixed.py');
+    assert.ok(failure, 'the file is flagged so the user learns about the missing import');
+    assert.ok(/missing_sensor_lib/.test(failure!.error), `names the missing module (got: ${failure!.error})`);
   });
 
   test('duplicate step definitions: first file loads, second fails with duplicates reported', () => {

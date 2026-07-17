@@ -189,6 +189,64 @@ def preflight_syntax_check(py_files: list[str]) -> list[dict[str, Any]]:
   return failures
 
 
+_STEP_DECORATORS = frozenset({"given", "when", "then", "step"})
+
+
+def _decorator_step_type(decorator: ast.expr) -> str | None:
+  """If an AST decorator is @given/@when/@then/@step (or @behave.given etc.), return its type."""
+  target = decorator.func if isinstance(decorator, ast.Call) else decorator
+  if isinstance(target, ast.Name):
+    name = target.id
+  elif isinstance(target, ast.Attribute):
+    name = target.attr  # e.g. behave.given -> "given"
+  else:
+    return None
+  return name.lower() if name.lower() in _STEP_DECORATORS else None
+
+
+def recover_literal_steps_via_ast(file_path: str) -> list[dict[str, Any]]:
+  """
+  Best-effort step recovery for a file behave could NOT load (e.g. a missing
+  import raised at module import time, before any step registered). Parses the
+  source and extracts step decorators whose pattern is a plain string literal -
+  those steps are fully known without running the file, so they can still be
+  navigated and matched. Steps with a computed/interpolated pattern are skipped
+  (their text genuinely depends on the unavailable import).
+
+  This is a deliberate, narrow fallback to home-rolled parsing, used only when
+  behave's own load failed - so the "just works" path stays behave-faithful while
+  a single bad import no longer costs a file every one of its steps.
+  """
+  try:
+    source = Path(file_path).read_text(encoding="utf-8", errors="replace")
+    tree = ast.parse(source, filename=file_path)
+  except (OSError, SyntaxError):
+    return []
+
+  resolved = str(Path(file_path).resolve())
+  steps: list[dict[str, Any]] = []
+  for node in ast.walk(tree):
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+      continue
+    for decorator in node.decorator_list:
+      step_type = _decorator_step_type(decorator)
+      if step_type is None or not isinstance(decorator, ast.Call) or not decorator.args:
+        continue
+      first = decorator.args[0]
+      if not (isinstance(first, ast.Constant) and isinstance(first.value, str)):
+        continue  # computed pattern - can't recover its text without the import
+      steps.append(
+        {
+          "step_type": step_type,
+          "pattern": first.value,
+          "file": resolved,
+          "line": decorator.lineno,
+          "regex_pattern": first.value,
+        }
+      )
+  return steps
+
+
 def load_environment_files(
   steps_paths: list[str],
 ) -> tuple[list[types.ModuleType], list[dict[str, Any]], list[str]]:
@@ -361,31 +419,31 @@ def collect_steps_from_registry(
   """
   Collect all registered steps from the registry.
 
-  exclude_files: resolved paths of files that failed to load - a file that
-  registered some steps and then raised has its partial registrations dropped
-  (the extension keeps that file's cached definitions instead).
+  exclude_files: resolved paths of files that failed to load - their registry
+  state is partial/unreliable, so the caller recovers their literal steps from
+  source (see _recover_literal_steps_via_ast) instead.
 
-  Returns (steps, corrupt_files). corrupt_files are files that registered at
-  least one step whose pattern came from a stubbed missing import; ALL of their
-  steps are dropped (the caller reports them as failed imports) so a half-loaded
-  file never surfaces a garbage step like "<...stub...>".
+  Returns (steps, corrupt_files). corrupt_files registered at least one step
+  whose pattern came from a stubbed missing import; only those GARBAGE steps are
+  skipped - every valid (real-string) step in the file is still collected, so a
+  single unresolved import no longer costs a file all of its steps.
   """
   exclude_files = exclude_files or set()
   step_types = ["given", "when", "then", "step"]
 
-  # First pass: any file with a stub-derived pattern is corrupt as a whole
   corrupt_files: set[str] = set()
-  for step_type in step_types:
-    for matcher in registry.steps.get(step_type, []):
-      if _is_stub_pattern(matcher.pattern):
-        corrupt_files.add(_get_file_path(matcher))
-
   steps: list[dict[str, Any]] = []
   for step_type in step_types:
     for matcher in registry.steps.get(step_type, []):
       file_path = _get_file_path(matcher)
 
-      if file_path in exclude_files or file_path in corrupt_files:
+      if file_path in exclude_files:
+        continue
+
+      # Skip only THIS garbage step (its name came from a missing import), not the
+      # whole file - the file's other steps are valid and worth keeping.
+      if _is_stub_pattern(matcher.pattern):
+        corrupt_files.add(file_path)
         continue
 
       step_info = {
@@ -711,15 +769,30 @@ def _build_success_result(
   fixtures = collect_fixtures_from_modules(env_modules)
   _attribute_stub_failures(failed_files, failed_paths, corrupt_files)
 
+  # Recover literal-pattern steps from files behave could NOT load at all (a
+  # missing import raised at import time, before any step registered). Their text
+  # is a plain string literal in source, so they remain navigable/matchable even
+  # though the file cannot execute. Only for files that contributed no steps yet
+  # (corrupt-but-loaded files already kept their valid steps above).
+  files_with_steps = {s["file"] for s in steps}
+  for failure in failed_files:
+    fp = failure["file"]
+    if fp in files_with_steps:
+      continue
+    recovered = recover_literal_steps_via_ast(fp)
+    if recovered:
+      steps.extend(recovered)
+      files_with_steps.add(fp)
+
   result: dict[str, Any] = {"steps": steps, "fixtures": fixtures}
   if failed_files:
     result["failed_files"] = failed_files
-    # Only meaningful alongside failures: lets the extension tell "this file
-    # loaded and its steps really are gone" apart from "this file's steps are
-    # missing because its importer failed" (library files are never exec'd
-    # directly, so they appear in neither loaded_files nor failed_files).
-    # Corrupt files were exec'd (so they're in loaded_files) but are now failed;
-    # drop them from loaded_files so the extension keeps their cached steps.
+    # loaded_files lets the extension tell "this file loaded and its steps really
+    # are gone" from "this file's steps are missing because its importer failed"
+    # (library files are never exec'd directly, so appear in neither list). Files
+    # whose steps we recovered from source have fresh steps in `steps`, and the
+    # extension's cache merge prefers fresh steps over cache, so they need no
+    # special handling here.
     surviving = [f for f in loaded_files if f not in failed_paths]
     result["loaded_files"] = surviving
     _prune_mocked_modules(surviving)
