@@ -17,6 +17,7 @@ interface DiscoverOutput {
   error?: string;
   error_kind?: string;
   failed_files?: RawFailedFile[];
+  loaded_files?: string[];
   mocked_modules?: string[];
   duplicates?: { step_type: string; pattern: string; file: string; line: number }[];
 }
@@ -90,6 +91,12 @@ suite('discover.py - per-file isolation and import stubbing', function () {
     assert.strictEqual(path.basename(failure.file), 'broken.py');
     assert.strictEqual(failure.kind, 'syntax');
     assert.strictEqual(failure.line, 3, 'syntax pre-flight reports the precise line');
+
+    // loaded_files accompanies failures so the extension can tell real deletions
+    // from collateral damage of a failed importer
+    const loadedNames = (result.loaded_files ?? []).map(f => path.basename(f));
+    assert.ok(loadedNames.includes('good.py'), `loaded_files should list good.py (got: ${loadedNames})`);
+    assert.ok(!loadedNames.includes('broken.py'), 'a failed file must not appear in loaded_files');
   });
 
   test('an uninstalled import used inside step bodies does not block parsing (mocked_modules)', () => {
@@ -247,6 +254,7 @@ suite('discover.py - per-file isolation and import stubbing', function () {
 
     assert.strictEqual(result.error, undefined);
     assert.strictEqual(result.failed_files, undefined);
+    assert.strictEqual(result.loaded_files, undefined, 'loaded_files only accompanies failures');
     assert.strictEqual(result.mocked_modules, undefined);
     assert.strictEqual(result.steps.length, 1);
   });

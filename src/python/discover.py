@@ -178,14 +178,15 @@ def preflight_syntax_check(py_files: list[str]) -> list[dict[str, Any]]:
 
 def load_environment_files(
   steps_paths: list[str],
-) -> tuple[list[types.ModuleType], list[dict[str, Any]]]:
+) -> tuple[list[types.ModuleType], list[dict[str, Any]], list[str]]:
   """
   Load environment.py files from step directory parents.
-  Returns (loaded modules, failed_files entries).
+  Returns (loaded modules, failed_files entries, successfully loaded file paths).
   """
   loaded_env_files: set[str] = set()
   loaded_modules: list[types.ModuleType] = []
   failures: list[dict[str, Any]] = []
+  loaded_paths: list[str] = []
   for sp in steps_paths:
     env_dir = Path(sp).resolve().parent
     env_file = env_dir / "environment.py"
@@ -201,9 +202,10 @@ def load_environment_files(
           env_module = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(env_module)
           loaded_modules.append(env_module)
+          loaded_paths.append(str(env_file))
       except Exception as env_err:  # noqa: BLE001  # any env failure is per-file, never fatal
         failures.append(_failure_entry(str(env_file), env_err))
-  return loaded_modules, failures
+  return loaded_modules, failures, loaded_paths
 
 
 class StepLoadError(Exception):
@@ -229,12 +231,14 @@ def _list_step_files(step_dirs: list[str]) -> list[str]:
 
 def _load_step_files_isolated(
   step_dirs: list[str], skip_files: set[str]
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[str]]:
   """
   Replicate behave's load_step_modules() (behave/runner_util.py) with one
   change: exec each step file inside try/except so one broken file only loses
   its own steps. Same decorator globals, same PathManager, same sorted load
   order, same matcher reset between files.
+
+  Returns (failed_files entries, successfully executed file paths).
 
   Raises _IsolationUnavailable if behave's internals have drifted from what
   this replication needs (caller falls back to the real load_step_modules).
@@ -261,6 +265,7 @@ def _load_step_files_isolated(
   setup_step_decorators(step_globals)
 
   failures: list[dict[str, Any]] = []
+  loaded: list[str] = []
   with path_manager(step_dirs):
     use_current_step_matcher_as_default()
     for file_path in _list_step_files(step_dirs):
@@ -270,18 +275,23 @@ def _load_step_files_isolated(
       try:
         step_module_globals = step_globals.copy()
         exec_file(file_path, step_module_globals)
+        loaded.append(str(Path(file_path).resolve()))
       except Exception as e:  # noqa: BLE001  # per-file isolation is the whole point
         failures.append(_failure_entry(file_path, e))
       finally:
         use_default_step_matcher()
-  return failures
+  return failures, loaded
 
 
-def load_step_directories(steps_paths: list[str]) -> list[dict[str, Any]]:
+def load_step_directories(
+  steps_paths: list[str],
+) -> tuple[list[dict[str, Any]], list[str]]:
   """
   Load step modules from all step directories, isolating failures per file.
 
-  Returns failed_files entries (syntax pre-flight failures + exec failures).
+  Returns (failed_files entries, successfully executed file paths). The loaded
+  list lets the extension distinguish "this file loaded and its steps really
+  are gone" from "this file's steps are missing because its importer failed".
   Falls back to behave's own all-or-nothing load_step_modules if the isolated
   replication is unavailable; in that case a failure raises StepLoadError.
   """
@@ -291,15 +301,15 @@ def load_step_directories(steps_paths: list[str]) -> list[dict[str, Any]]:
     str(Path(p).resolve()) for p in steps_paths if Path(p).resolve().exists()
   ]
   if not step_dirs:
-    return []
+    return [], []
 
   # D: syntax pre-flight - precise line/col, and skip exec of files that can't compile
   syntax_failures = preflight_syntax_check(_list_step_files(step_dirs))
   skip_files = {f["file"] for f in syntax_failures}
 
   try:
-    exec_failures = _load_step_files_isolated(step_dirs, skip_files)
-    return syntax_failures + exec_failures
+    exec_failures, loaded = _load_step_files_isolated(step_dirs, skip_files)
+    return syntax_failures + exec_failures, loaded
   except _IsolationUnavailable:
     pass
 
@@ -308,7 +318,12 @@ def load_step_directories(steps_paths: list[str]) -> list[dict[str, Any]]:
     runner_util.load_step_modules(step_dirs)
   except Exception as load_err:
     raise StepLoadError(str(load_err)) from load_err
-  return syntax_failures
+  loaded = [
+    str(Path(f).resolve())
+    for f in _list_step_files(step_dirs)
+    if str(Path(f).resolve()) not in skip_files
+  ]
+  return syntax_failures, loaded
 
 
 def collect_steps_from_registry(
@@ -553,6 +568,7 @@ def _build_success_result(
   step_registry: Any,
   env_modules: list[types.ModuleType],
   failed_files: list[dict[str, Any]],
+  loaded_files: list[str],
   steps_paths: list[str],
 ) -> dict[str, Any]:
   """Result for a (possibly partially) successful load."""
@@ -565,6 +581,11 @@ def _build_success_result(
   result: dict[str, Any] = {"steps": steps, "fixtures": fixtures}
   if failed_files:
     result["failed_files"] = failed_files
+    # Only meaningful alongside failures: lets the extension tell "this file
+    # loaded and its steps really are gone" apart from "this file's steps are
+    # missing because its importer failed" (library files are never exec'd
+    # directly, so they appear in neither loaded_files nor failed_files).
+    result["loaded_files"] = loaded_files
     # A failed file may hide a duplicate-definition problem (AmbiguousStep);
     # the regex scan is cheap and lets the extension keep its duplicates UI.
     if any(
@@ -592,12 +613,13 @@ def main() -> None:
     # inert stubs (recorded in MOCKED_MODULES) instead of failing the file.
     install_missing_import_stubs()
 
-    env_modules, env_failures = load_environment_files(steps_paths)
+    env_modules, env_failures, env_loaded = load_environment_files(steps_paths)
 
     try:
-      failed_files = env_failures + load_step_directories(steps_paths)
+      step_failures, step_loaded = load_step_directories(steps_paths)
+      failed_files = env_failures + step_failures
       result = _build_success_result(
-        step_registry, env_modules, failed_files, steps_paths
+        step_registry, env_modules, failed_files, env_loaded + step_loaded, steps_paths
       )
     except StepLoadError as e:
       result = _build_wholesale_error_result(str(e), steps_paths)

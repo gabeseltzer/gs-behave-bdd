@@ -83,6 +83,14 @@ export interface BehaveDiscoveryResult {
   duplicates?: DuplicateStepInfo[];
   /** Per-file load failures (per-file isolation - steps from other files still load) */
   failedFiles?: FailedFileInfo[];
+  /**
+   * Files discover.py successfully executed (step dir files + environment.py).
+   * Only present alongside failedFiles. Library files imported BY step files are
+   * never executed directly, so they appear in neither list — which is how the
+   * cache merge knows their absence from fresh results is collateral damage from
+   * a failed importer rather than a real deletion.
+   */
+  loadedFiles?: string[];
   /** Modules that were not installed and were satisfied with inert stubs */
   mockedModules?: string[];
   /** Raw stderr from the Python process (warnings, tracebacks, etc.) */
@@ -153,6 +161,7 @@ export async function loadFromBehave(
       error_kind?: string;
       duplicates?: RawDuplicateInfo[];
       failed_files?: RawFailedFileInfo[];
+      loaded_files?: string[];
       mocked_modules?: string[];
     }
 
@@ -212,6 +221,7 @@ export async function loadFromBehave(
     return {
       steps, fixtures,
       error: parsed.error, errorKind, duplicates, failedFiles,
+      loadedFiles: parsed.loaded_files,
       mockedModules: parsed.mocked_modules,
       stderr: processStderr || undefined
     };

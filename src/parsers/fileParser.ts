@@ -390,13 +390,28 @@ export class FileParser {
     setStepLoadDiagnostics(failedFiles);
     await setMissingModuleHints(result.mockedModules ?? [], stepFilesForHints);
 
-    // Snapshot cached definitions belonging to failed files BEFORE the delete-all
+    // Snapshot cached definitions BEFORE the delete-all. Retain a cached entry when:
+    // (a) its file failed to load (keep the failed file's own definitions), or
+    // (b) failures exist AND its file was neither executed by discover.py nor present
+    //     in the fresh results — i.e. a step LIBRARY whose steps are missing only
+    //     because their importer failed (libraries are never executed directly, so
+    //     they appear in neither loaded_files nor failed_files). A healthy dir-root
+    //     file that genuinely deleted its steps IS in loadedFiles, so it is replaced.
     const failedIds = new Set(failedFiles.map(f => uriId(vscode.Uri.file(f.filePath))));
+    const loadedIds = new Set((result.loadedFiles ?? []).map(f => uriId(vscode.Uri.file(f))));
+    const freshStepFileIds = new Set(result.steps.map(s => uriId(vscode.Uri.file(s.filePath))));
+    const freshFixtureFileIds = new Set(result.fixtures.map(f => uriId(vscode.Uri.file(f.filePath))));
+
+    const retain = (fileUri: vscode.Uri, freshIds: Set<string>): boolean => {
+      const id = uriId(fileUri);
+      return failedIds.has(id) || (!loadedIds.has(id) && !freshIds.has(id));
+    };
+
     const cachedSteps = failedIds.size > 0
-      ? getStepFileSteps(wkspSettings.featuresUri, false).map(([, s]) => s).filter(s => failedIds.has(uriId(s.uri)))
+      ? getStepFileSteps(wkspSettings.featuresUri, false).map(([, s]) => s).filter(s => retain(s.uri, freshStepFileIds))
       : [];
     const cachedFixtures = failedIds.size > 0
-      ? getFixtures(wkspSettings.featuresUri).filter(f => failedIds.has(uriId(f.uri)))
+      ? getFixtures(wkspSettings.featuresUri).filter(f => retain(f.uri, freshFixtureFileIds))
       : [];
 
     diagLog("removing existing steps for workspace: " + wkspSettings.name);

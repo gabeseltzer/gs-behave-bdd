@@ -301,4 +301,50 @@ suite('per-file cache merge (failed files keep cached definitions)', () => {
     const stored = stepsParserModule.getStepFileSteps(featuresUri);
     assert.strictEqual(stored.length, 0, 'steps removed from a healthy file must not linger via the cache');
   });
+
+  test('cached LIBRARY steps survive when their importing step file fails', async function () {
+    this.timeout(5000);
+
+    // The step-library shape: steps live in lib/library_steps.py, pulled in by
+    // broken.py via "from lib.library_steps import *". behave attributes them
+    // to the lib file, so when broken.py fails, the lib steps vanish from fresh
+    // results even though the lib file is in neither failed nor loaded lists.
+    const libFileUri = vscode.Uri.joinPath(wkspUri, 'lib', 'library_steps.py');
+    stepsParserModule.storeStepFileStep(featuresUri, makeCachedStep(libFileUri, 'a library step'));
+
+    loadFromBehaveStub.resolves({
+      steps: [{ stepType: 'given', pattern: 'a fresh step', filePath: goodFileUri.fsPath, lineNumber: 1, regex: 'a fresh step' }],
+      fixtures: [],
+      failedFiles: [failedFileFor(brokenFileUri)],
+      loadedFiles: [goodFileUri.fsPath],  // lib file is NOT here - never executed directly
+    });
+
+    await reparseAndWait();
+
+    const stored = stepsParserModule.getStepFileSteps(featuresUri).map(([, s]) => s);
+    const patterns = stored.map(s => s.textAsRe).sort();
+    assert.ok(patterns.includes('a library step'),
+      `library-attributed steps must survive their importer's failure (got: ${patterns})`);
+    assert.ok(patterns.includes('a fresh step'), `fresh steps stored too (got: ${patterns})`);
+  });
+
+  test('a LOADED file that dropped its steps is replaced even while another file fails', async function () {
+    this.timeout(5000);
+
+    stepsParserModule.storeStepFileStep(featuresUri, makeCachedStep(goodFileUri, 'a genuinely deleted step'));
+
+    // good.py loaded successfully but no longer defines any steps; broken.py failed
+    loadFromBehaveStub.resolves({
+      steps: [],
+      fixtures: [],
+      failedFiles: [failedFileFor(brokenFileUri)],
+      loadedFiles: [goodFileUri.fsPath],
+    });
+
+    await reparseAndWait();
+
+    const stored = stepsParserModule.getStepFileSteps(featuresUri).map(([, s]) => s);
+    assert.ok(!stored.some(s => s.textAsRe === 'a genuinely deleted step'),
+      'a successfully loaded file with no steps must not resurrect cached ones');
+  });
 });
