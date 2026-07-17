@@ -241,6 +241,72 @@ suite('discover.py - per-file isolation and import stubbing', function () {
     assert.strictEqual(result.failed_files![0].kind, 'syntax');
   });
 
+  test('a stubbed import used as a step PATTERN is reported as a failed import, not a garbage step', () => {
+    // Regression: `from lib.camera_helpers import PATH` where lib is not importable,
+    // then `@when(PATH)`. The stub must NOT register a "<stub>" step or blow up with a
+    // cryptic "TypeError: expected string or bytes-like object" - it must be a clear,
+    // named import failure, and other files must still load.
+    fs.writeFileSync(path.join(stepsDir, 'camera_steps.py'), [
+      'from lib.camera_helpers import SNAPSHOT_PATH, take_photo',
+      '',
+      '@when(SNAPSHOT_PATH)',
+      'def step_take_photo(context):',
+      '    take_photo(context)',
+    ].join('\n'));
+    fs.writeFileSync(path.join(stepsDir, 'good.py'), [
+      'from behave import given',
+      '',
+      '@given("a healthy step")',
+      'def step_good(context):',
+      '    pass',
+    ].join('\n'));
+
+    const result = runDiscover(tmpDir, [stepsDir]);
+
+    assert.strictEqual(result.error, undefined, 'must not be a wholesale error');
+    assert.ok(result.steps.some(s => s.pattern === 'a healthy step'),
+      'the healthy file must still load');
+    assert.ok(!result.steps.some(s => typeof s.pattern !== 'string' || s.pattern.includes('stub')),
+      `no garbage stub step may be reported (got: ${JSON.stringify(result.steps.map(s => s.pattern))})`);
+
+    const failure = result.failed_files?.find(f => path.basename(f.file) === 'camera_steps.py');
+    assert.ok(failure, 'camera_steps.py must be reported as failed');
+    assert.strictEqual(failure!.kind, 'import');
+    assert.ok(/lib\.camera_helpers|'lib'/.test(failure!.error),
+      `failure should name the missing module (got: ${failure!.error})`);
+  });
+
+  test('a TRANSITIVE missing import (via a real local helper) is named in the failure', () => {
+    // lib.camera_helpers IS importable, but it imports a missing 3rd-party module
+    // and derives the step-pattern constant from it. The failure must name the
+    // transitive module (cv2), which a scan of the step file's own imports can't see.
+    fs.mkdirSync(path.join(tmpDir, 'lib'));
+    fs.writeFileSync(path.join(tmpDir, 'lib', '__init__.py'), '');
+    fs.writeFileSync(path.join(tmpDir, 'lib', 'camera_helpers.py'), [
+      'import cv2_not_installed_xyz',
+      'SNAPSHOT_PATH = cv2_not_installed_xyz.DEFAULT_PATH',
+      'def take_photo(context):',
+      '    pass',
+    ].join('\n'));
+    fs.writeFileSync(path.join(stepsDir, 'camera_steps.py'), [
+      'from lib.camera_helpers import SNAPSHOT_PATH, take_photo',
+      '',
+      '@when(SNAPSHOT_PATH)',
+      'def step_take_photo(context):',
+      '    take_photo(context)',
+    ].join('\n'));
+
+    const result = runDiscover(tmpDir, [stepsDir]);
+
+    const failure = result.failed_files?.find(f => path.basename(f.file) === 'camera_steps.py');
+    assert.ok(failure, 'camera_steps.py must be reported as failed');
+    assert.ok(failure!.error.includes('cv2_not_installed_xyz'),
+      `failure should name the TRANSITIVE missing module (got: ${failure!.error})`);
+    // the transitive-only missing module must not linger as a "stubbed OK" hint
+    assert.ok(!(result.mocked_modules ?? []).includes('cv2_not_installed_xyz'),
+      'a module that only broke a failed file should be pruned from mocked_modules');
+  });
+
   test('fully healthy project: no failed_files, no mocked_modules keys', () => {
     fs.writeFileSync(path.join(stepsDir, 'clean.py'), [
       'from behave import given, when, then',

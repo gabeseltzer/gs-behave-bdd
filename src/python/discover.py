@@ -45,9 +45,22 @@ from typing import Any
 # installed in the interpreter. Reported to the extension for hint diagnostics.
 MOCKED_MODULES: set[str] = set()
 
+# Per-file attribution: resolved step-file path -> modules first stubbed while
+# executing that file. Captures TRANSITIVE missing imports (e.g. a local helper
+# the file imports that itself imports an uninstalled library), which a scan of
+# the file's own import statements cannot see. Used to name the module the user
+# must fix when a stub corrupts the file's step registration.
+STUBBED_DURING_FILE: dict[str, list[str]] = {}
+
 # Never stub these prefixes: behave must fail loudly if absent (the extension
 # falls back to its bundled copy), and stubbing it would silently yield 0 steps.
 _STUB_BLOCKLIST_PREFIXES = ("behave", "_pytest", "pytest")
+
+# Marker embedded in every stub's repr. If it shows up in a step pattern (either
+# because a stub object was used directly as the pattern, or interpolated into an
+# f-string), the step's name came from a missing import - the registration is
+# garbage and the file must be reported as a failed import, not silently kept.
+_STUB_REPR_MARKER = "gs-behave-bdd stub "
 
 
 class _StubObject:
@@ -80,7 +93,7 @@ class _StubObject:
     return iter(())
 
   def __repr__(self) -> str:
-    return f"<gs-behave-bdd stub {object.__getattribute__(self, '_stub_name')}>"
+    return f"<{_STUB_REPR_MARKER}{object.__getattribute__(self, '_stub_name')}>"
 
 
 class _StubModule(types.ModuleType):
@@ -269,17 +282,22 @@ def _load_step_files_isolated(
   with path_manager(step_dirs):
     use_current_step_matcher_as_default()
     for file_path in _list_step_files(step_dirs):
-      if str(Path(file_path).resolve()) in skip_files:
+      resolved = str(Path(file_path).resolve())
+      if resolved in skip_files:
         use_default_step_matcher()
         continue
+      stubbed_before = set(MOCKED_MODULES)
       try:
         step_module_globals = step_globals.copy()
         exec_file(file_path, step_module_globals)
-        loaded.append(str(Path(file_path).resolve()))
+        loaded.append(resolved)
       except Exception as e:  # noqa: BLE001  # per-file isolation is the whole point
         failures.append(_failure_entry(file_path, e))
       finally:
         use_default_step_matcher()
+        newly_stubbed = MOCKED_MODULES - stubbed_before
+        if newly_stubbed:
+          STUBBED_DURING_FILE[resolved] = sorted(newly_stubbed)
   return failures, loaded
 
 
@@ -326,27 +344,48 @@ def load_step_directories(
   return syntax_failures, loaded
 
 
+def _is_stub_pattern(pattern: Any) -> bool:
+  """
+  True if a step pattern originated from a stubbed (missing) import - either the
+  stub object was used directly as the pattern (not a str), or it was interpolated
+  into an f-string (a str carrying the stub marker). Such a step's name is garbage.
+  """
+  if not isinstance(pattern, str):
+    return True
+  return _STUB_REPR_MARKER in pattern
+
+
 def collect_steps_from_registry(
   registry: Any, exclude_files: set[str] | None = None
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], set[str]]:
   """
   Collect all registered steps from the registry.
 
   exclude_files: resolved paths of files that failed to load - a file that
   registered some steps and then raised has its partial registrations dropped
   (the extension keeps that file's cached definitions instead).
+
+  Returns (steps, corrupt_files). corrupt_files are files that registered at
+  least one step whose pattern came from a stubbed missing import; ALL of their
+  steps are dropped (the caller reports them as failed imports) so a half-loaded
+  file never surfaces a garbage step like "<...stub...>".
   """
   exclude_files = exclude_files or set()
-  steps: list[dict[str, Any]] = []
-  for step_type in ["given", "when", "then", "step"]:
-    if step_type not in registry.steps:
-      continue
+  step_types = ["given", "when", "then", "step"]
 
-    for matcher in registry.steps[step_type]:
-      regex_pat = _get_regex_pattern(matcher)
+  # First pass: any file with a stub-derived pattern is corrupt as a whole
+  corrupt_files: set[str] = set()
+  for step_type in step_types:
+    for matcher in registry.steps.get(step_type, []):
+      if _is_stub_pattern(matcher.pattern):
+        corrupt_files.add(_get_file_path(matcher))
+
+  steps: list[dict[str, Any]] = []
+  for step_type in step_types:
+    for matcher in registry.steps.get(step_type, []):
       file_path = _get_file_path(matcher)
 
-      if file_path in exclude_files:
+      if file_path in exclude_files or file_path in corrupt_files:
         continue
 
       step_info = {
@@ -358,11 +397,11 @@ def collect_steps_from_registry(
           if hasattr(matcher, "location") and matcher.location
           else 0
         ),
-        "regex_pattern": regex_pat,
+        "regex_pattern": _get_regex_pattern(matcher),
       }
       steps.append(step_info)
 
-  return steps
+  return steps, corrupt_files
 
 
 def collect_fixtures_from_modules(
@@ -564,6 +603,99 @@ def _build_wholesale_error_result(
   return result
 
 
+def _stubbed_imports_in_file(file_path: str) -> list[str]:
+  """
+  Module names imported by a file whose top-level package was stubbed because it
+  is not installed / not importable. Used to turn a cryptic stub-induced failure
+  ("TypeError: expected string or bytes-like object") into an actionable message
+  that names the module the user actually needs to fix.
+  """
+  if not MOCKED_MODULES:
+    return []
+  stubbed_tops = {m.split(".", maxsplit=1)[0] for m in MOCKED_MODULES}
+  try:
+    source = Path(file_path).read_text(encoding="utf-8", errors="replace")
+    tree = ast.parse(source, filename=file_path)
+  except (OSError, SyntaxError):
+    return []
+  found: set[str] = set()
+  for node in ast.walk(tree):
+    if isinstance(node, ast.Import):
+      for alias in node.names:
+        if alias.name.split(".", maxsplit=1)[0] in stubbed_tops:
+          found.add(alias.name)
+    elif isinstance(node, ast.ImportFrom) and node.module:
+      if node.module.split(".", maxsplit=1)[0] in stubbed_tops:
+        found.add(node.module)
+  return sorted(found)
+
+
+def _missing_import_note(file_path: str) -> str | None:
+  """
+  A human-readable 'could not import X' note naming the missing module(s) behind
+  a stub-induced failure. Prefers per-file exec tracking (which sees transitive
+  imports - a helper the file imports that itself imports a missing library) and
+  falls back to scanning the file's own import statements.
+  """
+  mods = STUBBED_DURING_FILE.get(file_path) or _stubbed_imports_in_file(file_path)
+  if not mods:
+    return None
+  names = ", ".join(f"'{m}'" for m in mods)
+  return (
+    f"could not import {names} (not installed in the selected Python interpreter, "
+    f"or not importable from this project)"
+  )
+
+
+def _attribute_stub_failures(
+  failed_files: list[dict[str, Any]],
+  failed_paths: set[str],
+  corrupt_files: set[str],
+) -> None:
+  """
+  Turn stub-induced problems into clear, actionable failures (in place):
+  - a file whose step pattern came from a stubbed import (corrupt_files) becomes
+    a failed import naming the missing module, instead of a garbage "<stub>" step;
+  - existing exec failures caused by a stub (e.g. the pattern reached re during
+    registration -> "TypeError: expected string...") get the module name appended.
+  """
+  for corrupt_file in corrupt_files:
+    if corrupt_file in failed_paths:
+      continue
+    note = _missing_import_note(corrupt_file)
+    failed_files.append(
+      {
+        "file": corrupt_file,
+        "line": 0,
+        "col": 0,
+        "error": note or "a value from a missing import was used as a step name",
+        "kind": "import",
+      }
+    )
+    failed_paths.add(corrupt_file)
+
+  for failure in failed_files:
+    if failure["kind"] in ("import", "error"):
+      note = _missing_import_note(failure["file"])
+      if note and note not in failure["error"]:
+        failure["error"] = f"{failure['error']} — {note}"
+
+
+def _prune_mocked_modules(surviving_files: list[str]) -> None:
+  """
+  Keep only mocked_modules that a SURVIVING (loaded, non-failed) file imports.
+  A module that only broke a failed file would otherwise get a misleading
+  "stubbed OK, tests will run" hint on top of that file's "could not import".
+  """
+  used_tops: set[str] = set()
+  for survivor in surviving_files:
+    for mod in _stubbed_imports_in_file(survivor):
+      used_tops.add(mod.split(".", maxsplit=1)[0])
+  MOCKED_MODULES.difference_update(
+    {m for m in MOCKED_MODULES if m.split(".", maxsplit=1)[0] not in used_tops}
+  )
+
+
 def _build_success_result(
   step_registry: Any,
   env_modules: list[types.ModuleType],
@@ -573,10 +705,11 @@ def _build_success_result(
 ) -> dict[str, Any]:
   """Result for a (possibly partially) successful load."""
   failed_paths = {f["file"] for f in failed_files}
-  steps = collect_steps_from_registry(
+  steps, corrupt_files = collect_steps_from_registry(
     step_registry.registry, exclude_files=failed_paths
   )
   fixtures = collect_fixtures_from_modules(env_modules)
+  _attribute_stub_failures(failed_files, failed_paths, corrupt_files)
 
   result: dict[str, Any] = {"steps": steps, "fixtures": fixtures}
   if failed_files:
@@ -585,7 +718,12 @@ def _build_success_result(
     # loaded and its steps really are gone" apart from "this file's steps are
     # missing because its importer failed" (library files are never exec'd
     # directly, so they appear in neither loaded_files nor failed_files).
-    result["loaded_files"] = loaded_files
+    # Corrupt files were exec'd (so they're in loaded_files) but are now failed;
+    # drop them from loaded_files so the extension keeps their cached steps.
+    surviving = [f for f in loaded_files if f not in failed_paths]
+    result["loaded_files"] = surviving
+    _prune_mocked_modules(surviving)
+
     # A failed file may hide a duplicate-definition problem (AmbiguousStep);
     # the regex scan is cheap and lets the extension keep its duplicates UI.
     if any(
