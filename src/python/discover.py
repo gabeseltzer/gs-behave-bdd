@@ -128,7 +128,9 @@ def _import_is_from_third_party() -> bool:
     filename = frame.f_code.co_filename
     # Skip our own finder frames and the import machinery; the first frame below
     # them is the code that actually executed the `import` statement.
-    if filename == __file__ or filename.startswith("<frozen") or "importlib" in filename:
+    if (
+      filename == __file__ or filename.startswith("<frozen") or "importlib" in filename
+    ):
       frame = frame.f_back
       continue
     norm = filename.replace("\\", "/")
