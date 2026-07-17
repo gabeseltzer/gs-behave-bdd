@@ -107,6 +107,35 @@ class _StubModule(types.ModuleType):
     return _StubObject(f"{self.__name__}.{item}")
 
 
+def _import_is_from_third_party() -> bool:
+  """
+  True if the import currently being resolved was triggered from third-party
+  library code (site-packages / dist-packages), not the user's project.
+
+  Such libraries routinely probe for OPTIONAL dependencies with
+  `try: import optional_dep / except ImportError: ...` and then use the result
+  assuming a real module (e.g. urllib3 reads `zstandard.__version__`). Stubbing
+  the optional dep defeats that: the library sees the import succeed, then fails
+  using the stub - which is a genuinely-working install (requests) breaking ONLY
+  because discovery stubbed a dependency it never needed. So never stub imports
+  that originate inside third-party code; let them fail as they normally would.
+  """
+  try:
+    frame: Any = sys._getframe(1)  # noqa: SLF001  # the finder's own frame
+  except (AttributeError, ValueError):
+    return False  # no stack introspection available: keep prior (stub) behaviour
+  while frame is not None:
+    filename = frame.f_code.co_filename
+    # Skip our own finder frames and the import machinery; the first frame below
+    # them is the code that actually executed the `import` statement.
+    if filename == __file__ or filename.startswith("<frozen") or "importlib" in filename:
+      frame = frame.f_back
+      continue
+    norm = filename.replace("\\", "/")
+    return "/site-packages/" in norm or "/dist-packages/" in norm
+  return False
+
+
 class _MissingModuleStubFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
   """
   Appended (never prepended) to sys.meta_path, so it is only consulted after
@@ -118,6 +147,12 @@ class _MissingModuleStubFinder(importlib.abc.MetaPathFinder, importlib.abc.Loade
   ) -> importlib.machinery.ModuleSpec | None:
     top_level = fullname.split(".", maxsplit=1)[0]
     if top_level in _STUB_BLOCKLIST_PREFIXES:
+      return None
+    # Only stub imports coming from the user's own project code. A third-party
+    # library importing a missing OPTIONAL dependency must be allowed to fail so
+    # its own try/except ImportError handling runs (otherwise installed packages
+    # like requests break because urllib3's optional zstandard got stubbed).
+    if _import_is_from_third_party():
       return None
     # is_package=True gives the stub a submodule_search_locations, so
     # "import matplotlib.pyplot" resolves (the submodule stubs too).

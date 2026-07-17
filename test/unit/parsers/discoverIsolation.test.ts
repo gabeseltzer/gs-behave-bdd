@@ -34,14 +34,17 @@ function findProjectRoot(): string {
   throw new Error('Could not find project root containing src/python/discover.py');
 }
 
-function runDiscover(projectPath: string, stepsDirs: string[]): DiscoverOutput {
+function runDiscover(projectPath: string, stepsDirs: string[], extraPythonPath?: string): DiscoverOutput {
   const root = findProjectRoot();
   const discoverPath = path.join(root, 'src', 'python', 'discover.py');
   const bundledLibs = path.join(root, 'bundled', 'libs');
 
+  const env = extraPythonPath
+    ? { ...process.env, PYTHONPATH: extraPythonPath }
+    : process.env;
   const output = execFileSync('python',
     [discoverPath, projectPath, JSON.stringify(stepsDirs), '--bundled-libs', bundledLibs],
-    { encoding: 'utf-8', timeout: 20000 });
+    { encoding: 'utf-8', timeout: 20000, env });
 
   return JSON.parse(output.trim());
 }
@@ -434,6 +437,58 @@ suite('discover.py - per-file isolation and import stubbing', function () {
 
     const result = runDiscover(tmpDir, [stepsDir]);
     assert.strictEqual(result.diagnostics, undefined, 'no diagnostics noise on the happy path');
+  });
+
+  test('a third-party library\'s missing OPTIONAL dependency is NOT stubbed (installed packages keep working)', () => {
+    // Regression for the reported bug: an installed package (like requests) broke
+    // because a dependency (urllib3) does `try: import zstandard / except
+    // ImportError` and then uses it - stubbing zstandard defeated that graceful
+    // fallback. Stubs must never be handed to imports from third-party code.
+    const sitePkgs = path.join(tmpDir, '.venv', 'lib', 'python3.10', 'site-packages');
+    fs.mkdirSync(path.join(sitePkgs, 'faketransport'), { recursive: true });
+    fs.writeFileSync(path.join(sitePkgs, 'faketransport', '__init__.py'), [
+      'import re',
+      'try:',
+      '    import optional_zstd_dep as _z',   // NOT installed
+      '    HAS = True',
+      'except ImportError:',
+      '    _z = None',
+      '    HAS = False',
+      'if HAS:',
+      '    VER = re.search(r"(\\d+)", _z.__version__)',   // would blow up on a stub
+      'def get():',
+      '    return "ok"',
+    ].join('\n'));
+
+    fs.writeFileSync(path.join(stepsDir, 'net_steps.py'), [
+      'from behave import given',
+      'import faketransport',
+      '@given("a network step")',
+      'def s(context):',
+      '    faketransport.get()',
+    ].join('\n'));
+    // a genuinely-missing module in USER code must still be stubbed
+    fs.writeFileSync(path.join(stepsDir, 'hw_steps.py'), [
+      'from behave import given',
+      'import my_missing_hardware_lib',
+      '@given("a hardware step")',
+      'def s(context):',
+      '    my_missing_hardware_lib.go()',
+    ].join('\n'));
+
+    const result = runDiscover(tmpDir, [stepsDir], sitePkgs);
+
+    assert.ok(result.steps.some(s => s.pattern === 'a network step'),
+      'a step whose import chain optionally imports a missing dep must load');
+    assert.ok((result.failed_files ?? []).length === 0,
+      `nothing should fail (got: ${JSON.stringify(result.failed_files)})`);
+    // the third-party optional dep must NOT appear as mocked...
+    assert.ok(!(result.mocked_modules ?? []).includes('optional_zstd_dep'),
+      'a third-party optional dependency must never be stubbed');
+    // ...but the user's own genuinely-missing module still is
+    assert.ok((result.mocked_modules ?? []).includes('my_missing_hardware_lib'),
+      'a module missing from USER code is still stubbed');
+    assert.ok(result.steps.some(s => s.pattern === 'a hardware step'));
   });
 
   test('fully healthy project: no failed_files, no mocked_modules keys', () => {
