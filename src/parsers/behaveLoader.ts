@@ -43,13 +43,69 @@ export interface DuplicateStepInfo {
 }
 
 /**
+ * How a step file failed to load. "syntax" and "import" are code-shaped
+ * (expected during editing, self-resolving); "error" is any other exception
+ * raised while executing the file's module-level code.
+ */
+export type FailedFileKind = "syntax" | "import" | "error";
+
+/**
+ * A step file (or environment.py) that could not be loaded. Steps from this
+ * file are absent from the fresh results; the extension keeps its cached
+ * definitions instead.
+ */
+export interface FailedFileInfo {
+  filePath: string;
+  /** 1-indexed line of the failure (0 if unknown) */
+  lineNumber: number;
+  /** 1-indexed column of the failure (0 if unknown) */
+  column: number;
+  errorMessage: string;
+  kind: FailedFileKind;
+  /** Full Python traceback (import failures only) - names the real culprit */
+  traceback?: string;
+}
+
+/**
+ * Environment discovery actually ran with. Attached only when something failed,
+ * so the user can compare against a working `behave` invocation.
+ */
+export interface DiscoveryDiagnostics {
+  pythonExecutable: string;
+  sysPath: string[];
+}
+
+/**
+ * Classifies a wholesale discovery error for notification routing:
+ * "code" errors are quiet (status item + diagnostics), "environmental"
+ * errors (python/behave missing, timeout) keep the warning popup.
+ */
+export type DiscoveryErrorKind = "code" | "environmental";
+
+/**
  * Combined result from the Python discovery subprocess
  */
 export interface BehaveDiscoveryResult {
   steps: BehaveStepDefinition[];
   fixtures: BehaveFixtureDefinition[];
   error?: string;
+  /** Classification of `error` for notification routing */
+  errorKind?: DiscoveryErrorKind;
   duplicates?: DuplicateStepInfo[];
+  /** Per-file load failures (per-file isolation - steps from other files still load) */
+  failedFiles?: FailedFileInfo[];
+  /**
+   * Files discover.py successfully executed (step dir files + environment.py).
+   * Only present alongside failedFiles. Library files imported BY step files are
+   * never executed directly, so they appear in neither list — which is how the
+   * cache merge knows their absence from fresh results is collateral damage from
+   * a failed importer rather than a real deletion.
+   */
+  loadedFiles?: string[];
+  /** Modules that were not installed and were satisfied with inert stubs */
+  mockedModules?: string[];
+  /** Interpreter + sys.path discovery ran with (present only when something failed) */
+  diagnostics?: DiscoveryDiagnostics;
   /** Raw stderr from the Python process (warnings, tracebacks, etc.) */
   stderr?: string;
 }
@@ -61,6 +117,12 @@ export interface BehaveDiscoveryResult {
  * @param projectPath Project root directory (used as cwd for subprocess)
  * @param stepsPaths Array of directories containing step files
  * @param bundledLibsPath Optional path to bundled behave libs directory
+ * @param timeoutMs Subprocess timeout in milliseconds
+ * @param env Environment for the subprocess. MUST match the environment used for
+ *   actual test runs (getBehaveEnv) so discovery resolves the same imports behave
+ *   does at run time - e.g. modules reachable only via the user's PYTHONPATH or
+ *   virtualenv. When omitted, the subprocess inherits the extension host's env,
+ *   which typically lacks those, causing spurious "could not import" failures.
  * @returns Combined steps and fixtures discovered by behave
  * @throws Error if behave is not installed or if import errors occur
  */
@@ -69,7 +131,8 @@ export async function loadFromBehave(
   projectPath: string,
   stepsPaths: string[],
   bundledLibsPath?: string,
-  timeoutMs = 10000
+  timeoutMs = 10000,
+  env?: NodeJS.ProcessEnv
 ): Promise<BehaveDiscoveryResult> {
   const startTime = performance.now();
 
@@ -78,7 +141,7 @@ export async function loadFromBehave(
     const args = [projectPath, JSON.stringify(stepsPaths)];
     if (bundledLibsPath)
       args.push('--bundled-libs', bundledLibsPath);
-    const { stdout: output, stderr: processStderr } = await spawnPython(pythonExec, scriptPath, args, projectPath, timeoutMs);
+    const { stdout: output, stderr: processStderr } = await spawnPython(pythonExec, scriptPath, args, projectPath, timeoutMs, env);
 
     // Parse JSON output
     interface RawStepInfo {
@@ -103,11 +166,25 @@ export async function loadFromBehave(
       line: number;
     }
 
+    interface RawFailedFileInfo {
+      file: string;
+      line: number;
+      col: number;
+      error: string;
+      kind: string;
+      traceback?: string;
+    }
+
     interface RawOutput {
       steps: RawStepInfo[];
       fixtures: RawFixtureInfo[];
       error?: string;
+      error_kind?: string;
       duplicates?: RawDuplicateInfo[];
+      failed_files?: RawFailedFileInfo[];
+      loaded_files?: string[];
+      mocked_modules?: string[];
+      diagnostics?: { python_executable: string; sys_path: string[] };
     }
 
     let parsed: RawOutput;
@@ -140,14 +217,42 @@ export async function loadFromBehave(
       lineNumber: d.line
     }));
 
+    const failedFiles: FailedFileInfo[] | undefined = parsed.failed_files?.map(f => ({
+      filePath: f.file,
+      lineNumber: f.line,
+      column: f.col,
+      errorMessage: f.error,
+      kind: (f.kind === "syntax" || f.kind === "import" ? f.kind : "error") as FailedFileKind,
+      traceback: f.traceback
+    }));
+
+    const diagnostics: DiscoveryDiagnostics | undefined = parsed.diagnostics
+      ? { pythonExecutable: parsed.diagnostics.python_executable, sysPath: parsed.diagnostics.sys_path }
+      : undefined;
+
+    const errorKind: DiscoveryErrorKind | undefined = parsed.error
+      ? (parsed.error_kind === "environmental" ? "environmental" : "code")
+      : undefined;
+
     const elapsed = Math.round(performance.now() - startTime);
     diagLog(`loadFromBehave: loaded ${steps.length} steps and ${fixtures.length} fixtures in ${elapsed}ms`);
     if (parsed.error)
       diagLog(`loadFromBehave: error from Python: ${parsed.error}`);
     if (duplicates?.length)
       diagLog(`loadFromBehave: ${duplicates.length} duplicate step definitions detected`);
+    if (failedFiles?.length)
+      diagLog(`loadFromBehave: ${failedFiles.length} step file(s) failed to load: ${failedFiles.map(f => f.filePath).join(", ")}`);
+    if (parsed.mocked_modules?.length)
+      diagLog(`loadFromBehave: stubbed missing modules: ${parsed.mocked_modules.join(", ")}`);
 
-    return { steps, fixtures, error: parsed.error, duplicates, stderr: processStderr || undefined };
+    return {
+      steps, fixtures,
+      error: parsed.error, errorKind, duplicates, failedFiles,
+      loadedFiles: parsed.loaded_files,
+      mockedModules: parsed.mocked_modules,
+      diagnostics,
+      stderr: processStderr || undefined
+    };
 
   } catch (e) {
     const elapsed = Math.round(performance.now() - startTime);
@@ -157,7 +262,7 @@ export async function loadFromBehave(
     // If behave is not installed and we weren't already using bundled, fall back to bundled
     if (!bundledLibsPath && isBehaveNotInstalledError(errMsg)) {
       diagLog(`loadFromBehave: behave not found in environment, falling back to bundled behave`);
-      return loadFromBehave(pythonExec, projectPath, stepsPaths, getBundledBehavePath(), timeoutMs);
+      return loadFromBehave(pythonExec, projectPath, stepsPaths, getBundledBehavePath(), timeoutMs, env);
     }
 
     // If bundled was already tried and still failed, give a clearer message than "pip install behave"
@@ -208,7 +313,8 @@ function spawnPython(
   scriptPath: string,
   args: string[],
   cwd: string,
-  timeoutMs = 10000
+  timeoutMs = 10000,
+  env?: NodeJS.ProcessEnv
 ): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     let stdout = '';
@@ -224,7 +330,10 @@ function spawnPython(
     };
 
     const allArgs = [scriptPath, ...args];
-    const cp = spawn(pythonExec, allArgs, { cwd });
+    // Pass env only when provided so callers that don't (tests) keep inheriting
+    // process.env; discovery callers pass getBehaveEnv so imports resolve exactly
+    // as they do for a real behave run (PYTHONPATH, virtualenv, env presets).
+    const cp = spawn(pythonExec, allArgs, env ? { cwd, env } : { cwd });
 
     const timeoutSecs = Math.round(timeoutMs / 1000);
     const timeoutId = setTimeout(() => {

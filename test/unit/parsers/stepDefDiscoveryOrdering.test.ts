@@ -47,6 +47,7 @@ suite('stepDefDiscoveryOrdering', () => {
     stepsSearchUri: stepsUri,
     stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
+    getEffectiveEnvVars: () => ({}),
   } as WorkspaceSettings;
 
   setup(() => {
@@ -238,6 +239,7 @@ suite('stepDefDiscoveryOrdering', () => {
       stepsSearchUri: stepsUri2,
       stepsSearchUris: [stepsUri2],
       projectUri: wkspUri2,
+      getEffectiveEnvVars: () => ({}),
     } as WorkspaceSettings;
 
     test('each workspace gets its own callback invocation with the correct featuresUri', async () => {
