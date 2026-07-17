@@ -27,6 +27,9 @@ import { ExecuteStepsDefinitionProvider } from './handlers/executeStepsDefinitio
 import { SelectionRangeProvider } from './handlers/selectionRangeProvider';
 import { HoverProvider } from './handlers/hoverProvider';
 import { ExecuteStepsHoverProvider } from './handlers/executeStepsHoverProvider';
+import {
+  updateExecuteStepsParamDecorations, refreshAllExecuteStepsParamDecorations, disposeExecuteStepsParamDecorations
+} from './handlers/executeStepsParamHighlighter';
 import { FixtureDefinitionProvider, FixtureHoverProvider, FixtureReferenceProvider } from './handlers/fixtureProviders';
 import { StepReferenceProvider } from './handlers/stepReferenceProvider';
 import { StepCodeLensProvider } from './handlers/codeLensProvider';
@@ -441,6 +444,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           validateExecuteSteps(document);
         }
       }
+      // step defs changed - parameter spans may have appeared/disappeared
+      refreshAllExecuteStepsParamDecorations();
       // Refresh CodeLens for open .py step files — feature edits change the
       // reference count even though the .py document itself didn't change.
       codeLensProvider.refresh();
@@ -513,7 +518,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.languages.registerHoverProvider({ language: "gherkin" }, new FixtureHoverProvider()),
       vscode.languages.registerReferenceProvider(["gherkin", "python"], new StepReferenceProvider()),
       vscode.languages.registerReferenceProvider(["gherkin", "python"], new FixtureReferenceProvider()),
-      vscode.languages.registerCodeLensProvider("python", codeLensProvider)
+      vscode.languages.registerCodeLensProvider("python", codeLensProvider),
+      // execute_steps {parameter} highlights use decorations (a python semantic tokens
+      // provider would displace Pylance's) - refresh when editors become visible
+      vscode.window.onDidChangeVisibleTextEditors(editors => {
+        for (const editor of editors) {
+          updateExecuteStepsParamDecorations(editor);
+        }
+      }),
+      { dispose: disposeExecuteStepsParamDecorations }
     );
 
 
@@ -883,6 +896,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           validateStepDefinitions(document);
           validateExecuteSteps(document);
         }
+        refreshAllExecuteStepsParamDecorations();
       }
       catch (e: unknown) {
         config.logger.showError(e, undefined);
@@ -1023,6 +1037,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           // Validate execute_steps strings when a .py file changes (scans the live
           // document text, so results are correct even before the 500ms debounce fires)
           validateExecuteSteps(event.document);
+          // keep execute_steps parameter highlights in sync with the live text
+          for (const editor of vscode.window.visibleTextEditors) {
+            if (urisMatch(editor.document.uri, event.document.uri))
+              updateExecuteStepsParamDecorations(editor);
+          }
 
           // If enviroment file changes, re-validate fixtures in all open feature files
           if (isEnvFile) {
