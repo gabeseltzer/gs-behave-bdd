@@ -80,8 +80,17 @@ Env var presets that include spooky secret env vars, with automatic redaction in
 ### 19. `And` keyword handling after `Background` blocks
 We don't handle `And` keywords correctly after Background statements. The first non-`Given`/`When`/`Then` keyword in a scenario should inherit from whichever Background step it follows, but currently the resolution breaks for scenarios that open with `And`.
 
-Repro feature illustrating the issue:
+Repro pattern illustrating the issue (a Background whose last step is a `When`,
+followed by scenarios that open with `And`):
 
 ```gherkin
-_(proprietary example removed)_
+Feature: Multi-scenario And handling
+    Background:
+        Given the system is initialized
+        And a first precondition holds
+        When the primary action is performed
+
+    Scenario: Opens with And -> should inherit the Background's When
+        And an additional precondition holds
+        Then the outcome is confirmed
 ```
