@@ -45,6 +45,7 @@ suite('fileParser - reparseFile', () => {
     stepsSearchUri: stepsUri,
     stepsSearchUris: [stepsUri],
     projectUri: wkspUri,
+    getEffectiveEnvVars: () => ({}),
   } as WorkspaceSettings;
 
   setup(() => {

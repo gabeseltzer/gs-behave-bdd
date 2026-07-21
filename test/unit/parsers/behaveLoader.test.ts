@@ -49,7 +49,7 @@ suite('behaveLoader', () => {
   let spawnStub: sinon.SinonStub;
   let diagLogStub: sinon.SinonStub;
   let mockProcess: MockChildProcess;
-  let loadFromBehave: (pythonExec: string, projectPath: string, stepsPaths: string[], bundledLibsPath?: string, timeoutMs?: number) => Promise<BehaveDiscoveryResult>;
+  let loadFromBehave: (pythonExec: string, projectPath: string, stepsPaths: string[], bundledLibsPath?: string, timeoutMs?: number, env?: NodeJS.ProcessEnv) => Promise<BehaveDiscoveryResult>;
 
   class MockChildProcess extends EventEmitter {
     pid = 12345;
@@ -110,6 +110,36 @@ suite('behaveLoader', () => {
     // Verify cwd is set to project path
     assert.ok(spawnArgs[2], 'spawn options should exist');
     assert.strictEqual(spawnArgs[2].cwd, projectPath, 'cwd should be project path');
+  });
+
+  test('passes the provided env to the subprocess (so discovery matches the behave run env)', async () => {
+    const behaveEnv = { ...process.env, PYTHONPATH: '/repo/shared', VIRTUAL_ENV: '/repo/.venv' };
+
+    setImmediate(() => {
+      mockProcess.stdout.emit('data', '{"steps":[],"fixtures":[]}');
+      mockProcess.emit('close', 0);
+    });
+
+    await loadFromBehave('python', '/path/to/project', ['/path/to/project/steps'], undefined, 10000, behaveEnv);
+
+    const opts = spawnStub.firstCall.args[2];
+    assert.strictEqual(opts.env, behaveEnv,
+      'the behave env must be forwarded to the discover.py subprocess');
+    assert.strictEqual(opts.env.PYTHONPATH, '/repo/shared',
+      'PYTHONPATH from the behave env must reach discovery');
+  });
+
+  test('omits env when none is provided (subprocess inherits process.env)', async () => {
+    setImmediate(() => {
+      mockProcess.stdout.emit('data', '{"steps":[],"fixtures":[]}');
+      mockProcess.emit('close', 0);
+    });
+
+    await loadFromBehave('python', '/path/to/project', ['/path/to/project/steps']);
+
+    const opts = spawnStub.firstCall.args[2];
+    assert.ok(!('env' in opts),
+      'without an explicit env, spawn options should not set env (inherit process.env)');
   });
 
   test('should parse JSON output from Python script', async () => {

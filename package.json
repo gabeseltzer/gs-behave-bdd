@@ -1,5 +1,17 @@
 {
 	"contributes": {
+		"colors": [
+			{
+				"id": "gsBehaveBdd.executeStepsParameter",
+				"description": "Color of step {parameter} values inside context.execute_steps(\"...\") string literals. Matches the default 'function' semantic token colors used for feature-file step parameters.",
+				"defaults": {
+					"dark": "#DCDCAA",
+					"light": "#795E26",
+					"highContrast": "#DCDCAA",
+					"highContrastLight": "#795E26"
+				}
+			}
+		],
 		"configuration": {
 			"title": "gs-behave-bdd",
 			"properties": {
@@ -294,7 +306,7 @@
 	"name": "gs-behave-bdd",
 	"displayName": "Behave BDD",
 	"description": "Full language support for Behave feature files. Run and debug tests. Navigate between steps and definitions. Forked from jimasp's behave-vsc",
-	"version": "1.5.2",
+	"version": "1.6.0",
 	"icon": "images/gs-behave-bdd.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",

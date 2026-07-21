@@ -133,6 +133,15 @@ async function runTestSuites() {
       launchArgs
     });
 
+    launchArgs = ["example-projects/execute-steps"];
+    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './execute-steps suite'));
+    await runTests({
+      vscodeExecutablePath,
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs
+    });
+
     launchArgs = ["example-projects/config-only"];
     extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './config-only suite'));
     await runTests({

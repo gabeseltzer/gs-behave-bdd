@@ -8,16 +8,19 @@ import {
   getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem, couldBePythonStepsFile,
   getFeaturesRootForFile, getDiscoveryEntry, urisMatch
 } from '../common';
-import { getStepFileSteps, deleteStepFileSteps } from './stepsParser';
-import { deleteFixtures, storePythonFixtureDefinitions } from './fixtureParser';
-import { loadFromBehave } from './behaveLoader';
+import { getStepFileSteps, deleteStepFileSteps, storeStepFileStep } from './stepsParser';
+import { deleteFixtures, storePythonFixtureDefinitions, getFixtures, restoreFixtures } from './fixtureParser';
+import { loadFromBehave, BehaveDiscoveryResult, FailedFileInfo } from './behaveLoader';
 import { storeBehaveStepDefinitions } from './stepsParserBehaveAdapter';
 import { TestData, TestFile } from './testFile';
 import { diagLog } from '../logger';
 import * as path from 'path';
-import { deleteStepMappings, rebuildStepMappings, getStepMappings } from './stepMappings';
+import { deleteStepMappings, rebuildStepMappings, getStepMappings, rebuildExecuteStepsMappings } from './stepMappings';
+import { parseExecuteStepsFileContent, deleteExecuteStepsCallSteps } from './executeStepsParser';
 import { getBundledBehavePath } from '../bundledBehave';
+import { getBehaveEnv } from '../runners/behaveEnv';
 import { setDuplicateStepDiagnostics, clearDuplicateStepDiagnostics } from '../handlers/duplicateStepDiagnostics';
+import { setStepLoadDiagnostics, setMissingModuleHints } from '../handlers/stepLoadDiagnostics';
 
 
 // for integration test assertions      
@@ -41,9 +44,14 @@ export class FileParser {
   private _errored = false;
   private _reparsingFile = false;
   private _pythonReparseTimers: Map<string, NodeJS.Timeout> = new Map();
+  // Python files edited during the current debounce window, per workspace. The debounce timer
+  // is per-workspace and its closure only captures the LATEST edit's fileUri/content, so the
+  // execute_steps rescan must accumulate and process EVERY file edited in the window - not just
+  // the last one - or earlier-edited files' call-site caches go stale (WR-06).
+  private _pendingExecScanFiles: Map<string, Map<string, { uri: vscode.Uri; content: string }>> = new Map();
   private static readonly PYTHON_REPARSE_DEBOUNCE_MS = 500;
   private _statusChangeHandlers: ((busy: boolean) => void)[] = [];
-  private _stepLoadErrorHandlers: ((error: string | undefined) => void)[] = [];
+  private _stepLoadErrorHandlers: ((error: string | undefined, failedFiles?: FailedFileInfo[]) => void)[] = [];
   // Workspaces whose WorkspaceSettings ctor threw (e.g. bad projectPath). Surfaced
   // to the language-status item so it shows Error severity instead of "Ready".
   private _wkspsWithFatalSettings = new Set<string>();
@@ -60,7 +68,7 @@ export class FileParser {
     this._statusChangeHandlers.push(handler);
   }
 
-  public onStepLoadError(handler: (error: string | undefined) => void) {
+  public onStepLoadError(handler: (error: string | undefined, failedFiles?: FailedFileInfo[]) => void) {
     this._stepLoadErrorHandlers.push(handler);
   }
 
@@ -90,8 +98,8 @@ export class FileParser {
     this._statusChangeHandlers.forEach(h => h(busy));
   }
 
-  private _notifyStepLoadError(error: string | undefined) {
-    this._stepLoadErrorHandlers.forEach(h => h(error));
+  private _notifyStepLoadError(error: string | undefined, failedFiles?: FailedFileInfo[]) {
+    this._stepLoadErrorHandlers.forEach(h => h(error, failedFiles));
   }
 
   async featureParseComplete(timeout: number, caller: string) {
@@ -217,6 +225,29 @@ export class FileParser {
     allPyFiles = allPyFiles.filter(f => { const id = uriId(f); if (seenPy.has(id)) return false; seenPy.add(id); return true; });
     diagLog(`${caller}: _parseStepsFiles findFiles took ${Math.round(performance.now() - findFilesStart)}ms, found ${allPyFiles.length} .py files`);
 
+    // Scan every watched .py file for embedded execute_steps() call sites (helper modules and
+    // environment.py included, not just step definition files - REFS-01/02/03). This is pure
+    // in-memory scanning independent of the behave subprocess below, so it must run even if
+    // the behave load fails.
+    deleteExecuteStepsCallSteps(wkspSettings.featuresUri);
+    const execScanStart = performance.now();
+    let execCallSitesFound = 0;
+    for (const pyFile of allPyFiles) {
+      if (cancelToken.isCancellationRequested)
+        break;
+      try {
+        const pyContent = await getContentFromFilesystem(pyFile);
+        execCallSitesFound += parseExecuteStepsFileContent(wkspSettings.featuresUri, pyContent, pyFile, caller);
+      }
+      catch {
+        // a transient read failure for one file (deleted/renamed between findFiles and the
+        // read, e.g. branch switch or build clean) must never abort the whole workspace parse -
+        // the scanner is designed to never throw, so honour that here too (WR-05)
+        diagLog(`${caller}: could not read ${pyFile.path} for execute_steps scan, skipping`);
+      }
+    }
+    diagLog(`${caller}: _parseStepsFiles execute_steps scan took ${Math.round(performance.now() - execScanStart)}ms, found ${execCallSitesFound} call sites across ${allPyFiles.length} .py files`);
+
     const stepFiles = allPyFiles.filter(uri => isStepsFile(uri));
 
     // Load all steps and fixtures using behave's built-in registry (handles imports automatically)
@@ -246,7 +277,10 @@ export class FileParser {
         wkspSettings.projectUri.fsPath,
         stepsPaths,
         wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined,
-        wkspSettings.stepDefinitionSearchTimeout * 1000
+        wkspSettings.stepDefinitionSearchTimeout * 1000,
+        // Same environment as an actual test run, so discovery resolves the same
+        // imports behave does (user PYTHONPATH, virtualenv, env presets).
+        getBehaveEnv(wkspSettings)
       );
       const loadBehaveElapsed = Math.round(performance.now() - loadBehaveStart);
       diagLog(`${caller}: _parseStepsFiles loadFromBehave took ${loadBehaveElapsed}ms, returned ${result.steps.length} steps and ${result.fixtures.length} fixtures`);
@@ -261,30 +295,44 @@ export class FileParser {
         return 0;
       }
 
-      // If discover.py reported an error (e.g. duplicate steps), keep old definitions
+      // Wholesale failure (behave's fallback loader path): keep ALL old definitions.
+      // This is a code-shaped error (a syntax/import problem in workspace files) —
+      // expected during editing and self-resolving, so no popup: the language-status
+      // item and Problems-pane diagnostics carry it instead (quiet-by-design).
       if (result.error) {
-        diagLog(`behave step loading error: ${result.error}`);
-        config.logger.logInfo(`Failed to load step definitions: ${result.error}`, wkspSettings.uri);
-        this._notifyStepLoadError(result.error);
-        this._showStepLoadWarning(result.error, wkspSettings.uri);
-        if (result.duplicates?.length) {
-          setDuplicateStepDiagnostics(result.duplicates);
-        }
+        this._handleWholesaleLoadError(result, wkspSettings);
         return stepFiles.length;
       }
 
-      // Behave loaded successfully — clear any previous error state and replace old definitions
-      this._notifyStepLoadError(undefined);
-      clearDuplicateStepDiagnostics();
-      diagLog("removing existing steps for workspace: " + wkspSettings.name);
-      deleteStepFileSteps(wkspSettings.featuresUri);
-      deleteFixtures(wkspSettings.featuresUri);
+      // Behave loaded (possibly with per-file failures) — merge fresh results with
+      // cached definitions for any files that failed to load
+      const storedCount = await this._applyBehaveResult(wkspSettings, result, stepFiles, caller);
 
-      // Convert and store all behave definitions
-      const storeBehaveStart = performance.now();
-      const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, result.steps);
-      storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
-      diagLog(`${caller}: _parseStepsFiles storeBehaveStepDefinitions took ${Math.round(performance.now() - storeBehaveStart)}ms`);
+      // Behave's registry can pull in step-library files that live OUTSIDE the watched roots
+      // (e.g. lib/ next to features/) - the allPyFiles scan above never saw them, so scan any
+      // step-def file we haven't scanned yet for execute_steps call sites too. In-editor edits
+      // to these files reparse via onDidChangeTextDocument, but on-disk-only changes are not
+      // watched (documented limitation).
+      const libScanStart = performance.now();
+      let libFilesScanned = 0;
+      for (const [, stepDef] of getStepFileSteps(wkspSettings.featuresUri)) {
+        const defUriId = uriId(stepDef.uri);
+        if (seenPy.has(defUriId))
+          continue;
+        seenPy.add(defUriId);
+        if (cancelToken.isCancellationRequested)
+          break;
+        try {
+          const libContent = await getContentFromFilesystem(stepDef.uri);
+          execCallSitesFound += parseExecuteStepsFileContent(wkspSettings.featuresUri, libContent, stepDef.uri, caller);
+          libFilesScanned++;
+        }
+        catch {
+          diagLog(`${caller}: could not read ${stepDef.uri.path} for execute_steps library scan, skipping`);
+        }
+      }
+      if (libFilesScanned > 0)
+        diagLog(`${caller}: _parseStepsFiles execute_steps library scan took ${Math.round(performance.now() - libScanStart)}ms across ${libFilesScanned} library files`);
 
       // Return count of step files (not step definitions)
       // stepFiles was already filtered to exclude non-step files
@@ -297,7 +345,9 @@ export class FileParser {
       return stepFileCount;
 
     } catch (e) {
-      // This catch handles truly unrecoverable errors (Python not found, timeout, etc.)
+      // This catch handles truly unrecoverable, ENVIRONMENTAL errors (Python not
+      // found, behave not installed, timeout). These won't self-resolve by editing
+      // code, so they keep the warning popup.
       const errMsg = e instanceof Error ? e.message : String(e);
       diagLog(`behave step loading error: ${errMsg}`);
       config.logger.logInfo(`Failed to load step definitions: ${errMsg}`, wkspSettings.uri);
@@ -306,6 +356,119 @@ export class FileParser {
       // Return the count of step files found (not 0) so callers know files exist even though loading failed
       return stepFiles.length;
     }
+  }
+
+
+  // Wholesale load failure (result.error set): keep old definitions, no popup unless
+  // discover.py explicitly classified the error as environmental.
+  private _handleWholesaleLoadError(result: BehaveDiscoveryResult, wkspSettings: WorkspaceSettings) {
+    diagLog(`behave step loading error: ${result.error}`);
+    config.logger.logInfo(`Failed to load step definitions: ${result.error}`, wkspSettings.uri);
+    this._logDiscoveryDiagnostics(result, wkspSettings);
+    this._notifyStepLoadError(result.error);
+    if (result.errorKind === "environmental")
+      this._showStepLoadWarning(result.error ?? "unknown error", wkspSettings.uri);
+    if (result.duplicates?.length) {
+      setDuplicateStepDiagnostics(result.duplicates);
+    }
+  }
+
+
+  // Logs the interpreter, search paths, and per-file tracebacks to the workspace
+  // output channel whenever discovery hits import problems. This is the ground
+  // truth for "imports that work for behave aren't followed": it shows the exact
+  // interpreter and sys.path used, to compare against a working `behave` run.
+  private _logDiscoveryDiagnostics(result: BehaveDiscoveryResult, wkspSettings: WorkspaceSettings) {
+    if (result.diagnostics) {
+      config.logger.logInfo(
+        `Step discovery ran with:\n` +
+        `  interpreter: ${result.diagnostics.pythonExecutable}\n` +
+        `  sys.path:\n${result.diagnostics.sysPath.map(p => `    ${p}`).join('\n')}\n` +
+        `If an import that works when you run behave is failing here, compare this ` +
+        `interpreter and these paths against your working behave environment ` +
+        `(a different virtualenv, or a path only your shell/PYTHONPATH provides, is the usual cause).`,
+        wkspSettings.uri);
+    }
+    for (const failed of result.failedFiles ?? []) {
+      if (failed.traceback)
+        config.logger.logInfo(`Traceback for ${failed.filePath}:\n${failed.traceback}`, wkspSettings.uri);
+    }
+  }
+
+
+  // Applies a successful (possibly partial) discovery result:
+  // - notifies status/diagnostics consumers (including per-file failures and stub hints)
+  // - replaces stored definitions, EXCEPT files that failed to load, which keep
+  //   their previously cached definitions (per-file isolation, G)
+  // Cached entries are stored before fresh ones so that on a pattern-key
+  // collision the fresh definition (from a file that currently loads) wins.
+  private _applyBehaveResult = async (wkspSettings: WorkspaceSettings, result: BehaveDiscoveryResult,
+    stepFilesForHints: vscode.Uri[], caller: string): Promise<number> => {
+
+    const failedFiles = result.failedFiles ?? [];
+
+    this._notifyStepLoadError(undefined, failedFiles.length ? failedFiles : undefined);
+
+    if (result.duplicates?.length)
+      setDuplicateStepDiagnostics(result.duplicates);
+    else
+      clearDuplicateStepDiagnostics();
+
+    setStepLoadDiagnostics(failedFiles);
+    await setMissingModuleHints(result.mockedModules ?? [], stepFilesForHints);
+    if (failedFiles.length > 0)
+      this._logDiscoveryDiagnostics(result, wkspSettings);
+
+    // Snapshot cached definitions BEFORE the delete-all. Retain a cached entry only
+    // when the file has NO fresh definitions AND is in a broken state, specifically:
+    // (a) its file failed to load and discovery recovered nothing fresh for it, or
+    // (b) failures exist AND its file was neither executed by discover.py nor present
+    //     in the fresh results — i.e. a step LIBRARY whose steps are missing only
+    //     because their importer failed (libraries are never executed directly, so
+    //     they appear in neither loaded_files nor failed_files).
+    // Fresh definitions ALWAYS win: a file whose literal steps discovery recovered
+    // from source (despite a failed import) is replaced with those, not the cache;
+    // and a healthy file that genuinely deleted its steps is replaced too.
+    const failedIds = new Set(failedFiles.map(f => uriId(vscode.Uri.file(f.filePath))));
+    const loadedIds = new Set((result.loadedFiles ?? []).map(f => uriId(vscode.Uri.file(f))));
+    const freshStepFileIds = new Set(result.steps.map(s => uriId(vscode.Uri.file(s.filePath))));
+    const freshFixtureFileIds = new Set(result.fixtures.map(f => uriId(vscode.Uri.file(f.filePath))));
+
+    const retain = (fileUri: vscode.Uri, freshIds: Set<string>): boolean => {
+      const id = uriId(fileUri);
+      if (freshIds.has(id)) return false; // fresh definitions supersede cache
+      return failedIds.has(id) || !loadedIds.has(id);
+    };
+
+    const cachedSteps = failedIds.size > 0
+      ? getStepFileSteps(wkspSettings.featuresUri, false).map(([, s]) => s).filter(s => retain(s.uri, freshStepFileIds))
+      : [];
+    const cachedFixtures = failedIds.size > 0
+      ? getFixtures(wkspSettings.featuresUri).filter(f => retain(f.uri, freshFixtureFileIds))
+      : [];
+
+    diagLog("removing existing steps for workspace: " + wkspSettings.name);
+    deleteStepFileSteps(wkspSettings.featuresUri);
+    deleteFixtures(wkspSettings.featuresUri);
+
+    // Cached first, fresh second: fresh wins any pattern-key collision
+    for (const cachedStep of cachedSteps)
+      storeStepFileStep(wkspSettings.featuresUri, cachedStep);
+    restoreFixtures(cachedFixtures);
+
+    const storeBehaveStart = performance.now();
+    const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, result.steps);
+    storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
+    diagLog(`${caller}: _applyBehaveResult storeBehaveStepDefinitions took ${Math.round(performance.now() - storeBehaveStart)}ms`);
+
+    if (failedFiles.length > 0) {
+      const failedNames = failedFiles.map(f => path.basename(f.filePath)).join(", ");
+      config.logger.logInfo(
+        `${failedFiles.length} file(s) could not be loaded for step discovery (kept ${cachedSteps.length} previously cached step definition(s) for: ${failedNames}) — see the Problems pane`,
+        wkspSettings.uri);
+    }
+
+    return storedCount;
   }
 
 
@@ -608,6 +771,7 @@ export class FileParser {
       for (const root of wkspSettings.featuresUris) {
         mappingsCount += rebuildStepMappings(root, wkspSettings.featuresUri);
       }
+      rebuildExecuteStepsMappings(wkspSettings.featuresUri);
       buildMappingsTime = performance.now() - updateMappingsStart;
       diagLog(`${callName}: stepmappings built`);
 
@@ -729,6 +893,15 @@ export class FileParser {
       clearTimeout(existingTimer);
     }
 
+    // Record this file for the execute_steps rescan - keyed per file so rapid edits to
+    // DIFFERENT files in the same workspace all get rescanned when the timer fires (WR-06)
+    let pendingFiles = this._pendingExecScanFiles.get(wkspKey);
+    if (!pendingFiles) {
+      pendingFiles = new Map();
+      this._pendingExecScanFiles.set(wkspKey, pendingFiles);
+    }
+    pendingFiles.set(uriId(fileUri), { uri: fileUri, content });
+
     const timer = setTimeout(async () => {
       this._pythonReparseTimers.delete(wkspKey);
       try {
@@ -760,7 +933,10 @@ export class FileParser {
             wkspSettings.projectUri.fsPath,
             [stepsPath],
             wkspSettings.importStrategy === 'useBundled' ? getBundledBehavePath() : undefined,
-            wkspSettings.stepDefinitionSearchTimeout * 1000
+            wkspSettings.stepDefinitionSearchTimeout * 1000,
+            // Same environment as an actual test run, so discovery resolves the same
+            // imports behave does (user PYTHONPATH, virtualenv, env presets).
+            getBehaveEnv(wkspSettings)
           );
 
           if (result.stderr) {
@@ -768,29 +944,15 @@ export class FileParser {
           }
 
           if (result.error) {
-            // discover.py reported an error (e.g. duplicate steps) — keep old definitions
+            // Wholesale, code-shaped failure — keep old definitions, no popup.
+            // Mid-edit breakage is expected and self-resolving; the language-status
+            // item and Problems-pane diagnostics carry the signal instead.
             diagLog(`[reparseFile] Behave step loading error: ${result.error}`);
-            config.logger.logInfo(`Failed to load step definitions: ${result.error}`, wkspSettings.uri);
-            // Only surface the error when the triggering file is saved — if the document has
-            // unsaved changes (e.g. the user just undid a duplicate), the disk state is stale
-            // and showing the error would be misleading.
-            const openDoc = (vscode.workspace.textDocuments ?? []).find(d => d.uri.toString() === fileUri.toString());
-            if (!openDoc?.isDirty) {
-              this._notifyStepLoadError(result.error);
-              this._showStepLoadWarning(result.error, wkspSettings.uri);
-            }
-            if (result.duplicates?.length) {
-              setDuplicateStepDiagnostics(result.duplicates);
-            }
+            this._handleWholesaleLoadError(result, wkspSettings);
           } else {
-            // Behave loaded successfully — clear any previous error state and replace old definitions
-            this._notifyStepLoadError(undefined);
-            clearDuplicateStepDiagnostics();
-            deleteStepFileSteps(wkspSettings.featuresUri);
-            deleteFixtures(wkspSettings.featuresUri);
-
-            const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, result.steps);
-            storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
+            // Behave loaded (possibly with per-file failures) — merge fresh results
+            // with cached definitions for any files that failed to load
+            const storedCount = await this._applyBehaveResult(wkspSettings, result, stepFiles, "[reparseFile]");
             const elapsed = Math.round(performance.now() - startTime);
             diagLog(`[reparseFile] Reloaded ${storedCount} steps and ${result.fixtures.length} fixtures from behave in ${elapsed}ms`);
             config.logger.logInfo(`Step definition search complete in ${elapsed}ms`, wkspSettings.uri);
@@ -798,7 +960,9 @@ export class FileParser {
 
           tokenSource.dispose();
         } catch (e) {
-          // Truly unrecoverable errors (Python not found, timeout, etc.)
+          // Truly unrecoverable, ENVIRONMENTAL errors (Python not found, behave not
+          // installed, timeout) — these keep the warning popup because they won't
+          // self-resolve by editing code.
           const errMsg = e instanceof Error ? e.message : String(e);
           diagLog(`[reparseFile] Behave step loading error: ${errMsg}`);
           config.logger.logInfo(`Failed to load step definitions: ${errMsg}`, wkspSettings.uri);
@@ -806,9 +970,21 @@ export class FileParser {
           this._showStepLoadWarning(errMsg, wkspSettings.uri);
         }
 
+        // Rescan EVERY .py file edited during this debounce window for execute_steps() call
+        // sites (any watched .py file, not just step definition files - helper modules/
+        // environment.py count too) before rebuilding exec mappings (WR-06).
+        // parseExecuteStepsFileContent clears each fileUri's prior entries itself, so this
+        // refreshes only the edited files' cache entries.
+        const pendingFilesForWksp = this._pendingExecScanFiles.get(wkspKey);
+        this._pendingExecScanFiles.delete(wkspKey);
+        for (const pendingFile of pendingFilesForWksp?.values() ?? []) {
+          parseExecuteStepsFileContent(wkspSettings.featuresUri, pendingFile.content, pendingFile.uri, "[reparseFile]");
+        }
+
         for (const root of wkspSettings.featuresUris) {
           rebuildStepMappings(root, wkspSettings.featuresUri);
         }
+        rebuildExecuteStepsMappings(wkspSettings.featuresUri);
         this.onStepMappingsRebuilt?.(wkspSettings.featuresUri);
       }
       catch (e: unknown) {
@@ -840,6 +1016,7 @@ export class FileParser {
       clearTimeout(timer);
     }
     this._pythonReparseTimers.clear();
+    this._pendingExecScanFiles.clear();
     this._reparsingFile = false;
   }
 
