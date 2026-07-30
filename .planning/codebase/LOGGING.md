@@ -159,6 +159,43 @@ if (!verboseLoggingEnabled())
   return "";
 ```
 
+**Know which paths are hot.** `validateAndGetStepInfo` backs the hover provider as well as
+go-to-definition, so it runs on every mouse-rest anywhere in a `.feature` file — including
+comments and blank lines, where it takes the "not a step line" branch. Eagerly building a
+template literal there costs on every hover even with verbose *off*.
+
+Two techniques, both used there:
+
+- **Build lazily.** Pass a thunk so the string is only constructed when it will be logged.
+- **Collapse repeats.** On a path that can fire many times for the same user intent, suppress an
+  identical consecutive message (keyed by uri+line). A hover storm over one step becomes one log
+  entry and one disk write. This is not just perf — a log drowned in repeats is a *worse*
+  diagnostic than a short one, which defeats the purpose of Rule 2.
+
+```typescript
+const logNav = (build: () => string) => {
+  if (!verboseLoggingEnabled()) return;      // nothing is built when off
+  const key = `${docUri.toString()}:${position.line}`;
+  const text = build();
+  if (key === _lastNavLogKey && text === _lastNavLogText) return;   // collapse repeats
+  ...
+};
+```
+
+## Rule 9a — Bound the disk, never the current log
+
+Rule 8 says the running session's log is unbounded. That makes *housekeeping* the only thing
+standing between the user and an unbounded temp folder, so it needs two limits, not one:
+
+- **Age** — sessions older than `SESSION_LOG_RETENTION_DAYS` (7) are deleted.
+- **Total size** — if surviving *old* logs still exceed `SESSION_LOG_TOTAL_BYTES_LIMIT` (512MB),
+  delete oldest-first until under it. Age alone does not bound disk: several windows running
+  large suites can blow the budget well inside the retention window.
+
+The running session's log is excluded from both sweeps (`keepPath`), and housekeeping runs
+**deferred off the activation path** (`setTimeout(…, 0)`) — the first `capture()` happens while
+`activate()` is running, and a readdir plus a stat per file must not sit in front of startup.
+
 ## Rule 10 — Don't re-derive classification from a log message
 
 Log messages are for humans and accrete context — paths, commands, embedded stderr. Control flow
@@ -203,5 +240,7 @@ For `discover.py` and anything like it:
 - [ ] Does it diagnose where it can, with a `>>>` prefix?
 - [ ] Is a new toast really justified? Is it deduped/suppressible? Does detail go to the channel?
 - [ ] Could it log secrets? If so, is it behind its own opt-in?
-- [ ] Is expensive message construction guarded by `verboseLoggingEnabled()`?
+- [ ] Is expensive message construction guarded by `verboseLoggingEnabled()` (or built lazily)?
+- [ ] Is this a hot path (hover, completion, semantic highlight, per-keystroke)? If so, are
+      repeats collapsed?
 - [ ] Does control flow avoid re-parsing any log message?

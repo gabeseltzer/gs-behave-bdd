@@ -15,10 +15,13 @@ export class Logger {
   // everything we write, which "Behave BDD: Save Diagnostic Report" appends to the report file.
   //
   // The session log is UNBOUNDED, so it is streamed to disk rather than held in memory: a long
-  // behave run can emit megabytes through logInfoNoLF, and an in-memory array would cost that
-  // several times over once joined and embedded in the report string. A WriteStream keeps
-  // memory flat (it buffers only what the disk hasn't taken yet) and the report is assembled
-  // by copying file-to-file, so peak memory does not scale with log size either.
+  // session (many reparses, or verbose logging left on) can run to megabytes, and an in-memory
+  // array would cost that several times over once joined and embedded in the report string.
+  // A WriteStream keeps memory flat (it buffers only what the disk hasn't taken yet) and the
+  // report is assembled by copying file-to-file, so peak memory does not scale with log size.
+  //
+  // Note behave's own test output does NOT come through here - it goes straight to the TestRun
+  // via run.appendOutput (see behaveRun.ts), so a test run does not inflate this log.
   private logStream: fs.WriteStream | undefined;
   private sessionLogPath: string | undefined;
   // set if opening/writing the log ever fails (read-only or full temp dir). Latched so a broken
@@ -54,7 +57,10 @@ export class Logger {
       // folder's contents on activation without awaiting, which could delete a log we are writing
       const dir = path.join(os.tmpdir(), "gs-behave-bdd-logs");
       fs.mkdirSync(dir, { recursive: true });
-      pruneOldSessionLogs(dir);
+      // Housekeeping is deferred off the activation path: the first capture() happens while
+      // activate() is running, and pruning does a readdir plus a stat per file. Nothing depends
+      // on it having finished, so it must not sit in front of the extension starting up.
+      setTimeout(() => pruneOldSessionLogs(dir, Date.now(), this.sessionLogPath), 0);
 
       // pid alone isn't enough to make this unique: the name is second-resolution, so two Logger
       // instances constructed in the same second would open the same file in append mode. There
@@ -332,23 +338,57 @@ export enum DiagLogType {
 
 // Session logs are unbounded and one is created per window, so without a sweep they would
 // accumulate in the temp folder indefinitely. This prunes PREVIOUS sessions only - it never
-// touches or truncates the log of the running session.
+// touches or truncates the log of the running session (that is the point of unbounded).
+//
+// Two limits, because age alone doesn't bound disk: someone running large suites in several
+// windows can produce a lot of bytes well inside the retention window.
 export const SESSION_LOG_RETENTION_DAYS = 7;
+export const SESSION_LOG_TOTAL_BYTES_LIMIT = 512 * 1024 * 1024; // 512MB across OLD logs
 
-export function pruneOldSessionLogs(dir: string, now = Date.now()) {
+export function pruneOldSessionLogs(dir: string, now = Date.now(), keepPath?: string) {
   const cutoff = now - SESSION_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const remove = (full: string) => {
+    try {
+      fs.unlinkSync(full);
+      return true;
+    }
+    catch {
+      // in use by another vscode window, or already gone - skip it
+      return false;
+    }
+  };
+
   try {
+    const survivors: { full: string; mtimeMs: number; size: number }[] = [];
+
     for (const name of fs.readdirSync(dir)) {
       if (!name.startsWith("session-") || !name.endsWith(".log"))
         continue;
       const full = path.join(dir, name);
+      if (keepPath && full === keepPath)
+        continue;
       try {
-        if (fs.statSync(full).mtimeMs < cutoff)
-          fs.unlinkSync(full);
+        const stat = fs.statSync(full);
+        if (stat.mtimeMs < cutoff)
+          remove(full);
+        else
+          survivors.push({ full, mtimeMs: stat.mtimeMs, size: stat.size });
       }
       catch {
-        // in use by another vscode window, or already gone - skip it
+        // vanished between readdir and stat - nothing to do
       }
+    }
+
+    // still over the size budget: drop oldest-first until under it
+    let total = survivors.reduce((sum, f) => sum + f.size, 0);
+    if (total <= SESSION_LOG_TOTAL_BYTES_LIMIT)
+      return;
+    survivors.sort((a, b) => a.mtimeMs - b.mtimeMs);
+    for (const file of survivors) {
+      if (total <= SESSION_LOG_TOTAL_BYTES_LIMIT)
+        break;
+      if (remove(file.full))
+        total -= file.size;
     }
   }
   catch {

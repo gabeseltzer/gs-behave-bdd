@@ -18,7 +18,9 @@ import * as commonModule from '../../../src/common';
 import * as stepsParserModule from '../../../src/parsers/stepsParser';
 import * as stepMappingsModule from '../../../src/parsers/stepMappings';
 import * as featureParserModule from '../../../src/parsers/featureParser';
-import { logStepResolutionContext } from '../../../src/handlers/providerHelpers';
+import {
+  logStepResolutionContext, validateAndGetStepInfo, _resetNavLogDedup,
+} from '../../../src/handlers/providerHelpers';
 import {
   buildDiagnosticReport, diagnosticReportFileName, diagnosticReportHandler,
 } from '../../../src/handlers/diagnosticReportHandler';
@@ -197,6 +199,61 @@ suite('verbose diagnostic logging', () => {
   });
 
 
+  suite('hover-path cost (validateAndGetStepInfo)', () => {
+
+    // validateAndGetStepInfo backs BOTH the definition provider and the hover provider, so it
+    // runs on every mouse-rest anywhere in a feature file. These pin the two things that keep
+    // that affordable.
+
+    const featureUri = vscode.Uri.file('/fake/workspace/features/thing.feature');
+
+    function makeDoc(lineText: string) {
+      return {
+        uri: featureUri,
+        lineAt: () => ({ text: lineText }),
+      };
+    }
+
+    setup(() => {
+      _resetNavLogDedup();
+      sinon.stub(commonModule, 'getWorkspaceUriForFile').returns(vscode.Uri.file('/fake/workspace'));
+    });
+
+    test('builds no message at all when verboseLogging is off', async () => {
+      sinon.stub(loggerModule, 'verboseLoggingEnabled').returns(false);
+      const logVerbose = sinon.stub(configModule.config.logger, 'logVerbose');
+
+      // a comment line - the "not a step line" branch, i.e. most hovers in a real file
+      await validateAndGetStepInfo(makeDoc('# just a comment') as never, { line: 3 } as never);
+
+      assert.strictEqual(logVerbose.callCount, 0);
+    });
+
+    test('collapses a hover storm over one line into a single entry', async () => {
+      sinon.stub(loggerModule, 'verboseLoggingEnabled').returns(true);
+      const logVerbose = sinon.stub(configModule.config.logger, 'logVerbose');
+
+      const doc = makeDoc('# just a comment');
+      for (let i = 0; i < 25; i++)
+        await validateAndGetStepInfo(doc as never, { line: 3 } as never);
+
+      assert.strictEqual(logVerbose.callCount, 1, 'repeat hovers over the same line must not re-log');
+    });
+
+    test('still logs when the user moves to a different line', async () => {
+      sinon.stub(loggerModule, 'verboseLoggingEnabled').returns(true);
+      const logVerbose = sinon.stub(configModule.config.logger, 'logVerbose');
+
+      const doc = makeDoc('# just a comment');
+      await validateAndGetStepInfo(doc as never, { line: 3 } as never);
+      await validateAndGetStepInfo(doc as never, { line: 4 } as never);
+
+      assert.strictEqual(logVerbose.callCount, 2);
+    });
+
+  });
+
+
   suite('pruneOldSessionLogs', () => {
 
     let dir: string;
@@ -236,6 +293,36 @@ suite('verbose diagnostic logging', () => {
 
     test('does not throw on a missing directory', () => {
       assert.doesNotThrow(() => pruneOldSessionLogs(path.join(dir, 'nope')));
+    });
+
+    test('drops oldest-first when recent logs still exceed the total size budget', () => {
+      // age alone does not bound disk - several windows running large suites can blow the
+      // budget well inside the retention window
+      const big = 'x'.repeat(1024);
+      for (let i = 0; i < 4; i++) {
+        const full = path.join(dir, `session-${i}.log`);
+        fs.writeFileSync(full, big);
+        const when = new Date(Date.now() - (10 - i) * 60 * 1000); // 0 = oldest
+        fs.utimesSync(full, when, when);
+      }
+
+      // budget of ~2 files
+      sinon.stub(loggerModule, 'SESSION_LOG_TOTAL_BYTES_LIMIT').value(2 * 1024);
+      pruneOldSessionLogs(dir);
+
+      const left = fs.readdirSync(dir).sort();
+      assert.deepStrictEqual(left, ['session-2.log', 'session-3.log'], 'newest two should survive');
+    });
+
+    test('never deletes the running session, even when over budget', () => {
+      const keep = path.join(dir, 'session-current.log');
+      fs.writeFileSync(keep, 'x'.repeat(4096));
+      fs.writeFileSync(path.join(dir, 'session-old.log'), 'x'.repeat(4096));
+
+      sinon.stub(loggerModule, 'SESSION_LOG_TOTAL_BYTES_LIMIT').value(1);
+      pruneOldSessionLogs(dir, Date.now(), keep);
+
+      assert.deepStrictEqual(fs.readdirSync(dir), ['session-current.log']);
     });
 
   });
