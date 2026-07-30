@@ -5,8 +5,13 @@
 // - logStepResolutionContext explains WHY a step failed to resolve
 
 import * as assert from 'assert';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as sinon from 'sinon';
-import { Logger, verboseLoggingEnabled } from '../../../src/logger';
+import {
+  Logger, pruneOldSessionLogs, SESSION_LOG_RETENTION_DAYS, verboseLoggingEnabled,
+} from '../../../src/logger';
 import * as configModule from '../../../src/configuration';
 import * as loggerModule from '../../../src/logger';
 import * as commonModule from '../../../src/common';
@@ -34,7 +39,23 @@ function stubVerboseLogging(enabled: boolean) {
 
 suite('verbose diagnostic logging', () => {
 
+  // Every Logger opens a real session log file on disk (that is the point - see logger.ts), so
+  // any test that constructs one must go through newLogger() to get it cleaned up afterwards.
+  const loggers: Logger[] = [];
+
+  function newLogger(): Logger {
+    const logger = new Logger();
+    loggers.push(logger);
+    return logger;
+  }
+
   teardown(() => {
+    for (const logger of loggers) {
+      const p = logger.getSessionLogPath();
+      logger.dispose();
+      try { if (p) fs.unlinkSync(p); } catch { /* already gone, or never created */ }
+    }
+    loggers.length = 0;
     sinon.restore();
   });
 
@@ -82,27 +103,36 @@ suite('verbose diagnostic logging', () => {
 
     test('writes nothing when verboseLogging is off', () => {
       stubVerboseLogging(false);
-      new Logger().logVerbose("should not appear", wkspUri);
+      newLogger().logVerbose("should not appear", wkspUri);
       assert.deepStrictEqual(appended, []);
     });
 
     test('writes to the workspace output channel with a [verbose] prefix when on', () => {
       stubVerboseLogging(true);
-      new Logger().logVerbose("step navigation: gave up", wkspUri);
+      newLogger().logVerbose("step navigation: gave up", wkspUri);
       assert.deepStrictEqual(appended, ["[verbose] step navigation: gave up"]);
     });
 
     test('does not throw when no wkspUri is supplied and no channels exist', () => {
       stubVerboseLogging(true);
-      assert.doesNotThrow(() => new Logger().logVerbose("no channels yet"));
+      assert.doesNotThrow(() => newLogger().logVerbose("no channels yet"));
     });
 
   });
 
 
-  suite('Logger transcript capture', () => {
+  suite('Logger session log capture', () => {
 
+    // real fs is used here on purpose - the point of the session log is that it survives
+    // arbitrary volume by living on disk, which an fs mock would not exercise
     const wkspUri = vscode.Uri.file('/fake/workspace');
+
+    async function readSessionLog(logger: Logger): Promise<string> {
+      await logger.flushSessionLog();
+      const p = logger.getSessionLogPath();
+      assert.ok(p, 'expected a session log path');
+      return fs.readFileSync(p!, 'utf8');
+    }
 
     setup(() => {
       sinon.stub(vscode.window, 'createOutputChannel').returns({
@@ -117,44 +147,95 @@ suite('verbose diagnostic logging', () => {
       });
     });
 
-    test('captures logInfo output, prefixed with the workspace name', () => {
+    test('captures logInfo output to the session log, prefixed with the workspace name', async () => {
       stubVerboseLogging(false);
-      const logger = new Logger();
+      const logger = newLogger();
       logger.logInfo("Searching for step definitions...", wkspUri);
 
-      const { text, truncated } = logger.getTranscript();
-      assert.strictEqual(text, "[workspace] Searching for step definitions...");
-      assert.strictEqual(truncated, false);
+      assert.strictEqual(await readSessionLog(logger), "[workspace] Searching for step definitions...\n");
     });
 
-    test('captures verbose lines so they reach the diagnostic report file', () => {
+    test('captures verbose lines so they reach the diagnostic report file', async () => {
       stubVerboseLogging(true);
-      const logger = new Logger();
+      const logger = newLogger();
       logger.logVerbose("step navigation: gave up", wkspUri);
 
-      assert.ok(logger.getTranscript().text.includes('[verbose] step navigation: gave up'));
+      assert.ok((await readSessionLog(logger)).includes('[verbose] step navigation: gave up'));
     });
 
     test('does not capture verbose lines when verboseLogging is off', () => {
       stubVerboseLogging(false);
-      const logger = new Logger();
+      const logger = newLogger();
       logger.logVerbose("should not be captured", wkspUri);
 
-      assert.strictEqual(logger.getTranscript().text, "");
+      // nothing was logged at all, so no log file should have been opened
+      assert.strictEqual(logger.getSessionLogPath(), undefined);
     });
 
-    test('drops the oldest lines and reports truncation past the cap', () => {
+    test('keeps every line - the log is unbounded, nothing is dropped or truncated', async () => {
       stubVerboseLogging(false);
-      const logger = new Logger();
-      for (let i = 0; i < 5100; i++)
+      const logger = newLogger();
+      const lineCount = 20000;
+      for (let i = 0; i < lineCount; i++)
         logger.logInfo(`line ${i}`, wkspUri);
 
-      const { text, truncated } = logger.getTranscript();
-      const captured = text.split("\n");
-      assert.strictEqual(captured.length, 5000);
-      assert.strictEqual(truncated, true);
-      assert.ok(!text.includes('line 0\n'), 'earliest lines should have been dropped');
-      assert.ok(captured[captured.length - 1].endsWith('line 5099'));
+      const captured = (await readSessionLog(logger)).split("\n").filter(l => l.length > 0);
+      assert.strictEqual(captured.length, lineCount);
+      assert.ok(captured[0].endsWith('line 0'), 'the FIRST line must survive');
+      assert.ok(captured[lineCount - 1].endsWith(`line ${lineCount - 1}`), 'the last line must survive');
+    });
+
+    test('a log file that cannot be opened degrades to no capture instead of throwing', () => {
+      stubVerboseLogging(false);
+      sinon.stub(fs, 'mkdirSync').throws(new Error('EROFS: read-only file system'));
+      const logger = newLogger();
+
+      assert.doesNotThrow(() => logger.logInfo("still logs to the output channel", wkspUri));
+      assert.strictEqual(logger.getSessionLogPath(), undefined);
+    });
+
+  });
+
+
+  suite('pruneOldSessionLogs', () => {
+
+    let dir: string;
+
+    setup(() => {
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-behave-bdd-prune-test-'));
+    });
+
+    teardown(() => {
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    function writeLog(name: string, ageDays: number) {
+      const full = path.join(dir, name);
+      fs.writeFileSync(full, 'x');
+      const when = new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000);
+      fs.utimesSync(full, when, when);
+    }
+
+    test('deletes session logs older than the retention window', () => {
+      writeLog('session-old.log', SESSION_LOG_RETENTION_DAYS + 1);
+      writeLog('session-recent.log', 1);
+
+      pruneOldSessionLogs(dir);
+
+      assert.deepStrictEqual(fs.readdirSync(dir), ['session-recent.log']);
+    });
+
+    test('never touches files it did not create', () => {
+      writeLog('something-else.txt', 999);
+      writeLog('session-old.log', 999);
+
+      pruneOldSessionLogs(dir);
+
+      assert.deepStrictEqual(fs.readdirSync(dir), ['something-else.txt']);
+    });
+
+    test('does not throw on a missing directory', () => {
+      assert.doesNotThrow(() => pruneOldSessionLogs(path.join(dir, 'nope')));
     });
 
   });
@@ -285,26 +366,21 @@ suite('verbose diagnostic logging', () => {
       assert.ok(report.includes('settings FAILED to load for this workspace'), report);
     });
 
-    test('embeds the captured log, so the file alone is enough for a bug report', async () => {
+    test('ends with the captured-log header, which the handler appends the log after', async () => {
       sinon.stub(commonModule, 'getUrisOfWkspFoldersWithFeatures').returns([]);
-      sinon.stub(configModule.config.logger, 'getTranscript').returns({
-        text: '[verbose] step navigation: no step definition mapped to "Given a thing"',
-        truncated: false,
-      });
 
       const report = await buildDiagnosticReport();
 
-      assert.ok(report.includes('===== captured log ====='), report);
-      assert.ok(report.includes('step navigation: no step definition mapped'), report);
+      assert.ok(report.trimEnd().endsWith('===== captured log (full session, unbounded) ====='), report);
     });
 
-    test('says so when the captured log was truncated', async () => {
+    test('names the session log file so a reader can find the live log', async () => {
       sinon.stub(commonModule, 'getUrisOfWkspFoldersWithFeatures').returns([]);
-      sinon.stub(configModule.config.logger, 'getTranscript').returns({ text: 'some lines', truncated: true });
+      sinon.stub(configModule.config.logger, 'getSessionLogPath').returns('/tmp/gs-behave-bdd-logs/session-x.log');
 
       const report = await buildDiagnosticReport();
 
-      assert.ok(report.includes('earlier output was dropped'), report);
+      assert.ok(report.includes('session log:      /tmp/gs-behave-bdd-logs/session-x.log'), report);
     });
 
   });
@@ -318,19 +394,51 @@ suite('verbose diagnostic logging', () => {
       assert.ok(!/[:*?"<>|]/.test(name), 'must be a legal Windows filename');
     });
 
-    test('writes the report to a .log file and opens it', async () => {
+    test('writes summary + full session log to a .log file and opens it', async () => {
       stubVerboseLogging(false);
       sinon.stub(commonModule, 'getUrisOfWkspFoldersWithFeatures').returns([]);
-      const writeFileStub = sinon.stub(vscode.workspace.fs, 'writeFile').resolves();
       const showDocStub = sinon.stub(vscode.window, 'showTextDocument').resolves({});
+      const openDocStub = sinon.stub(vscode.workspace, 'openTextDocument').resolves({});
+
+      // a real session log on disk, so the file-to-file append path is exercised
+      const sessionLog = path.join(os.tmpdir(), `gs-behave-bdd-session-test-${process.pid}.log`);
+      fs.writeFileSync(sessionLog, '[verbose] step navigation: gave up\n');
+      sinon.stub(configModule.config.logger, 'getSessionLogPath').returns(sessionLog);
+      sinon.stub(configModule.config.logger, 'flushSessionLog').resolves();
+
+      try {
+        await diagnosticReportHandler();
+
+        assert.strictEqual(openDocStub.callCount, 1);
+        const reportPath = openDocStub.firstCall.args[0].fsPath;
+        assert.ok(reportPath.endsWith('.log'), reportPath);
+
+        const written = fs.readFileSync(reportPath, 'utf8');
+        assert.ok(written.includes('===== Behave BDD diagnostic report ====='));
+        assert.ok(written.includes('[verbose] step navigation: gave up'), 'session log must be appended');
+        assert.ok(written.trimEnd().endsWith('===== end of diagnostic report ====='), written.slice(-200));
+        assert.strictEqual(showDocStub.callCount, 1, 'the report file should be opened for review');
+
+        fs.unlinkSync(reportPath);
+      }
+      finally {
+        fs.unlinkSync(sessionLog);
+      }
+    });
+
+    test('notes the absence of a session log rather than failing', async () => {
+      stubVerboseLogging(false);
+      sinon.stub(commonModule, 'getUrisOfWkspFoldersWithFeatures').returns([]);
+      sinon.stub(vscode.window, 'showTextDocument').resolves({});
+      const openDocStub = sinon.stub(vscode.workspace, 'openTextDocument').resolves({});
+      sinon.stub(configModule.config.logger, 'getSessionLogPath').returns(undefined);
+      sinon.stub(configModule.config.logger, 'flushSessionLog').resolves();
 
       await diagnosticReportHandler();
 
-      assert.strictEqual(writeFileStub.callCount, 1);
-      const [uri, content] = writeFileStub.firstCall.args;
-      assert.ok(uri.fsPath.endsWith('.log'), uri.fsPath);
-      assert.ok(content.toString().includes('===== Behave BDD diagnostic report ====='));
-      assert.strictEqual(showDocStub.callCount, 1, 'the report file should be opened for review');
+      const reportPath = openDocStub.firstCall.args[0].fsPath;
+      assert.ok(fs.readFileSync(reportPath, 'utf8').includes('(no session log was captured)'));
+      fs.unlinkSync(reportPath);
     });
 
   });

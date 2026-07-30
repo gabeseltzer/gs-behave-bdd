@@ -266,13 +266,18 @@ definition, or no tests appear — collect a report rather than guessing:
 3. Run the vscode command **`Behave BDD: Save Diagnostic Report`**. This writes a `.log` file to your
    temp folder and opens it. It contains versions, the resolved Python interpreter, the
    features/steps paths actually in use, how many step definitions were loaded, — if the cursor is
-   on a step — why that specific step didn't resolve, and the full captured log for the session.
+   on a step — why that specific step didn't resolve, and then the **complete log for the session**.
+   Nothing is truncated, so the file can be large; that's expected, attach it as-is.
 4. Skim the file (you can redact anything you'd rather not share), then attach it to a github
    [issue](https://github.com/gabeseltzer/gs-behave-bdd/issues).
 
 > `verboseLogging` does **not** log your environment variable preset values. If you specifically
 > need those in the log, enable `gs-behave-bdd.logEnvVarPresetContents` as well — but note that
 > preset values may contain secrets, so review the file before sharing it.
+
+Everything the extension writes to the `Behave BDD` output channel is also mirrored to a session
+log in `<temp>/gs-behave-bdd-logs/`, one file per vscode window, which is what the report appends.
+These are never truncated; logs from sessions older than 7 days are cleaned up automatically.
 
 The three counts near the end of the report localise most problems:
 

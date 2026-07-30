@@ -1,3 +1,6 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { config } from './configuration';
 import { getUrisOfWkspFoldersWithFeatures, WkspError, WkspErrorAction } from './common';
@@ -8,29 +11,92 @@ export class Logger {
   private channels: { [wkspUri: string]: vscode.OutputChannel } = {};
   public visible = false;
 
-  // vscode gives no way to read an OutputChannel's contents back, so keep our own copy of
-  // everything we write. The diagnostic report file embeds this, making that one file
-  // sufficient for a bug report - the user never has to select-all the output pane.
-  // Bounded so a long behave run (or a noisy verbose session) can't grow without limit.
-  public static readonly MAX_TRANSCRIPT_LINES = 5000;
-  private transcript: string[] = [];
+  // vscode gives no way to read an OutputChannel's contents back, so we keep our own copy of
+  // everything we write, which "Behave BDD: Save Diagnostic Report" appends to the report file.
+  //
+  // The session log is UNBOUNDED, so it is streamed to disk rather than held in memory: a long
+  // behave run can emit megabytes through logInfoNoLF, and an in-memory array would cost that
+  // several times over once joined and embedded in the report string. A WriteStream keeps
+  // memory flat (it buffers only what the disk hasn't taken yet) and the report is assembled
+  // by copying file-to-file, so peak memory does not scale with log size either.
+  private logStream: fs.WriteStream | undefined;
+  private sessionLogPath: string | undefined;
+  // set if opening/writing the log ever fails (read-only or full temp dir). Latched so a broken
+  // disk produces one diagnostic instead of an error per logged line.
+  private logStreamBroken = false;
+  private static _nextLogFileSeq = 0;
 
   private capture(text: string, wkspUri?: vscode.Uri) {
+    const stream = this.ensureLogStream();
+    if (!stream)
+      return;
     // inlined rather than using common.basename(), which throws on an empty path - a logging
     // call must never be the thing that raises
     const prefix = wkspUri ? `[${wkspUri.path.split("/").pop() || wkspUri.path}] ` : "";
-    this.transcript.push(prefix + text);
-    if (this.transcript.length > Logger.MAX_TRANSCRIPT_LINES)
-      this.transcript.splice(0, this.transcript.length - Logger.MAX_TRANSCRIPT_LINES);
+    try {
+      // write() returns false when the internal buffer is over the high-water mark, but we
+      // deliberately keep writing: dropping diagnostics to save memory would defeat the point,
+      // and node keeps queueing regardless. Nothing here awaits the drain, so logging stays
+      // synchronous from the caller's perspective.
+      stream.write(prefix + text + "\n");
+    }
+    catch {
+      this.logStreamBroken = true;
+    }
   }
 
-  // Returns the captured log, plus a note if the head was dropped so a reader of the
-  // diagnostic report is never misled into thinking they have the whole session.
-  public getTranscript(): { text: string; truncated: boolean } {
-    return {
-      text: this.transcript.join("\n"),
-      truncated: this.transcript.length >= Logger.MAX_TRANSCRIPT_LINES,
-    };
+  private ensureLogStream(): fs.WriteStream | undefined {
+    if (this.logStream || this.logStreamBroken)
+      return this.logStream;
+
+    try {
+      // deliberately NOT config.extensionTempFilesUri: cleanExtensionTempDirectory() wipes that
+      // folder's contents on activation without awaiting, which could delete a log we are writing
+      const dir = path.join(os.tmpdir(), "gs-behave-bdd-logs");
+      fs.mkdirSync(dir, { recursive: true });
+      pruneOldSessionLogs(dir);
+
+      // pid alone isn't enough to make this unique: the name is second-resolution, so two Logger
+      // instances constructed in the same second would open the same file in append mode. There
+      // is only one Logger in production, but tests construct several.
+      const seq = Logger._nextLogFileSeq++;
+      const stamp = new Date().toISOString().replace(/\.\d+Z$/, "").replace(/:/g, "-");
+      const suffix = seq === 0 ? "" : `-${seq}`;
+      this.sessionLogPath = path.join(dir, `session-${stamp}-${process.pid}${suffix}.log`);
+      const stream = fs.createWriteStream(this.sessionLogPath, { flags: "a" });
+      // an async write failure surfaces here rather than at the write() call
+      stream.on("error", () => { this.logStreamBroken = true; });
+      this.logStream = stream;
+      return stream;
+    }
+    catch {
+      this.logStreamBroken = true;
+      this.sessionLogPath = undefined;
+      return undefined;
+    }
+  }
+
+  // Path of this session's log, or undefined if nothing has been logged yet or the log
+  // could not be opened.
+  public getSessionLogPath(): string | undefined {
+    return this.logStreamBroken ? undefined : this.sessionLogPath;
+  }
+
+  // Waits for queued writes to reach disk. Callers that are about to READ the session log
+  // (i.e. the diagnostic report) must await this first, or they can miss the tail.
+  public flushSessionLog(): Promise<void> {
+    const stream = this.logStream;
+    if (!stream)
+      return Promise.resolve();
+    return new Promise<void>(resolve => {
+      // writing an empty chunk resolves once everything already queued has been flushed
+      try {
+        stream.write("", () => resolve());
+      }
+      catch {
+        resolve();
+      }
+    });
   }
 
   syncChannelsToWorkspaceFolders() {
@@ -64,6 +130,14 @@ export class Logger {
     for (const wkspPath in this.channels) {
       this.channels[wkspPath].dispose();
     }
+    // end() (not destroy()) so anything still queued is written before the handle closes
+    try {
+      this.logStream?.end();
+    }
+    catch {
+      // nothing useful to do while tearing down
+    }
+    this.logStream = undefined;
   }
 
   show = (wkspUri: vscode.Uri) => {
@@ -253,6 +327,33 @@ export class Logger {
 
 export enum DiagLogType {
   "info", "warn", "error"
+}
+
+
+// Session logs are unbounded and one is created per window, so without a sweep they would
+// accumulate in the temp folder indefinitely. This prunes PREVIOUS sessions only - it never
+// touches or truncates the log of the running session.
+export const SESSION_LOG_RETENTION_DAYS = 7;
+
+export function pruneOldSessionLogs(dir: string, now = Date.now()) {
+  const cutoff = now - SESSION_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.startsWith("session-") || !name.endsWith(".log"))
+        continue;
+      const full = path.join(dir, name);
+      try {
+        if (fs.statSync(full).mtimeMs < cutoff)
+          fs.unlinkSync(full);
+      }
+      catch {
+        // in use by another vscode window, or already gone - skip it
+      }
+    }
+  }
+  catch {
+    // unreadable temp dir - housekeeping is best-effort and must never block logging
+  }
 }
 
 // Reading config.globalSettings constructs WindowSettings on first access, which throws if

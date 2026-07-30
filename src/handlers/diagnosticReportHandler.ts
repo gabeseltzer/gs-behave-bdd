@@ -1,11 +1,12 @@
+import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { config } from '../configuration';
 import { getUrisOfWkspFoldersWithFeatures, isFeatureFile } from '../common';
 import { getFeatureFileSteps } from '../parsers/featureParser';
 import { getStepFileStepForFeatureFileStep, getStepMappings } from '../parsers/stepMappings';
 import { getStepFileSteps } from '../parsers/stepsParser';
-import { Logger } from '../logger';
 import { logStepResolutionContext } from './providerHelpers';
 
 export const EXTENSION_ID = "gabeseltzer.gs-behave-bdd";
@@ -46,6 +47,7 @@ export async function buildDiagnosticReport(): Promise<string> {
   }
   if (!verboseLogging)
     add(`                  (turn on gs-behave-bdd.verboseLogging and retry the failing action for far more detail)`);
+  add(`session log:      ${config.logger.getSessionLogPath() ?? "(none - nothing logged yet, or the log file could not be opened)"}`);
 
   const allFolders = vscode.workspace.workspaceFolders ?? [];
   const wkspUris = getUrisOfWkspFoldersWithFeatures(true);
@@ -132,17 +134,11 @@ export async function buildDiagnosticReport(): Promise<string> {
       `explain that specific step)`);
   }
 
-  // The captured log is the bulk of the file and the part that actually explains a silent
-  // failure, so it goes last - the summary above stays readable without scrolling.
-  const { text: transcript, truncated } = config.logger.getTranscript();
+  // The full session log follows this summary in the report file. It is appended by
+  // diagnosticReportHandler as a file-to-file copy rather than being embedded here, so that a
+  // multi-megabyte log never has to exist as a string in the extension host.
   add();
-  add("===== captured log =====");
-  if (truncated)
-    add(`(NOTE: only the most recent ${Logger.MAX_TRANSCRIPT_LINES} lines are kept - earlier output was dropped)`);
-  add(transcript || "(nothing logged this session)");
-
-  add();
-  add("===== end of diagnostic report =====");
+  add("===== captured log (full session, unbounded) =====");
 
   return lines.join("\n");
 }
@@ -167,26 +163,54 @@ export function diagnosticReportFileName(now: Date): string {
 
 
 /**
- * Command handler: writes the report to a .log file and opens it. A file rather than the
- * clipboard because the embedded captured log can run to thousands of lines - too much to
- * paste into a chat message, but fine to attach to an issue.
+ * Streams src onto the end of dest. Used instead of readFile+append so that appending the
+ * session log costs a fixed-size buffer regardless of how large that log is.
+ */
+async function appendFileToFile(src: string, dest: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const readStream = fs.createReadStream(src);
+    const writeStream = fs.createWriteStream(dest, { flags: "a" });
+    readStream.on("error", reject);
+    writeStream.on("error", reject);
+    writeStream.on("close", resolve);
+    readStream.pipe(writeStream);
+  });
+}
+
+
+/**
+ * Command handler: writes the summary to a .log file, appends the full session log, and opens
+ * it. A file rather than the clipboard because the session log is unbounded - it can run to
+ * megabytes, which is too much to paste anywhere but fine to attach to an issue.
  */
 export async function diagnosticReportHandler(): Promise<void> {
   try {
-    const report = await buildDiagnosticReport();
+    const summary = await buildDiagnosticReport();
 
-    const fileUri = vscode.Uri.joinPath(vscode.Uri.file(os.tmpdir()), diagnosticReportFileName(new Date()));
-    await vscode.workspace.fs.writeFile(fileUri, Buffer.from(report, "utf8"));
+    const filePath = path.join(os.tmpdir(), diagnosticReportFileName(new Date()));
+    await fs.promises.writeFile(filePath, summary + "\n", "utf8");
+
+    // the tail of the log is the most recently written and therefore the most likely to still
+    // be sitting in the stream's buffer, so flush before reading it back
+    await config.logger.flushSessionLog();
+    const sessionLogPath = config.logger.getSessionLogPath();
+    if (sessionLogPath && fs.existsSync(sessionLogPath))
+      await appendFileToFile(sessionLogPath, filePath);
+    else
+      await fs.promises.appendFile(filePath, "(no session log was captured)\n", "utf8");
+
+    await fs.promises.appendFile(filePath, "\n===== end of diagnostic report =====\n", "utf8");
 
     // Open it so the user can eyeball it (and redact anything they'd rather not share)
     // before attaching it to an issue.
+    const fileUri = vscode.Uri.file(filePath);
     const doc = await vscode.workspace.openTextDocument(fileUri);
     await vscode.window.showTextDocument(doc, { preview: false });
 
     const picked = await vscode.window.showInformationMessage(
-      `Behave BDD diagnostic report written to ${fileUri.fsPath}`, "Copy Path", "Reveal in Explorer");
+      `Behave BDD diagnostic report written to ${filePath}`, "Copy Path", "Reveal in Explorer");
     if (picked === "Copy Path")
-      await vscode.env.clipboard.writeText(fileUri.fsPath);
+      await vscode.env.clipboard.writeText(filePath);
     else if (picked === "Reveal in Explorer")
       await vscode.commands.executeCommand("revealFileInOS", fileUri);
   }
