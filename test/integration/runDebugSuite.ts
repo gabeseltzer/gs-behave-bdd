@@ -3,7 +3,7 @@ import {
   downloadAndUnzipVSCode,
   runTests
 } from '@vscode/test-electron';
-import { getShortPathOnWindows, installMsPythonExtension } from './testRunUtils';
+import { getCleanTestEnv, getShortPathOnWindows, installMsPythonExtension } from './testRunUtils';
 import { snapshotFixtures, restoreFixtures } from './fixtureSnapshot';
 
 
@@ -36,7 +36,9 @@ async function runDebugSuite() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      // strip the host extension host's env vars so the spawned VSCode does not start as plain node
+      extensionTestsEnv: getCleanTestEnv()
     });
 
     console.log("debug suite complete");
