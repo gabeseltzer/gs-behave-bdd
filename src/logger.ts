@@ -68,11 +68,23 @@ export class Logger {
       const seq = Logger._nextLogFileSeq++;
       const stamp = new Date().toISOString().replace(/\.\d+Z$/, "").replace(/:/g, "-");
       const suffix = seq === 0 ? "" : `-${seq}`;
-      this.sessionLogPath = path.join(dir, `session-${stamp}-${process.pid}${suffix}.log`);
+
+      // Timestamp FIRST so a plain alphabetical listing is chronological; identifiers after it
+      // so a folder full of logs from an integration run can be told apart at a glance (each
+      // suite opens a different example project). "-insiders" only when it applies, because
+      // that is the tell for an integration-test run rather than a real user session.
+      const label = sanitizeForFileName(currentWorkspaceLabel(), 40);
+      const flavour = isInsiders() ? "-insiders" : "";
+      this.sessionLogPath =
+        path.join(dir, `session-${stamp}-${label}${flavour}-${process.pid}${suffix}.log`);
+
       const stream = fs.createWriteStream(this.sessionLogPath, { flags: "a" });
       // an async write failure surfaces here rather than at the write() call
       stream.on("error", () => { this.logStreamBroken = true; });
       this.logStream = stream;
+      // Header so the file identifies itself even after being renamed, copied into an issue,
+      // or pasted into a chat - the filename is not guaranteed to survive that journey.
+      stream.write(sessionLogHeader());
       return stream;
     }
     catch {
@@ -333,6 +345,83 @@ export class Logger {
 
 export enum DiagLogType {
   "info", "warn", "error"
+}
+
+
+/**
+ * Best-effort name for the thing this window has open, used to identify a session log.
+ * `vscode.workspace.name` covers both a single folder ("my-project") and a multi-root
+ * workspace ("thing (Workspace)"); fall back to the first folder, then to a placeholder.
+ */
+export function currentWorkspaceLabel(): string {
+  try {
+    const name = vscode.workspace.name;
+    if (name)
+      return name;
+    const folders = vscode.workspace.workspaceFolders;
+    if (folders && folders.length > 0)
+      return folders[0].name;
+    return "no-workspace";
+  }
+  catch {
+    return "unknown-workspace";
+  }
+}
+
+
+export function isInsiders(): boolean {
+  try {
+    return (vscode.env.appName ?? "").toLowerCase().includes("insider");
+  }
+  catch {
+    return false;
+  }
+}
+
+
+/**
+ * Makes an arbitrary label safe as a filename component on every platform, and short enough
+ * that a deep temp path plus this cannot approach Windows' MAX_PATH.
+ */
+export function sanitizeForFileName(label: string, maxLength: number): string {
+  const cleaned = label
+    .replace(/[^A-Za-z0-9._-]+/g, "-")   // covers < > : " / \ | ? * and whitespace
+    .replace(/-{2,}/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "");
+  if (cleaned === "")
+    return "unnamed";
+  return cleaned.length > maxLength ? cleaned.substring(0, maxLength).replace(/[-.]+$/, "") : cleaned;
+}
+
+
+function sessionLogHeader(): string {
+  const folders = (() => {
+    try {
+      return (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath).join(", ") || "(none)";
+    }
+    catch {
+      return "(unavailable)";
+    }
+  })();
+  const app = (() => {
+    try {
+      return `${vscode.env.appName ?? "unknown"} ${vscode.version ?? ""}`.trim();
+    }
+    catch {
+      return "unknown";
+    }
+  })();
+
+  return [
+    `===== Behave BDD session log =====`,
+    `started:   ${new Date().toISOString()}`,
+    `workspace: ${currentWorkspaceLabel()}`,
+    `folders:   ${folders}`,
+    `vscode:    ${app} (pid ${process.pid})`,
+    `platform:  ${process.platform}`,
+    `==================================`,
+    ``,
+  ].join("\n");
 }
 
 

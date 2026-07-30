@@ -133,7 +133,16 @@ suite('verbose diagnostic logging', () => {
       await logger.flushSessionLog();
       const p = logger.getSessionLogPath();
       assert.ok(p, 'expected a session log path');
-      return fs.readFileSync(p!, 'utf8');
+      return fs.readFileSync(p as string, 'utf8');
+    }
+
+    // every session log opens with a self-describing header block; most assertions want the body
+    const HEADER_END = '==================================\n';
+    async function readSessionLogBody(logger: Logger): Promise<string> {
+      const text = await readSessionLog(logger);
+      const end = text.indexOf(HEADER_END);
+      assert.ok(end > 0, `expected a header block, got:\n${text.substring(0, 200)}`);
+      return text.substring(end + HEADER_END.length).replace(/^\n/, '');
     }
 
     setup(() => {
@@ -154,7 +163,7 @@ suite('verbose diagnostic logging', () => {
       const logger = newLogger();
       logger.logInfo("Searching for step definitions...", wkspUri);
 
-      assert.strictEqual(await readSessionLog(logger), "[workspace] Searching for step definitions...\n");
+      assert.strictEqual(await readSessionLogBody(logger), "[workspace] Searching for step definitions...\n");
     });
 
     test('captures verbose lines so they reach the diagnostic report file', async () => {
@@ -181,10 +190,45 @@ suite('verbose diagnostic logging', () => {
       for (let i = 0; i < lineCount; i++)
         logger.logInfo(`line ${i}`, wkspUri);
 
-      const captured = (await readSessionLog(logger)).split("\n").filter(l => l.length > 0);
+      const captured = (await readSessionLogBody(logger)).split("\n").filter(l => l.length > 0);
       assert.strictEqual(captured.length, lineCount);
       assert.ok(captured[0].endsWith('line 0'), 'the FIRST line must survive');
       assert.ok(captured[lineCount - 1].endsWith(`line ${lineCount - 1}`), 'the last line must survive');
+    });
+
+    test('the file name carries the workspace so runs can be told apart', () => {
+      stubVerboseLogging(false);
+      sinon.stub(vscode.workspace, 'name').value('monorepo scan/proj');
+      const logger = newLogger();
+      logger.logInfo("anything", wkspUri);
+
+      const name = path.basename(logger.getSessionLogPath() as string);
+      assert.ok(name.includes('monorepo-scan-proj'), `spaces and slashes must be sanitised: ${name}`);
+      assert.ok(name.startsWith('session-2'), 'timestamp first, so alphabetical order stays chronological');
+      assert.ok(name.includes(String(process.pid)), 'pid keeps concurrent windows distinct');
+      assert.ok(!/[<>:"/\\|?*]/.test(name), `illegal filename characters in "${name}"`);
+    });
+
+    test('falls back to a placeholder when no workspace is open', () => {
+      stubVerboseLogging(false);
+      sinon.stub(vscode.workspace, 'name').value(undefined);
+      sinon.stub(vscode.workspace, 'workspaceFolders').value(undefined);
+      const logger = newLogger();
+      logger.logInfo("anything", wkspUri);
+
+      assert.ok(path.basename(logger.getSessionLogPath() as string).includes('no-workspace'));
+    });
+
+    test('the header identifies the session even if the file is renamed or pasted elsewhere', async () => {
+      stubVerboseLogging(false);
+      sinon.stub(vscode.workspace, 'name').value('my-project');
+      const logger = newLogger();
+      logger.logInfo("anything", wkspUri);
+
+      const text = await readSessionLog(logger);
+      assert.ok(text.startsWith('===== Behave BDD session log ====='), text.substring(0, 80));
+      assert.ok(text.includes('workspace: my-project'), text.substring(0, 300));
+      assert.ok(text.includes(`(pid ${process.pid})`), text.substring(0, 300));
     });
 
     test('a log file that cannot be opened degrades to no capture instead of throwing', () => {

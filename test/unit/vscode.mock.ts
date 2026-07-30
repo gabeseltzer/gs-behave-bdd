@@ -232,6 +232,9 @@ export class RelativePattern {
 }
 
 export const workspace = {
+  // real vscode exposes the folder name, or "<name> (Workspace)" for a multi-root workspace,
+  // or undefined when nothing is open. Read by the session-log file namer.
+  name: undefined as string | undefined,
   fs: {
     readFile: () => Promise.resolve(Buffer.from('')),
     writeFile: () => Promise.resolve(),
