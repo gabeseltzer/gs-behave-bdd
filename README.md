@@ -255,6 +255,31 @@ The status bar indicator is hidden when only one project exists or when `project
 
 - Please read through the [release notes](https://github.com/jimasp/behave-vsc/releases) for breaking changes. If that does not resolve your issue, then please rollback to the previous working version via the vscode uninstall dropdown and raise an [issue](https://github.com/jimasp/behave-vsc/issues).
   
+### Start here: get a diagnostic report
+
+If the extension appears to do nothing — e.g. ctrl+click / F12 on a step doesn't jump to its Python
+definition, or no tests appear — collect a report rather than guessing:
+
+1. Turn on `gs-behave-bdd.verboseLogging` in settings. This makes the extension log *why* it gave up
+   at every point where it would otherwise fail silently (step navigation, hover, step discovery).
+2. Retry the thing that isn't working. If it's step navigation, leave the cursor on the step line.
+3. Run the vscode command **`Behave BDD: Copy Diagnostic Report`**. This copies a report to your
+   clipboard (and writes it to the `Behave BDD` output channel) containing versions, the resolved
+   Python interpreter, the features/steps paths actually in use, how many step definitions were
+   loaded, and — if the cursor is on a step — why that specific step didn't resolve.
+4. Paste that into a github [issue](https://github.com/gabeseltzer/gs-behave-bdd/issues).
+
+> ⚠️ `verboseLogging` also logs the full contents of your environment variable presets. Review the
+> report for secrets before sharing it.
+
+The three counts near the end of the report localise most problems:
+
+| Symptom in the report | Likely cause |
+| --- | --- |
+| `parsed feature file steps: 0` | the configured features path doesn't contain your `.feature` files |
+| `loaded step definitions: 0` | step discovery failed, or there's no `steps` folder where the extension looked |
+| both non-zero but `mappings: 0` | step text doesn't match any definition's pattern, or step files failed to load (check the Problems pane) |
+
 ### Otherwise
 
 - Does your project meet the [workspace requirements](#workspace-requirements) and have the [required project directory structure](#required-project-directory-structure)?

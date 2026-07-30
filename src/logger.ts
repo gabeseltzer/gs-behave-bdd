@@ -94,7 +94,30 @@ export class Logger {
       run.appendOutput(text);
   };
 
-  // used by settings.ts 
+  // Verbose diagnostic logging, gated on the `verboseLogging` setting.
+  //
+  // Unlike diagLog()/xRay (which only reaches the DevTools console), this writes to the
+  // "Behave BDD" OUTPUT CHANNEL, so a user can select-all + copy the text straight out of
+  // the output pane and send it to a maintainer. That is the whole point of this method:
+  // use it at every point where the extension gives up silently, so the log explains WHY
+  // a feature (e.g. ctrl+click go-to-definition) did nothing.
+  logVerbose = (text: string, wkspUri?: vscode.Uri) => {
+    if (!verboseLoggingEnabled())
+      return;
+
+    const msg = `[verbose] ${text}`;
+    diagLog(msg);
+
+    if (wkspUri) {
+      this.ensureChannel(wkspUri).appendLine(msg);
+      return;
+    }
+    for (const wkspPath in this.channels) {
+      this.channels[wkspPath].appendLine(msg);
+    }
+  };
+
+  // used by settings.ts
   logSettingsWarning = (text: string, wkspUri: vscode.Uri, run?: vscode.TestRun) => {
     diagLog(text, wkspUri, DiagLogType.warn);
 
@@ -200,6 +223,19 @@ export class Logger {
 export enum DiagLogType {
   "info", "warn", "error"
 }
+
+// Reading config.globalSettings constructs WindowSettings on first access, which throws if
+// the user's settings are broken - so never let a logging call be the thing that surfaces
+// that. Absent/unreadable settings simply mean "verbose off".
+export const verboseLoggingEnabled = (): boolean => {
+  try {
+    return !!(config && config.globalSettings && config.globalSettings.verboseLogging);
+  }
+  catch {
+    return false;
+  }
+}
+
 
 export const diagLog = (message: string, wkspUri?: vscode.Uri, logType?: DiagLogType) => {
   if (config && !config.globalSettings.xRay && !config.integrationTestRun && !config.exampleProject)

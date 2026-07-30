@@ -250,6 +250,20 @@ export class FileParser {
 
     const stepFiles = allPyFiles.filter(uri => isStepsFile(uri));
 
+    config.logger.logVerbose(
+      `step discovery: searched ${wkspSettings.featuresUris.map(u => u.fsPath).join(", ")} ` +
+      `(steps search paths: ${wkspSettings.stepsSearchUris.map(u => u.fsPath).join(", ")})\n` +
+      `  found ${allPyFiles.length} .py file(s), of which ${stepFiles.length} look like step files`,
+      wkspSettings.uri);
+    if (stepFiles.length === 0) {
+      // no step files => no step definitions => ctrl+click can never resolve. Almost always a
+      // wrong steps folder location rather than an execution failure, so name the paths searched.
+      config.logger.logVerbose(
+        `step discovery: >>> NO step files found. Step definitions must live in a "steps" folder under a ` +
+        `configured features path. Nothing will resolve until this is fixed.`,
+        wkspSettings.uri);
+    }
+
     // Load all steps and fixtures using behave's built-in registry (handles imports automatically)
     // We load BEFORE deleting old steps so that on failure we keep the previous valid definitions
     try {
@@ -271,6 +285,11 @@ export class FileParser {
       const stepsPaths = stepsDirs.length > 0 ? stepsDirs : [wkspSettings.stepsSearchUri.fsPath];
 
       const loadBehaveStart = performance.now();
+      config.logger.logVerbose(
+        `step discovery: interpreter "${pythonExec}", cwd "${wkspSettings.projectUri.fsPath}", ` +
+        `importStrategy "${wkspSettings.importStrategy}", timeout ${wkspSettings.stepDefinitionSearchTimeout}s\n` +
+        `  step dirs passed to behave: ${stepsPaths.join(", ")}`,
+        wkspSettings.uri);
       config.logger.logInfo(`Searching for step definitions...`, wkspSettings.uri);
       const result = await loadFromBehave(
         pythonExec,
@@ -285,6 +304,12 @@ export class FileParser {
       const loadBehaveElapsed = Math.round(performance.now() - loadBehaveStart);
       diagLog(`${caller}: _parseStepsFiles loadFromBehave took ${loadBehaveElapsed}ms, returned ${result.steps.length} steps and ${result.fixtures.length} fixtures`);
       config.logger.logInfo(`Step definition search complete in ${loadBehaveElapsed}ms`, wkspSettings.uri);
+      config.logger.logVerbose(
+        `step discovery: behave returned ${result.steps.length} step definition(s) and ${result.fixtures.length} fixture(s)` +
+        (result.failedFiles?.length ? `\n  file(s) that failed to load: ${result.failedFiles.map(f => `${f.filePath} (${f.kind}: ${f.errorMessage})`).join("; ")}` : "") +
+        (result.mockedModules?.length ? `\n  missing modules stubbed out: ${result.mockedModules.join(", ")}` : "") +
+        (result.duplicates?.length ? `\n  duplicate step definitions: ${result.duplicates.length}` : ""),
+        wkspSettings.uri);
 
       if (result.stderr) {
         config.logger.logInfo(`behave stderr output:\n${result.stderr}`, wkspSettings.uri);

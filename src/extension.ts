@@ -12,6 +12,7 @@ import { setConfigParseErrorDiagnostic, clearConfigParseErrorDiagnostic } from '
 import { StepFileStep } from './parsers/stepsParser';
 import type { FailedFileInfo } from './parsers/behaveLoader';
 import { gotoStepHandler } from './handlers/gotoStepHandler';
+import { diagnosticReportHandler } from './handlers/diagnosticReportHandler';
 import { findStepReferencesHandler, nextStepReferenceHandler as nextStepReferenceHandler, prevStepReferenceHandler, treeView } from './handlers/findStepReferencesHandler';
 import { FileParser } from './parsers/fileParser';
 import { testRunHandler, checkRunGuard } from './runners/testRunHandler';
@@ -525,6 +526,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         }
         await vscode.commands.executeCommand('gs-behave-bdd.findStepReferences');
       }),
+      vscode.commands.registerCommand('gs-behave-bdd.diagnosticReport', () => diagnosticReportHandler()),
       vscode.commands.registerCommand('gs-behave-bdd.recheckMigrations', () => recheckMigrationsCommandHandler()),
       // Phase 023 Plan 01: open the migrations Webview panel. Co-located
       // above MIGRATION_ACTION_COMMAND so 023-04's deletion sweep keeps a

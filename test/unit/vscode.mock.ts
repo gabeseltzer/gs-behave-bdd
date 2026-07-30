@@ -369,6 +369,13 @@ export function _resetWebviewMocks(): void {
   _onDidChangeConfigurationCallbacks.length = 0;
 }
 
+// vscode.version / vscode.extensions / vscode.env — read by the diagnostic report handler.
+export const version = '1.82.0-mock';
+
+export const extensions = {
+  getExtension: (_id: string): unknown => undefined,
+};
+
 export const window = {
   showWarningMessage: () => Promise.resolve(undefined),
   showErrorMessage: () => Promise.resolve(undefined),
@@ -469,9 +476,15 @@ export const commands = {
 // 260514-dvt: remoteName tells us we're on a VS Code Server (devcontainer,
 // WSL, SSH-remote, etc.). Default undefined (local); tests stub to exercise
 // the server-data-dir path.
-export const env: { appName: string; remoteName: string | undefined } = {
+// clipboard is read by the diagnostic report handler, which copies the report for the user.
+export const env: {
+  appName: string;
+  remoteName: string | undefined;
+  clipboard: { writeText: (text: string) => Promise<void> };
+} = {
   appName: 'Visual Studio Code',
   remoteName: undefined,
+  clipboard: { writeText: (_text: string) => Promise.resolve() },
 };
 
 export enum FileType {

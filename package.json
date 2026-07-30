@@ -106,7 +106,7 @@
 				"gs-behave-bdd.verboseLogging": {
 					"scope": "window",
 					"type": "boolean",
-					"markdownDescription": "⚠️ **Warning:** Enabling this may log sensitive information to the output channel, including the full contents of your environment variable presets.\n\nWhen enabled, additional developer debugging information is written to the output channel.",
+					"markdownDescription": "Enable this when something isn't working. Detailed diagnostics are written to the `Behave BDD` output channel, including *why* step navigation (ctrl+click / F12), hover, and step discovery gave up — which is otherwise silent. Then run `Behave BDD: Copy Diagnostic Report` to copy everything for a bug report.\n\n⚠️ **Warning:** this also logs the full contents of your environment variable presets, which may include secrets. Review the output before sharing it.",
 					"default": false
 				},
 				"gs-behave-bdd.discoveryDepth": {
@@ -189,6 +189,10 @@
 			{
 				"command": "gs-behave-bdd.openMigrationsPanel",
 				"title": "Behave BDD: Open Migrations Panel"
+			},
+			{
+				"command": "gs-behave-bdd.diagnosticReport",
+				"title": "Behave BDD: Copy Diagnostic Report (for bug reports)"
 			}
 		],
 		"keybindings": [
