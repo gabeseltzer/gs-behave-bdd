@@ -124,9 +124,11 @@ try {
 - `getSessionLogPath()` / `flushSessionLog()`: for the diagnostic report; flush before reading
 
 **Settings:**
-- `verboseLogging` — the flag to ask users for. Safe to request: logs no secrets
+- `verboseLogging` — **the** flag to ask users for. Covers output-channel diagnostics, DevTools
+  console diagnostics, and error stack traces. Safe to request: logs no secrets
 - `logEnvVarPresetContents` — separate opt-in, logs env var preset values (may contain secrets)
-- `xRay` — DevTools console diagnostics + error stack traces
+- `xRay` — **deprecated**, honoured as an alias for the console half of `verboseLogging`;
+  migrated away by `xRay-self` (see `src/migrations/logging.ts`)
 
 **Usage:**
 - Create detailed logs for parsing/test execution events

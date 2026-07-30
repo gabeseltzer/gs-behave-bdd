@@ -91,6 +91,17 @@ command** where one exists.
 The most common real cause of step-search failure is an environment mismatch — a different
 virtualenv, or a path only the user's shell provides. That is invisible without this.
 
+## Rule 4a — One flag to ask for
+
+A user who has to be told "enable A, and also B, and for stack traces C" will enable one of
+them. `verboseLogging` is deliberately the single flag worth asking for: output-channel
+diagnostics, DevTools-console diagnostics, and error stack traces are all under it. `xRay` is
+deprecated and honoured only as an alias until its migration is taken.
+
+When adding diagnostic capability, extend `verboseLogging` rather than adding a flag. The only
+justified exception is Rule 7 (sensitive data), which must be separable precisely so the general
+flag stays safe to recommend.
+
 ## Rule 5 — Diagnose, don't just report
 
 Where the code can distinguish causes, it should. Raw facts make the user do the reasoning;
@@ -103,6 +114,17 @@ a diagnosis doesn't. The three counts that localise nearly every step-navigation
 | both > 0, 0 mappings | step text matches no definition's pattern, or step files failed to load |
 
 Prefix a diagnosis with `>>>` so it stands out when skimming a long log.
+
+**Diagnose in one place.** These three live in `diagnoseStepState()` (`handlers/stepStateDiagnosis.ts`),
+a pure function of the three counts, shared by the language-status item, the diagnostic report,
+and the step-navigation log. They had begun to drift into three slightly different wordings —
+and a status item that disagrees with the log is worse than either alone. New diagnoses go in
+that function, not inline at a call site.
+
+**"No error" is not "working".** A wrong features path or a steps folder we never found produces
+a perfectly clean load of *nothing*, which used to render as a green `Behave: Ready` while
+ctrl+click silently did nothing. Any status surface that can show success must ask whether the
+success is degenerate before claiming it.
 
 ## Rule 6 — Notifications are a scarce resource
 
@@ -122,6 +144,15 @@ Adding a toast is a tax on every user, forever. The bar:
 verboseLogging and send me the log"* must never also mean *"leak your secrets"*. If a future
 setting would log credentials, tokens, or full environments, give it its own flag with its own
 warning. Never fold it into a general debug flag.
+
+**This extends to migrations.** `migrations/logging.ts` has two entries whose relative order is
+load-bearing, for exactly this reason: `verboseLogging-self` (old preset-dumping intent →
+`logEnvVarPresetContents`) MUST run before `xRay-self` (→ `verboseLogging`). Reversed, an
+xRay-only user would have `verboseLogging` written to `true` on their behalf and then be offered
+secret logging on the strength of a value they never set. `evaluateAllMigrations` iterates the
+registry sequentially, so array order is what executes — and a regression test asserts both the
+order and the leak it prevents. Any new migration that *writes* a flag another migration *reads*
+needs the same analysis.
 
 ## Rule 8 — The log must be retrievable as one artifact
 

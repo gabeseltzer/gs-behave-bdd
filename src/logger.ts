@@ -250,7 +250,7 @@ export class Logger {
 
     if (error instanceof Error) {
       text = error.message;
-      if (error.stack && config && config.globalSettings && config.globalSettings.xRay)
+      if (error.stack && consoleDiagnosticsEnabled())
         text += `\n${error.stack.split("\n").slice(1).join("\n")}`;
     }
     else {
@@ -409,8 +409,21 @@ export const verboseLoggingEnabled = (): boolean => {
 }
 
 
+// console diagnostics are enabled by verboseLogging; xRay is the deprecated alias, honoured
+// until the user takes the xRay-to-verboselogging migration (see migrations/logging.ts)
+export const consoleDiagnosticsEnabled = (): boolean => {
+  try {
+    return !!(config && config.globalSettings &&
+      (config.globalSettings.verboseLogging || config.globalSettings.xRay));
+  }
+  catch {
+    return false;
+  }
+}
+
+
 export const diagLog = (message: string, wkspUri?: vscode.Uri, logType?: DiagLogType) => {
-  if (config && !config.globalSettings.xRay && !config.integrationTestRun && !config.exampleProject)
+  if (config && !consoleDiagnosticsEnabled() && !config.integrationTestRun && !config.exampleProject)
     return;
 
   if (wkspUri)

@@ -60,6 +60,14 @@ notification, or early-return on a user-visible path. Headlines:
   embedded in a spawn error contains "behave" (via the `discover.py` path), which made the
   "behave not installed" heuristic match every `ImportError` and re-spawn the fallback in a loop.
   Classify at the source from the narrowest input; carry it on a typed error.
+- **One flag to ask for.** `xRay` is deprecated (alias only); `verboseLogging` now covers console
+  diagnostics and stack traces too. Extend `verboseLogging` rather than adding a diagnostic flag.
+- **Diagnose in one place.** `diagnoseStepState()` is shared by the language-status item, the
+  diagnostic report and the navigation log. "No error" is not "working" — a status surface that
+  can show success must first check the success isn't degenerate (0 defs / 0 mappings).
+- **Migration order can be a security property.** `verboseLogging-self` must precede `xRay-self`
+  or an xRay-only user gets offered secret logging on a value they never set. Any new migration
+  that writes a flag another migration reads needs the same analysis.
 
 ### v1.6.0 Decisions
 

@@ -374,7 +374,7 @@ suite('verbose diagnostic logging', () => {
       sinon.stub(stepMappingsModule, 'getStepMappings').returns([]);
 
       const detail = logStepResolutionContext(featureUri);
-      assert.ok(detail.includes('ZERO step definitions were loaded'), detail);
+      assert.ok(detail.includes('No step definitions loaded'), detail);
     });
 
     test('points at a pattern mismatch when definitions exist but none matched', () => {
@@ -385,7 +385,7 @@ suite('verbose diagnostic logging', () => {
       sinon.stub(stepMappingsModule, 'getStepMappings').returns([]);
 
       const detail = logStepResolutionContext(featureUri);
-      assert.ok(detail.includes('step definitions ARE loaded but none matched'), detail);
+      assert.ok(detail.includes('No steps matched'), detail);
       assert.ok(detail.includes('step definitions loaded: 1'), detail);
     });
 
@@ -439,7 +439,7 @@ suite('verbose diagnostic logging', () => {
       assert.ok(report.includes('/usr/bin/python3'), report);
       assert.ok(report.includes('discovery source:  behave.ini'), report);
       assert.ok(report.includes('loaded step definitions:   0'), report);
-      assert.ok(report.includes('ZERO step definitions loaded'), report);
+      assert.ok(report.includes('No step definitions loaded'), report);
       // the report is useful without verboseLogging, but should say it gets better with it
       assert.ok(report.includes('turn on gs-behave-bdd.verboseLogging'), report);
     });

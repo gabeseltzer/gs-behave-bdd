@@ -303,7 +303,7 @@ The three counts near the end of the report localise most problems:
 - Check if the issue has already been reported in github [issues](https://github.com/gabeseltzer/gs-behave-bdd/issues?q=is%3Aissue).
 - Try temporarily disabling other extensions.
 - Have you recently upgraded vscode, and does your python/behave environment match the one tested for this release? You can check the environment tested for each release in [github](https://github.com/gabeseltzer/gs-behave-bdd/releases) and downgrade as required.
-- Any extension errors should pop up in a notification window, but you can also look at debug logs and error stacks by enabling `xRay` in the extension settings and using vscode command "Developer: Toggle Developer Tools".
+- Any extension errors should pop up in a notification window, but you can also look at debug logs and error stacks by enabling `verboseLogging` in the extension settings and using vscode command "Developer: Toggle Developer Tools". (`xRay` is the deprecated name for this; `verboseLogging` now covers both the console diagnostics and the output channel. The extension will offer to migrate the setting for you.)
 - The extension is only tested with a few example projects. It's possible that something specific to your project/setup/environment is not accounted for. See [Contributing](CONTRIBUTING.md) for instructions on debugging the extension with your own project. (If you debug with your own project, you may also wish to check whether the same issue occurs with one of the example project workspaces.)
 
 ---

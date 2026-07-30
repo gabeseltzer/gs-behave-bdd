@@ -5,6 +5,7 @@ import { getStepFileStepForFeatureFileStep, getStepMappings, waitOnReadyForSteps
 import { featureFileStepRe } from "../parsers/gherkinPatterns";
 import { getStepFileSteps, StepFileStep } from "../parsers/stepsParser";
 import { verboseLoggingEnabled } from "../logger";
+import { diagnoseStepState } from "./stepStateDiagnosis";
 
 
 // Collapses repeat verbose logs for the same position (see logNav in validateAndGetStepInfo).
@@ -144,15 +145,14 @@ export function logStepResolutionContext(docUri: vscode.Uri): string {
   const mappingCount = getStepMappings(wkspSettings.featuresUri).length;
   lines.push(`  step definitions loaded: ${stepDefCount}; feature steps currently mapped: ${mappingCount}`);
 
-  if (stepDefCount === 0) {
-    lines.push(`  >>> ZERO step definitions were loaded, so nothing can ever match. Step discovery either ` +
-      `failed or found no step files - search this log for "Step definition search complete", ` +
-      `"Failed to load step definitions", or "failed to load".`);
-  }
-  else {
-    lines.push(`  >>> step definitions ARE loaded but none matched this step's text. Check for a typo, a ` +
-      `parameter type mismatch, or a step file that failed to load (search this log for "failed to load").`);
-  }
+  // shared with the language-status item and the diagnostic report so all three agree.
+  // featureStepCount is passed as 1: reaching here means we resolved a step line in a parsed
+  // feature file, so the "no feature steps at all" case cannot apply.
+  const diagnosis = diagnoseStepState(1, stepDefCount, mappingCount);
+  lines.push(diagnosis
+    ? `  >>> ${diagnosis.title}: ${diagnosis.detail}`
+    : `  >>> step definitions ARE loaded and other steps matched, but this one did not. Check for a typo, ` +
+      `a parameter type mismatch, or a step file that failed to load (search this log for "failed to load").`);
 
   return lines.join("\n");
 }

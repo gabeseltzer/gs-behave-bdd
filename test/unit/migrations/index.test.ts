@@ -24,8 +24,8 @@ suite('Phase 20 — migrations registry invariants', () => {
     }
   });
 
-  test('registry contains exactly 17 entries (D-A4.4)', () => {
-    assert.strictEqual(MIGRATION_REGISTRY.length, 17, 'D-A4.4 mandates 17 entries');
+  test('registry contains exactly 19 entries (D-A4.4 + 2 logging entries)', () => {
+    assert.strictEqual(MIGRATION_REGISTRY.length, 19, 'D-A4.4 (17) plus the 2 logging entries');
   });
 
   test('Phase 20 D-A6.1: extension.ts wires evaluateAllMigrations and deletes v1.4.0 silent calls', () => {

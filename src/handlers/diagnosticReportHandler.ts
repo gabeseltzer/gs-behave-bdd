@@ -7,6 +7,7 @@ import { getUrisOfWkspFoldersWithFeatures, isFeatureFile } from '../common';
 import { getFeatureFileSteps } from '../parsers/featureParser';
 import { getStepFileStepForFeatureFileStep, getStepMappings } from '../parsers/stepMappings';
 import { getStepFileSteps } from '../parsers/stepsParser';
+import { diagnoseStepState } from './stepStateDiagnosis';
 import { logStepResolutionContext } from './providerHelpers';
 
 export const EXTENSION_ID = "gabeseltzer.gs-behave-bdd";
@@ -103,14 +104,9 @@ export async function buildDiagnosticReport(): Promise<string> {
     add(`loaded step definitions:   ${stepDefCount}`);
     add(`feature step -> definition mappings: ${mappingCount}`);
 
-    if (featureStepCount === 0)
-      add(`>>> ZERO feature steps parsed - the configured features path probably does not contain your .feature files.`);
-    else if (stepDefCount === 0)
-      add(`>>> ZERO step definitions loaded - step discovery failed or found no step files. Search this output ` +
-        `channel for "Failed to load step definitions" / "NO step files found".`);
-    else if (mappingCount === 0)
-      add(`>>> Feature steps and step definitions both exist but NOTHING matched. This points at a step text / ` +
-        `pattern mismatch, or step files that failed to load (check the Problems pane).`);
+    const diagnosis = diagnoseStepState(featureStepCount, stepDefCount, mappingCount);
+    if (diagnosis)
+      add(`>>> ${diagnosis.title}: ${diagnosis.detail}`);
   }
 
   // Resolve the step under the cursor, if the user is sitting on one - this makes the report
