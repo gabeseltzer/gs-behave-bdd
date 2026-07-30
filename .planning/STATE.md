@@ -40,6 +40,27 @@ Last activity: 2026-07-16
 
 ## Accumulated Context
 
+### Cross-cutting: Logging & Diagnosability (260730-vlg, 2026-07-30)
+
+**Binding rules now live in `.planning/codebase/LOGGING.md`** — read it before adding any log,
+notification, or early-return on a user-visible path. Headlines:
+
+- **Never fail silently.** Every early return / swallowed error on a user-visible feature path logs
+  why. Deduplicating a *notification* must never deduplicate the *log*.
+- **Two audiences.** `logInfo` stays sparse (that is what all users see); `logVerbose` is
+  exhaustive and free when off — err heavily toward over-inclusion there.
+- **State the consequence**, log the **environment** (interpreter, resolved paths, counts,
+  reproducible command), and **diagnose** rather than just report (`>>>` prefix).
+- **`verboseLogging` is the flag to ask users for** and is safe to request — secrets live behind the
+  separate `logEnvVarPresetContents` opt-in. Never fold sensitive output into a general debug flag.
+- **The session log is unbounded and disk-backed** (`<temp>/gs-behave-bdd-logs/`), assembled
+  file-to-file into the report by `Behave BDD: Save Diagnostic Report`. Streaming, latched write
+  failures, and 7-day pruning of *previous* sessions are load-bearing — see Rule 8 before changing.
+- **Never re-derive control flow from a log message.** Shipped bug: the reproducible command
+  embedded in a spawn error contains "behave" (via the `discover.py` path), which made the
+  "behave not installed" heuristic match every `ImportError` and re-spawn the fallback in a loop.
+  Classify at the source from the narrowest input; carry it on a typed error.
+
 ### v1.6.0 Decisions
 
 - Coarse granularity → 4 phases for v1.6.0, matching the research-suggested build order exactly (scanner/mapping funnel → validation diagnostics → go-to-definition → integration/fixture/docs).
