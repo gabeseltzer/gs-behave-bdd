@@ -18,6 +18,7 @@ export class WindowSettings {
   public readonly multiRootRunWorkspacesInParallel: boolean;
   public readonly xRay: boolean;
   public readonly verboseLogging: boolean;
+  public readonly logEnvVarPresetContents: boolean;
 
   constructor(winConfig: vscode.WorkspaceConfiguration) {
     const get = <T>(key: string): T | undefined => winConfig.get<T>(key);
@@ -32,10 +33,14 @@ export class WindowSettings {
     const verboseLoggingCfg: boolean | undefined = get("verboseLogging");
     if (verboseLoggingCfg === undefined)
       throw "verboseLogging is undefined";
+    const logEnvVarPresetContentsCfg: boolean | undefined = get("logEnvVarPresetContents");
+    if (logEnvVarPresetContentsCfg === undefined)
+      throw "logEnvVarPresetContents is undefined";
 
     this.multiRootRunWorkspacesInParallel = multiRootRunWorkspacesInParallelCfg;
     this.xRay = xRayCfg;
     this.verboseLogging = verboseLoggingCfg;
+    this.logEnvVarPresetContents = logEnvVarPresetContentsCfg;
   }
 }
 
@@ -380,9 +385,11 @@ export class WorkspaceSettings {
     if (wkspUris.length > 0 && this.uri === wkspUris[0])
       logger.logInfoAllWksps(`\ninstance settings:\n${JSON.stringify(winSettingsDic, null, 2)}`);
 
-    // By default, only log the number of presets rather than their full contents (which may be sensitive).
-    // The full contents can be re-enabled via the verboseLogging setting.
-    if (!winSettings.verboseLogging) {
+    // By default, only log the number of presets rather than their full contents (which may be
+    // sensitive). Full contents require the dedicated logEnvVarPresetContents opt-in - deliberately
+    // NOT part of verboseLogging, so that users can be told "turn on verboseLogging and send me the
+    // log" without that instruction also asking them to leak their secrets.
+    if (!winSettings.logEnvVarPresetContents) {
       const presetCount = Object.keys(this.envVarPresets).length;
       rscSettingsDic["envVarPresets"] = `${presetCount} preset${presetCount !== 1 ? "s" : ""} loaded`;
     }

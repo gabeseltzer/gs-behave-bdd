@@ -36,6 +36,7 @@ function makeWinSettings(): WindowSettings {
     multiRootRunWorkspacesInParallel: true,
     xRay: false,
     verboseLogging: false,
+    logEnvVarPresetContents: false,
   }));
 }
 

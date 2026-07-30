@@ -5,6 +5,7 @@ import { getUrisOfWkspFoldersWithFeatures, isFeatureFile } from '../common';
 import { getFeatureFileSteps } from '../parsers/featureParser';
 import { getStepFileStepForFeatureFileStep, getStepMappings } from '../parsers/stepMappings';
 import { getStepFileSteps } from '../parsers/stepsParser';
+import { Logger } from '../logger';
 import { logStepResolutionContext } from './providerHelpers';
 
 export const EXTENSION_ID = "gabeseltzer.gs-behave-bdd";
@@ -14,7 +15,8 @@ export const EXTENSION_ID = "gabeseltzer.gs-behave-bdd";
  * Builds a self-contained diagnostic report describing the extension's view of the world:
  * versions, per-workspace resolved paths, discovery source, and how many step definitions /
  * mappings actually exist. This is what a user pastes into a bug report - it answers "why does
- * nothing resolve?" without a back-and-forth, and needs no verboseLogging setting to produce.
+ * nothing resolve?" without a back-and-forth, and needs no verboseLogging setting to produce
+ * (though it is far more useful with it on).
  */
 export async function buildDiagnosticReport(): Promise<string> {
 
@@ -36,6 +38,7 @@ export async function buildDiagnosticReport(): Promise<string> {
     verboseLogging = config.globalSettings.verboseLogging;
     xRay = config.globalSettings.xRay;
     add(`settings:         verboseLogging=${verboseLogging}, xRay=${xRay}, ` +
+      `logEnvVarPresetContents=${config.globalSettings.logEnvVarPresetContents}, ` +
       `multiRootRunWorkspacesInParallel=${config.globalSettings.multiRootRunWorkspacesInParallel}`);
   }
   catch (e) {
@@ -129,6 +132,15 @@ export async function buildDiagnosticReport(): Promise<string> {
       `explain that specific step)`);
   }
 
+  // The captured log is the bulk of the file and the part that actually explains a silent
+  // failure, so it goes last - the summary above stays readable without scrolling.
+  const { text: transcript, truncated } = config.logger.getTranscript();
+  add();
+  add("===== captured log =====");
+  if (truncated)
+    add(`(NOTE: only the most recent ${Logger.MAX_TRANSCRIPT_LINES} lines are kept - earlier output was dropped)`);
+  add(transcript || "(nothing logged this session)");
+
   add();
   add("===== end of diagnostic report =====");
 
@@ -145,25 +157,38 @@ function stepResolutionDetailOrHint(uri: vscode.Uri): string {
 
 
 /**
- * Command handler: writes the report to the output channel, shows it, and puts it on the
- * clipboard so the user can paste it into a bug report in one step.
+ * Builds the log file name for a report. Timestamped so repeated runs (e.g. before and after
+ * a settings change) don't overwrite each other, and colon-free so it is a legal Windows name.
+ */
+export function diagnosticReportFileName(now: Date): string {
+  const stamp = now.toISOString().replace(/\.\d+Z$/, "").replace(/:/g, "-");
+  return `gs-behave-bdd-diagnostics-${stamp}.log`;
+}
+
+
+/**
+ * Command handler: writes the report to a .log file and opens it. A file rather than the
+ * clipboard because the embedded captured log can run to thousands of lines - too much to
+ * paste into a chat message, but fine to attach to an issue.
  */
 export async function diagnosticReportHandler(): Promise<void> {
   try {
     const report = await buildDiagnosticReport();
 
-    const wkspUris = getUrisOfWkspFoldersWithFeatures(true);
-    if (wkspUris.length > 0) {
-      config.logger.logInfo(`\n${report}`, wkspUris[0]);
-      config.logger.show(wkspUris[0]);
-    }
-    else {
-      config.logger.logInfoAllWksps(`\n${report}`);
-    }
+    const fileUri = vscode.Uri.joinPath(vscode.Uri.file(os.tmpdir()), diagnosticReportFileName(new Date()));
+    await vscode.workspace.fs.writeFile(fileUri, Buffer.from(report, "utf8"));
 
-    await vscode.env.clipboard.writeText(report);
-    void vscode.window.showInformationMessage(
-      "Behave BDD diagnostic report copied to the clipboard (and written to the Behave BDD output channel).");
+    // Open it so the user can eyeball it (and redact anything they'd rather not share)
+    // before attaching it to an issue.
+    const doc = await vscode.workspace.openTextDocument(fileUri);
+    await vscode.window.showTextDocument(doc, { preview: false });
+
+    const picked = await vscode.window.showInformationMessage(
+      `Behave BDD diagnostic report written to ${fileUri.fsPath}`, "Copy Path", "Reveal in Explorer");
+    if (picked === "Copy Path")
+      await vscode.env.clipboard.writeText(fileUri.fsPath);
+    else if (picked === "Reveal in Explorer")
+      await vscode.commands.executeCommand("revealFileInOS", fileUri);
   }
   catch (e: unknown) {
     // entry point function (handler) - show error

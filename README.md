@@ -253,7 +253,7 @@ The status bar indicator is hidden when only one project exists or when `project
 
 ### If you have used a previous version of this extension
 
-- Please read through the [release notes](https://github.com/jimasp/behave-vsc/releases) for breaking changes. If that does not resolve your issue, then please rollback to the previous working version via the vscode uninstall dropdown and raise an [issue](https://github.com/jimasp/behave-vsc/issues).
+- Please read through the [release notes](https://github.com/gabeseltzer/gs-behave-bdd/releases) for breaking changes. If that does not resolve your issue, then please rollback to the previous working version via the vscode uninstall dropdown and raise an [issue](https://github.com/gabeseltzer/gs-behave-bdd/issues).
   
 ### Start here: get a diagnostic report
 
@@ -263,14 +263,16 @@ definition, or no tests appear — collect a report rather than guessing:
 1. Turn on `gs-behave-bdd.verboseLogging` in settings. This makes the extension log *why* it gave up
    at every point where it would otherwise fail silently (step navigation, hover, step discovery).
 2. Retry the thing that isn't working. If it's step navigation, leave the cursor on the step line.
-3. Run the vscode command **`Behave BDD: Copy Diagnostic Report`**. This copies a report to your
-   clipboard (and writes it to the `Behave BDD` output channel) containing versions, the resolved
-   Python interpreter, the features/steps paths actually in use, how many step definitions were
-   loaded, and — if the cursor is on a step — why that specific step didn't resolve.
-4. Paste that into a github [issue](https://github.com/gabeseltzer/gs-behave-bdd/issues).
+3. Run the vscode command **`Behave BDD: Save Diagnostic Report`**. This writes a `.log` file to your
+   temp folder and opens it. It contains versions, the resolved Python interpreter, the
+   features/steps paths actually in use, how many step definitions were loaded, — if the cursor is
+   on a step — why that specific step didn't resolve, and the full captured log for the session.
+4. Skim the file (you can redact anything you'd rather not share), then attach it to a github
+   [issue](https://github.com/gabeseltzer/gs-behave-bdd/issues).
 
-> ⚠️ `verboseLogging` also logs the full contents of your environment variable presets. Review the
-> report for secrets before sharing it.
+> `verboseLogging` does **not** log your environment variable preset values. If you specifically
+> need those in the log, enable `gs-behave-bdd.logEnvVarPresetContents` as well — but note that
+> preset values may contain secrets, so review the file before sharing it.
 
 The three counts near the end of the report localise most problems:
 

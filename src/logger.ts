@@ -8,6 +8,31 @@ export class Logger {
   private channels: { [wkspUri: string]: vscode.OutputChannel } = {};
   public visible = false;
 
+  // vscode gives no way to read an OutputChannel's contents back, so keep our own copy of
+  // everything we write. The diagnostic report file embeds this, making that one file
+  // sufficient for a bug report - the user never has to select-all the output pane.
+  // Bounded so a long behave run (or a noisy verbose session) can't grow without limit.
+  public static readonly MAX_TRANSCRIPT_LINES = 5000;
+  private transcript: string[] = [];
+
+  private capture(text: string, wkspUri?: vscode.Uri) {
+    // inlined rather than using common.basename(), which throws on an empty path - a logging
+    // call must never be the thing that raises
+    const prefix = wkspUri ? `[${wkspUri.path.split("/").pop() || wkspUri.path}] ` : "";
+    this.transcript.push(prefix + text);
+    if (this.transcript.length > Logger.MAX_TRANSCRIPT_LINES)
+      this.transcript.splice(0, this.transcript.length - Logger.MAX_TRANSCRIPT_LINES);
+  }
+
+  // Returns the captured log, plus a note if the head was dropped so a reader of the
+  // diagnostic report is never misled into thinking they have the whole session.
+  public getTranscript(): { text: string; truncated: boolean } {
+    return {
+      text: this.transcript.join("\n"),
+      truncated: this.transcript.length >= Logger.MAX_TRANSCRIPT_LINES,
+    };
+  }
+
   syncChannelsToWorkspaceFolders() {
 
     const wkspUris = getUrisOfWkspFoldersWithFeatures(true);
@@ -67,6 +92,7 @@ export class Logger {
 
   logInfoAllWksps = (text: string, run?: vscode.TestRun) => {
     diagLog(text);
+    this.capture(text);
 
     for (const wkspPath in this.channels) {
       this.channels[wkspPath].appendLine(text);
@@ -79,6 +105,7 @@ export class Logger {
 
   logInfo = (text: string, wkspUri: vscode.Uri, run?: vscode.TestRun) => {
     diagLog(text);
+    this.capture(text, wkspUri);
 
     this.ensureChannel(wkspUri).appendLine(text);
     if (run)
@@ -88,6 +115,7 @@ export class Logger {
   // log info without a line feed (used for logging behave output)
   logInfoNoLF = (text: string, wkspUri: vscode.Uri, run?: vscode.TestRun) => {
     diagLog(text);
+    this.capture(text, wkspUri);
 
     this.ensureChannel(wkspUri).append(text);
     if (run)
@@ -97,16 +125,17 @@ export class Logger {
   // Verbose diagnostic logging, gated on the `verboseLogging` setting.
   //
   // Unlike diagLog()/xRay (which only reaches the DevTools console), this writes to the
-  // "Behave BDD" OUTPUT CHANNEL, so a user can select-all + copy the text straight out of
-  // the output pane and send it to a maintainer. That is the whole point of this method:
-  // use it at every point where the extension gives up silently, so the log explains WHY
-  // a feature (e.g. ctrl+click go-to-definition) did nothing.
+  // "Behave BDD" OUTPUT CHANNEL and the captured transcript, so it lands in the file written
+  // by "Behave BDD: Save Diagnostic Report". That is the whole point of this method: use it at
+  // every point where the extension gives up silently, so the log explains WHY a feature
+  // (e.g. ctrl+click go-to-definition) did nothing.
   logVerbose = (text: string, wkspUri?: vscode.Uri) => {
     if (!verboseLoggingEnabled())
       return;
 
     const msg = `[verbose] ${text}`;
     diagLog(msg);
+    this.capture(msg, wkspUri);
 
     if (wkspUri) {
       this.ensureChannel(wkspUri).appendLine(msg);
@@ -120,6 +149,7 @@ export class Logger {
   // used by settings.ts
   logSettingsWarning = (text: string, wkspUri: vscode.Uri, run?: vscode.TestRun) => {
     diagLog(text, wkspUri, DiagLogType.warn);
+    this.capture(`WARNING: ${text}`, wkspUri);
 
     this.ensureChannel(wkspUri).appendLine(text);
     this.ensureChannel(wkspUri).show(true);
@@ -158,6 +188,7 @@ export class Logger {
                    actions?: WkspErrorAction[]) => {
 
     diagLog(text, wkspUri, logType);
+    this.capture(`${DiagLogType[logType].toUpperCase()}: ${text}`, wkspUri);
 
     if (wkspUri) {
       this.ensureChannel(wkspUri).appendLine(text);

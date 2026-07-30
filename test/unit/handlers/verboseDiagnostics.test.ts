@@ -14,7 +14,9 @@ import * as stepsParserModule from '../../../src/parsers/stepsParser';
 import * as stepMappingsModule from '../../../src/parsers/stepMappings';
 import * as featureParserModule from '../../../src/parsers/featureParser';
 import { logStepResolutionContext } from '../../../src/handlers/providerHelpers';
-import { buildDiagnosticReport } from '../../../src/handlers/diagnosticReportHandler';
+import {
+  buildDiagnosticReport, diagnosticReportFileName, diagnosticReportHandler,
+} from '../../../src/handlers/diagnosticReportHandler';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const vscode = require('vscode');
@@ -25,6 +27,7 @@ function stubVerboseLogging(enabled: boolean) {
     multiRootRunWorkspacesInParallel: true,
     xRay: false,
     verboseLogging: enabled,
+    logEnvVarPresetContents: false,
   }));
 }
 
@@ -92,6 +95,66 @@ suite('verbose diagnostic logging', () => {
     test('does not throw when no wkspUri is supplied and no channels exist', () => {
       stubVerboseLogging(true);
       assert.doesNotThrow(() => new Logger().logVerbose("no channels yet"));
+    });
+
+  });
+
+
+  suite('Logger transcript capture', () => {
+
+    const wkspUri = vscode.Uri.file('/fake/workspace');
+
+    setup(() => {
+      sinon.stub(vscode.window, 'createOutputChannel').returns({
+        append: () => { /* unused */ },
+        appendLine: () => { /* unused */ },
+        clear: () => { /* unused */ },
+        show: () => { /* unused */ },
+        hide: () => { /* unused */ },
+        dispose: () => { /* unused */ },
+        replace: () => { /* unused */ },
+        name: 'Behave BDD',
+      });
+    });
+
+    test('captures logInfo output, prefixed with the workspace name', () => {
+      stubVerboseLogging(false);
+      const logger = new Logger();
+      logger.logInfo("Searching for step definitions...", wkspUri);
+
+      const { text, truncated } = logger.getTranscript();
+      assert.strictEqual(text, "[workspace] Searching for step definitions...");
+      assert.strictEqual(truncated, false);
+    });
+
+    test('captures verbose lines so they reach the diagnostic report file', () => {
+      stubVerboseLogging(true);
+      const logger = new Logger();
+      logger.logVerbose("step navigation: gave up", wkspUri);
+
+      assert.ok(logger.getTranscript().text.includes('[verbose] step navigation: gave up'));
+    });
+
+    test('does not capture verbose lines when verboseLogging is off', () => {
+      stubVerboseLogging(false);
+      const logger = new Logger();
+      logger.logVerbose("should not be captured", wkspUri);
+
+      assert.strictEqual(logger.getTranscript().text, "");
+    });
+
+    test('drops the oldest lines and reports truncation past the cap', () => {
+      stubVerboseLogging(false);
+      const logger = new Logger();
+      for (let i = 0; i < 5100; i++)
+        logger.logInfo(`line ${i}`, wkspUri);
+
+      const { text, truncated } = logger.getTranscript();
+      const captured = text.split("\n");
+      assert.strictEqual(captured.length, 5000);
+      assert.strictEqual(truncated, true);
+      assert.ok(!text.includes('line 0\n'), 'earliest lines should have been dropped');
+      assert.ok(captured[captured.length - 1].endsWith('line 5099'));
     });
 
   });
@@ -220,6 +283,54 @@ suite('verbose diagnostic logging', () => {
       const report = await buildDiagnosticReport();
 
       assert.ok(report.includes('settings FAILED to load for this workspace'), report);
+    });
+
+    test('embeds the captured log, so the file alone is enough for a bug report', async () => {
+      sinon.stub(commonModule, 'getUrisOfWkspFoldersWithFeatures').returns([]);
+      sinon.stub(configModule.config.logger, 'getTranscript').returns({
+        text: '[verbose] step navigation: no step definition mapped to "Given a thing"',
+        truncated: false,
+      });
+
+      const report = await buildDiagnosticReport();
+
+      assert.ok(report.includes('===== captured log ====='), report);
+      assert.ok(report.includes('step navigation: no step definition mapped'), report);
+    });
+
+    test('says so when the captured log was truncated', async () => {
+      sinon.stub(commonModule, 'getUrisOfWkspFoldersWithFeatures').returns([]);
+      sinon.stub(configModule.config.logger, 'getTranscript').returns({ text: 'some lines', truncated: true });
+
+      const report = await buildDiagnosticReport();
+
+      assert.ok(report.includes('earlier output was dropped'), report);
+    });
+
+  });
+
+
+  suite('diagnosticReportHandler', () => {
+
+    test('file name is timestamped and contains no characters illegal on Windows', () => {
+      const name = diagnosticReportFileName(new Date(Date.UTC(2026, 6, 30, 14, 5, 33, 123)));
+      assert.strictEqual(name, 'gs-behave-bdd-diagnostics-2026-07-30T14-05-33.log');
+      assert.ok(!/[:*?"<>|]/.test(name), 'must be a legal Windows filename');
+    });
+
+    test('writes the report to a .log file and opens it', async () => {
+      stubVerboseLogging(false);
+      sinon.stub(commonModule, 'getUrisOfWkspFoldersWithFeatures').returns([]);
+      const writeFileStub = sinon.stub(vscode.workspace.fs, 'writeFile').resolves();
+      const showDocStub = sinon.stub(vscode.window, 'showTextDocument').resolves({});
+
+      await diagnosticReportHandler();
+
+      assert.strictEqual(writeFileStub.callCount, 1);
+      const [uri, content] = writeFileStub.firstCall.args;
+      assert.ok(uri.fsPath.endsWith('.log'), uri.fsPath);
+      assert.ok(content.toString().includes('===== Behave BDD diagnostic report ====='));
+      assert.strictEqual(showDocStub.callCount, 1, 'the report file should be opened for review');
     });
 
   });

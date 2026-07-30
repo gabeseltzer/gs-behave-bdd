@@ -257,6 +257,9 @@ export const workspace = {
       if (key === 'verboseLogging') {
         return false;
       }
+      if (key === 'logEnvVarPresetContents') {
+        return false;
+      }
       if (key === 'importStrategy') {
         return 'useBundled';
       }
