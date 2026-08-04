@@ -103,6 +103,18 @@
 					"markdownDescription": "Show reference counts above step definitions in Python files via CodeLens.",
 					"default": true
 				},
+				"gs-behave-bdd.formatBlankLines": {
+					"scope": "resource",
+					"type": "boolean",
+					"markdownDescription": "When formatting a feature file, insert a blank line before each `Background:`, `Rule:`, `Scenario:`, `Scenario Outline:`, `Examples:` and tag line, and collapse runs of blank lines down to one.\n\nDisable this if you want the formatter to only re-indent your feature files, without restructuring them.\n\nNote that the indent character and width are *not* controlled here — they come from your editor settings for the document (`editor.insertSpaces` / `editor.tabSize`, including any `[gherkin]` override or `.editorconfig` value).",
+					"default": true
+				},
+				"gs-behave-bdd.formatAlignTables": {
+					"scope": "resource",
+					"type": "boolean",
+					"markdownDescription": "When formatting a feature file, pad the cells of data tables and `Examples:` tables so that the pipes line up.\n\nCell widths are counted in code points, so tables containing full-width or CJK characters will be padded by character count rather than by rendered width. Rows with differing cell counts are left untouched.",
+					"default": true
+				},
 				"gs-behave-bdd.verboseLogging": {
 					"scope": "window",
 					"type": "boolean",
