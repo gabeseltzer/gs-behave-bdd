@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { getWorkspaceUriForFile, getLines } from '../common';
 import { config } from '../configuration';
 import { parser } from '../extension';
-import { featureFileStepRe } from '../parsers/gherkinPatterns';
+import { featureFileStepRe, getStepParamSpans } from '../parsers/gherkinPatterns';
 import { getStepFileStepForFeatureFileStep } from '../parsers/stepMappings';
 import { parseRepWildcard } from '../parsers/stepsParser';
 
@@ -90,25 +90,13 @@ export class SemHighlightProvider implements vscode.DocumentSemanticTokensProvid
 
 			if (stepFileStep && stepFileStep.textAsRe.includes(parseRepWildcard)) {
 				const grpWldText = stepFileStep.textAsRe.replaceAll(parseRepWildcard, `(${parseRepWildcard})`);
-				const wcMatches = new RegExp(grpWldText).exec(line);
 
-				if (wcMatches && wcMatches.length > 1) {
-
-					wcMatches.shift();
-					wcMatches.forEach((match) => {
-						if (stepFileStep.textAsRe.startsWith(parseRepWildcard)) {
-							const m = featureFileStepRe.exec(line);
-							if (m)
-								match = match.replace(m[1], "").trim();
-						}
-
-						r.push({
-							line: i,
-							startCharacter: line.indexOf(match),
-							length: match.length,
-							tokenType: 'function'
-						});
-
+				for (const span of getStepParamSpans(line, grpWldText, featureFileStepRe)) {
+					r.push({
+						line: i,
+						startCharacter: span.start,
+						length: span.length,
+						tokenType: 'function'
 					});
 				}
 			}

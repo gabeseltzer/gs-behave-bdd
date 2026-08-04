@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { couldBePythonStepsFile, getWorkspaceSettingsForFile } from '../common';
-import { executeStepsKeywordRe } from '../parsers/gherkinPatterns';
+import { executeStepsKeywordRe, getStepParamSpans } from '../parsers/gherkinPatterns';
 import { ExecuteStepsCallStep } from '../parsers/executeStepsParser';
 import { matchExecuteStepsContent } from '../parsers/stepMappings';
 import { StepFileStep, parseRepWildcard } from '../parsers/stepsParser';
@@ -43,28 +43,11 @@ export function computeParamRanges(matches: { callStep: ExecuteStepsCallStep; st
       continue;
 
     const grpWldText = stepFileStep.textAsRe.replaceAll(parseRepWildcard, `(${parseRepWildcard})`);
-    const wcMatches = new RegExp(grpWldText).exec(callStep.text);
-    if (!wcMatches || wcMatches.length < 2)
-      continue;
 
-    wcMatches.shift();
-    for (let match of wcMatches) {
-      // a leading wildcard can swallow the step keyword - strip it before locating the span
-      if (stepFileStep.textAsRe.startsWith(parseRepWildcard)) {
-        const m = executeStepsKeywordRe.exec(callStep.text);
-        if (m)
-          match = match.replace(m[1], "").trim();
-      }
-      if (!match)
-        continue;
-
-      const idx = callStep.text.indexOf(match);
-      if (idx === -1)
-        continue;
-
+    for (const span of getStepParamSpans(callStep.text, grpWldText, executeStepsKeywordRe)) {
       const line = callStep.range.start.line;
-      const startCol = callStep.range.start.character + idx;
-      ranges.push(new vscode.Range(line, startCol, line, startCol + match.length));
+      const startCol = callStep.range.start.character + span.start;
+      ranges.push(new vscode.Range(line, startCol, line, startCol + span.length));
     }
   }
 
