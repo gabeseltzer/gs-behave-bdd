@@ -100,28 +100,47 @@ try {
 
 ## Logging
 
+> **See [LOGGING.md](LOGGING.md) for the binding design rules** (never fail silently, sparse
+> default output vs exhaustive verbose, sensitive data opt-ins, the unbounded session log, and the
+> checklist for new code). What follows is the API reference only.
+
 **Framework:** 
 - Custom `Logger` class wrapping VS Code's `OutputChannel` API
 - Per-workspace output channels for multi-root workspace support
 - Entry point: `config.logger` singleton
+- Everything written is mirrored to an unbounded per-window session log on disk, because vscode
+  offers no way to read an `OutputChannel` back
 
 **Patterns:**
-- `logInfo(text, wkspUri, testRun?)`: Log info message to workspace channel and optional test run
+- `logInfo(text, wkspUri, testRun?)`: Log info message to workspace channel and optional test run.
+  Reserve for milestones and real problems — this is what users see by default
+- `logVerbose(text, wkspUri?)`: Exhaustive diagnostics, no-op unless `verboseLogging` is enabled.
+  Use at every point where the extension gives up, so the log explains why
 - `logInfoNoLF(text, wkspUri, testRun?)`: Log without line feed (for streaming behave output)
 - `logSettingsWarning(text, wkspUri)`: Log warning with user notification
 - `showError(error, wkspUri?, testRun?)`: Log error with automatic formatting and user dialog
-- `diagLog(message, wkspUri?, logType?)`: Global diagnostic logging (only when `xRay` setting enabled)
+- `diagLog(message, wkspUri?, logType?)`: DevTools-console-only logging (when `xRay` is enabled).
+  Prefer `logVerbose` for anything a *user* may need to send you
+- `getSessionLogPath()` / `flushSessionLog()`: for the diagnostic report; flush before reading
+
+**Settings:**
+- `verboseLogging` — **the** flag to ask users for. Covers output-channel diagnostics, DevTools
+  console diagnostics, and error stack traces. Safe to request: logs no secrets
+- `logEnvVarPresetContents` — separate opt-in, logs env var preset values (may contain secrets)
+- `xRay` — **deprecated**, honoured as an alias for the console half of `verboseLogging`;
+  migrated away by `xRay-self` (see `src/migrations/logging.ts`)
 
 **Usage:**
 - Create detailed logs for parsing/test execution events
-- Use `diagLog()` for internal debugging (with `xRay` setting check)
 - Log workspace context when available to support multi-workspace debugging
+- State the *consequence* of a failure, not just the error string
 
 Example (from `logger.ts`):
 ```typescript
 logInfo = (text: string, wkspUri: vscode.Uri, run?: vscode.TestRun) => {
   diagLog(text);
-  this.channels[wkspUri.path].appendLine(text);
+  this.capture(text, wkspUri);   // mirrors to the session log
+  this.ensureChannel(wkspUri).appendLine(text);
   if (run)
     run.appendOutput(text + "\r\n");
 };

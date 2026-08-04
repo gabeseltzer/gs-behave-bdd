@@ -16,6 +16,21 @@ export function getShortPathOnWindows(longPath: string): string {
   return longPath;
 }
 
+// The VSCode extension host exports ELECTRON_RUN_AS_NODE=1 plus a set of VSCODE_* vars to every
+// process it spawns. If the test runner is launched from such a process (e.g. a terminal or agent
+// owned by an extension), those vars leak into the VSCode instance we spawn here, so its Electron
+// binary starts as plain node, treats the first launch arg as a script, and dies with
+// "Cannot find module .../example-projects/simple" before any test runs.
+// child_process drops env keys whose value is undefined, so this unsets them for the child only.
+export function getCleanTestEnv(): { [key: string]: string | undefined } {
+  const env: { [key: string]: string | undefined } = { ELECTRON_RUN_AS_NODE: undefined };
+  for (const key of Object.keys(process.env)) {
+    if (key.startsWith('VSCODE_'))
+      env[key] = undefined;
+  }
+  return env;
+}
+
 export async function installMsPythonExtension(vscodeExecutablePath: string): Promise<void> {
   console.log('installing ms-python.python extension...');
   const [cliPath, ...args] = resolveCliArgsFromVSCodeExecutablePath(vscodeExecutablePath);

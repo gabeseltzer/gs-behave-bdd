@@ -961,6 +961,27 @@ def main() -> None:
   except (OSError, ValueError, json.JSONDecodeError) as e:
     print(json.dumps({"error": f"Unexpected error: {e!s}"}), file=sys.stderr)
     sys.exit(1)
+  except Exception as e:  # noqa: BLE001
+    # Catch-all so an unanticipated exception type still produces a structured, diagnosable
+    # result instead of a bare traceback that the extension can only report as "exited with
+    # code 1". The traceback and environment are what make such a failure actionable.
+    print(
+      json.dumps(
+        {
+          "error": f"Unexpected {type(e).__name__} during step discovery: {e!s}",
+          "error_kind": "environmental",
+          "steps": [],
+          "fixtures": [],
+          "traceback": "".join(traceback.format_exception(type(e), e, e.__traceback__)),
+          "diagnostics": {
+            "python_executable": sys.executable,
+            "sys_path": [p for p in sys.path if p],
+          },
+        }
+      ),
+      file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 if __name__ == "__main__":

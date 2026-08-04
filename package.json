@@ -77,7 +77,8 @@
 				"gs-behave-bdd.xRay": {
 					"scope": "window",
 					"type": "boolean",
-					"markdownDescription": "Specifies whether extension errors have stack traces and diagnostics are logged in console. The console output is viewable via the vscode command `Developer: Toggle Developer Tools`. Diagnostic logs are noisy, and may have a small performance impact.",
+					"markdownDescription": "Specifies whether extension errors have stack traces and diagnostics are logged in console. The console output is viewable via the vscode command `Developer: Toggle Developer Tools`.",
+					"markdownDeprecationMessage": "**Deprecated:** use `#gs-behave-bdd.verboseLogging#` instead, which now covers console diagnostics and error stack traces as well as the output channel — one setting instead of two. This still works, and the extension will offer to migrate it for you.",
 					"default": false
 				},
 				"gs-behave-bdd.stepDefinitionSearchTimeout": {
@@ -118,7 +119,13 @@
 				"gs-behave-bdd.verboseLogging": {
 					"scope": "window",
 					"type": "boolean",
-					"markdownDescription": "⚠️ **Warning:** Enabling this may log sensitive information to the output channel, including the full contents of your environment variable presets.\n\nWhen enabled, additional developer debugging information is written to the output channel.",
+					"markdownDescription": "Enable this when something isn't working. Detailed diagnostics are written to the `Behave BDD` output channel, including *why* step navigation (ctrl+click / F12), hover, and step discovery gave up — which is otherwise silent. Then run `Behave BDD: Save Diagnostic Report` to write everything to a file you can attach to a bug report.\n\nAlso enables error stack traces and console diagnostics (viewable via `Developer: Toggle Developer Tools`), replacing the deprecated `#gs-behave-bdd.xRay#` setting.\n\nThis does **not** log the contents of your environment variable presets — see `#gs-behave-bdd.logEnvVarPresetContents#` if you need those.",
+					"default": false
+				},
+				"gs-behave-bdd.logEnvVarPresetContents": {
+					"scope": "window",
+					"type": "boolean",
+					"markdownDescription": "Log the full contents of `#gs-behave-bdd.envVarPresets#` to the output channel instead of just a count.\n\n⚠️ **Warning:** preset values may include secrets such as tokens or passwords. Only enable this while debugging your own env var configuration, and review the output before sharing it with anyone.",
 					"default": false
 				},
 				"gs-behave-bdd.discoveryDepth": {
@@ -201,6 +208,10 @@
 			{
 				"command": "gs-behave-bdd.openMigrationsPanel",
 				"title": "Behave BDD: Open Migrations Panel"
+			},
+			{
+				"command": "gs-behave-bdd.diagnosticReport",
+				"title": "Behave BDD: Save Diagnostic Report (for bug reports)"
 			}
 		],
 		"keybindings": [
@@ -318,7 +329,7 @@
 	"name": "gs-behave-bdd",
 	"displayName": "Behave BDD",
 	"description": "Full language support for Behave feature files. Run and debug tests. Navigate between steps and definitions. Forked from jimasp's behave-vsc",
-	"version": "1.6.1",
+	"version": "1.6.2",
 	"icon": "images/gs-behave-bdd.png",
 	"galleryBanner": {
 		"color": "#2B2B2B",

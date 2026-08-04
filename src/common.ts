@@ -271,6 +271,18 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
   workspaceFoldersWithFeatures = [];
   discoveryCache.clear();
 
+  // Every `return false` below means "this folder is not a behave project", after which the
+  // extension does NOTHING for it - no test items, no step parsing, no ctrl+click. That was
+  // entirely silent, and is the most common cause of "the extension isn't working for me", so
+  // record a reason per rejected folder and log the lot after the loop. Collected rather than
+  // logged inline to keep this function's hot path free of I/O (see the <1ms requirement).
+  const rejections: string[] = [];
+  const accepted: string[] = [];
+  const reject = (folder: vscode.WorkspaceFolder, reason: string): false => {
+    rejections.push(`  "${folder.name}" (${folder.uri.fsPath}): ${reason}`);
+    return false;
+  };
+
   function hasFeaturesFolder(folder: vscode.WorkspaceFolder): boolean {
 
     const wkspConfig = vscode.workspace.getConfiguration("gs-behave-bdd", folder.uri);
@@ -304,7 +316,7 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
             `Behave BDD will ignore this workspace until the path is corrected.`,
             "OK"
           );
-          return false;
+          return reject(folder, `configured projectPath "${projectPath}" does not exist on disk (looked for "${fullPath}")`);
         }
       }
 
@@ -331,7 +343,10 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
       const featuresUri = vscode.Uri.joinPath(projectUri, "features");
       const hasDefaultFeaturesFolder = fs.existsSync(featuresUri.fsPath);
       if (!hasDefaultFeaturesFolder) {
-        return false; // probably a workspace with no behave requirements
+        // probably a workspace with no behave requirements
+        return reject(folder,
+          `gs-behave-bdd.projectPath is set but no featuresPaths were resolved, and the default ` +
+          `features folder "${featuresUri.fsPath}" does not exist. Set gs-behave-bdd.featuresPaths.`);
       }
       discoveryCache.set(uriId(folder.uri), { source: "settings", featuresUris: [featuresUri] });
       return true;
@@ -385,7 +400,9 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
         }
 
         // ALL paths failed — do NOT fall through to convention (D-06)
-        return false;
+        return reject(folder,
+          `every "paths" entry in ${configResult.configFileUri.fsPath} is missing on disk ` +
+          `(${dedupResult.rawPaths.join(", ")}) - see the Problems pane for per-path errors`);
       } else {
         // ok:false -- malformed config file; capture error, fall through to convention (D-06)
         // Store a partial entry so Phase 3 can read the configError
@@ -514,7 +531,13 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
       }
     }
 
-    return false;
+    // NOTE: deliberately does not report the configured discoveryDepth - D-11 forbids re-reading
+    // that setting at lookup time (guarded by a structural test in projectList.test.ts).
+    return reject(folder,
+      `no behave project found - there is no behave config file (behave.ini, .behaverc, setup.cfg, ` +
+      `tox.ini, pyproject.toml) with a usable "paths" entry, no "features" folder at the root, no ` +
+      `gs-behave-bdd.projectPath/featuresPaths setting, and the subdirectory scan (see ` +
+      `gs-behave-bdd.discoveryDepth) found nothing either`);
   }
 
 
@@ -526,11 +549,34 @@ export const getUrisOfWkspFoldersWithFeatures = (forceRefresh = false): vscode.U
   for (const folder of folders) {
     if (hasFeaturesFolder(folder)) {
       workspaceFoldersWithFeatures.push(folder.uri);
+      const entry = discoveryCache.get(uriId(folder.uri));
+      accepted.push(`  "${folder.name}": source=${entry?.source ?? "unknown"}` +
+        (entry?.configFileUri ? `, config=${entry.configFileUri.fsPath}` : "") +
+        `, features=${(entry?.featuresUris ?? []).map(u => u.fsPath).join(", ")}`);
     }
   }
 
   diagLog(`perf info: getUrisOfWkspFoldersWithFeatures took ${performance.now() - start} ms, ` +
     `workspaceFoldersWithFeatures: ${workspaceFoldersWithFeatures.length}`);
+
+  // logVerbose is a no-op unless the user turned verboseLogging on, so this normally costs
+  // nothing. It is the ground truth for "why does the extension ignore my project?".
+  const detail = [
+    `project discovery: examined ${folders.length} workspace folder(s), accepted ${workspaceFoldersWithFeatures.length}`,
+    accepted.length ? `accepted:\n${accepted.join("\n")}` : "",
+    rejections.length ? `NOT recognised as behave projects:\n${rejections.join("\n")}` : "",
+  ].filter(Boolean).join("\n");
+  config.logger.logVerbose(detail);
+
+  // Nothing was accepted, so the extension is about to do nothing at all for this window. That
+  // is worth stating unconditionally (not just under verboseLogging) - it is otherwise invisible.
+  // Note the async subdirectory scanner may still discover configs after this, in which case a
+  // later pass logs a non-zero count.
+  if (workspaceFoldersWithFeatures.length === 0 && rejections.length > 0) {
+    config.logger.logInfoAllWksps(
+      `Behave BDD: no behave project was found in any open workspace folder, so no tests, step ` +
+      `parsing, or step navigation will be available. Reasons per folder:\n${rejections.join("\n")}`);
+  }
 
   if (workspaceFoldersWithFeatures.length === 0) {
     if (folders.length === 1 && folders[0].name === "gs-behave-bdd")

@@ -255,8 +255,40 @@ The status bar indicator is hidden when only one project exists or when `project
 
 ### If you have used a previous version of this extension
 
-- Please read through the [release notes](https://github.com/jimasp/behave-vsc/releases) for breaking changes. If that does not resolve your issue, then please rollback to the previous working version via the vscode uninstall dropdown and raise an [issue](https://github.com/jimasp/behave-vsc/issues).
+- Please read through the [release notes](https://github.com/gabeseltzer/gs-behave-bdd/releases) for breaking changes. If that does not resolve your issue, then please rollback to the previous working version via the vscode uninstall dropdown and raise an [issue](https://github.com/gabeseltzer/gs-behave-bdd/issues).
   
+### Start here: get a diagnostic report
+
+If the extension appears to do nothing — e.g. ctrl+click / F12 on a step doesn't jump to its Python
+definition, or no tests appear — collect a report rather than guessing:
+
+1. Turn on `gs-behave-bdd.verboseLogging` in settings. This makes the extension log *why* it gave up
+   at every point where it would otherwise fail silently (step navigation, hover, step discovery).
+2. Retry the thing that isn't working. If it's step navigation, leave the cursor on the step line.
+3. Run the vscode command **`Behave BDD: Save Diagnostic Report`**. This writes a `.log` file to your
+   temp folder and opens it. It contains versions, the resolved Python interpreter, the
+   features/steps paths actually in use, how many step definitions were loaded, — if the cursor is
+   on a step — why that specific step didn't resolve, and then the **complete log for the session**.
+   Nothing is truncated, so the file can be large; that's expected, attach it as-is.
+4. Skim the file (you can redact anything you'd rather not share), then attach it to a github
+   [issue](https://github.com/gabeseltzer/gs-behave-bdd/issues).
+
+> `verboseLogging` does **not** log your environment variable preset values. If you specifically
+> need those in the log, enable `gs-behave-bdd.logEnvVarPresetContents` as well — but note that
+> preset values may contain secrets, so review the file before sharing it.
+
+Everything the extension writes to the `Behave BDD` output channel is also mirrored to a session
+log in `<temp>/gs-behave-bdd-logs/`, one file per vscode window, which is what the report appends.
+These are never truncated; logs from sessions older than 7 days are cleaned up automatically.
+
+The three counts near the end of the report localise most problems:
+
+| Symptom in the report | Likely cause |
+| --- | --- |
+| `parsed feature file steps: 0` | the configured features path doesn't contain your `.feature` files |
+| `loaded step definitions: 0` | step discovery failed, or there's no `steps` folder where the extension looked |
+| both non-zero but `mappings: 0` | step text doesn't match any definition's pattern, or step files failed to load (check the Problems pane) |
+
 ### Otherwise
 
 - Does your project meet the [workspace requirements](#workspace-requirements) and have the [required project directory structure](#required-project-directory-structure)?
@@ -273,7 +305,7 @@ The status bar indicator is hidden when only one project exists or when `project
 - Check if the issue has already been reported in github [issues](https://github.com/gabeseltzer/gs-behave-bdd/issues?q=is%3Aissue).
 - Try temporarily disabling other extensions.
 - Have you recently upgraded vscode, and does your python/behave environment match the one tested for this release? You can check the environment tested for each release in [github](https://github.com/gabeseltzer/gs-behave-bdd/releases) and downgrade as required.
-- Any extension errors should pop up in a notification window, but you can also look at debug logs and error stacks by enabling `xRay` in the extension settings and using vscode command "Developer: Toggle Developer Tools".
+- Any extension errors should pop up in a notification window, but you can also look at debug logs and error stacks by enabling `verboseLogging` in the extension settings and using vscode command "Developer: Toggle Developer Tools". (`xRay` is the deprecated name for this; `verboseLogging` now covers both the console diagnostics and the output channel. The extension will offer to migrate the setting for you.)
 - The extension is only tested with a few example projects. It's possible that something specific to your project/setup/environment is not accounted for. See [Contributing](CONTRIBUTING.md) for instructions on debugging the extension with your own project. (If you debug with your own project, you may also wish to check whether the same issue occurs with one of the example project workspaces.)
 
 ---

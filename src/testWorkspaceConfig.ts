@@ -42,6 +42,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   private runParallel: boolean | undefined;
   private xRay: boolean | undefined;
   private verboseLogging: boolean | undefined;
+  private logEnvVarPresetContents: boolean | undefined;
   private importStrategy: string | undefined;
   private stepDefinitionSearchTimeout: number | undefined;
   private discoveryDepth: number | undefined;
@@ -52,7 +53,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   constructor({
     envVarOverrides, envVarPresets, activeEnvVarPreset, projectPath, featuresPaths, justMyCode,
     multiRootRunWorkspacesInParallel,
-    runParallel, xRay, verboseLogging, importStrategy, stepDefinitionSearchTimeout, discoveryDepth, discoveryStopOnFirstHit, suppressedNotifications
+    runParallel, xRay, verboseLogging, logEnvVarPresetContents, importStrategy, stepDefinitionSearchTimeout, discoveryDepth, discoveryStopOnFirstHit, suppressedNotifications
   }: {
     envVarOverrides: { [name: string]: string } | undefined,
     envVarPresets?: { [presetName: string]: { [name: string]: string } } | undefined,
@@ -64,6 +65,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     runParallel: boolean | undefined,
     xRay: boolean | undefined,
     verboseLogging?: boolean | undefined,
+    logEnvVarPresetContents?: boolean | undefined,
     importStrategy?: string | undefined,
     stepDefinitionSearchTimeout?: number | undefined,
     discoveryDepth?: number | undefined,
@@ -80,6 +82,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     this.multiRootRunWorkspacesInParallel = multiRootRunWorkspacesInParallel;
     this.xRay = xRay;
     this.verboseLogging = verboseLogging;
+    this.logEnvVarPresetContents = logEnvVarPresetContents;
     this.importStrategy = importStrategy;
     this.stepDefinitionSearchTimeout = stepDefinitionSearchTimeout;
     this.discoveryDepth = discoveryDepth;
@@ -117,6 +120,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.xRay === undefined ? false : this.xRay);
       case "verboseLogging":
         return <T><unknown>(this.verboseLogging === undefined ? false : this.verboseLogging);
+      case "logEnvVarPresetContents":
+        return <T><unknown>(this.logEnvVarPresetContents === undefined ? false : this.logEnvVarPresetContents);
       case "importStrategy":
         return <T><unknown>(this.importStrategy === undefined ? "useBundled" : this.importStrategy);
       case "stepDefinitionSearchTimeout":
@@ -174,6 +179,9 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         break;
       case "verboseLogging":
         response = <T><unknown>this.verboseLogging;
+        break;
+      case "logEnvVarPresetContents":
+        response = <T><unknown>this.logEnvVarPresetContents;
         break;
       case "importStrategy":
         response = <T><unknown>this.importStrategy;

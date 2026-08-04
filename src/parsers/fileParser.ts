@@ -250,6 +250,20 @@ export class FileParser {
 
     const stepFiles = allPyFiles.filter(uri => isStepsFile(uri));
 
+    config.logger.logVerbose(
+      `step discovery: searched ${wkspSettings.featuresUris.map(u => u.fsPath).join(", ")} ` +
+      `(steps search paths: ${wkspSettings.stepsSearchUris.map(u => u.fsPath).join(", ")})\n` +
+      `  found ${allPyFiles.length} .py file(s), of which ${stepFiles.length} look like step files`,
+      wkspSettings.uri);
+    if (stepFiles.length === 0) {
+      // no step files => no step definitions => ctrl+click can never resolve. Almost always a
+      // wrong steps folder location rather than an execution failure, so name the paths searched.
+      config.logger.logVerbose(
+        `step discovery: >>> NO step files found. Step definitions must live in a "steps" folder under a ` +
+        `configured features path. Nothing will resolve until this is fixed.`,
+        wkspSettings.uri);
+    }
+
     // Load all steps and fixtures using behave's built-in registry (handles imports automatically)
     // We load BEFORE deleting old steps so that on failure we keep the previous valid definitions
     try {
@@ -271,6 +285,11 @@ export class FileParser {
       const stepsPaths = stepsDirs.length > 0 ? stepsDirs : [wkspSettings.stepsSearchUri.fsPath];
 
       const loadBehaveStart = performance.now();
+      config.logger.logVerbose(
+        `step discovery: interpreter "${pythonExec}", cwd "${wkspSettings.projectUri.fsPath}", ` +
+        `importStrategy "${wkspSettings.importStrategy}", timeout ${wkspSettings.stepDefinitionSearchTimeout}s\n` +
+        `  step dirs passed to behave: ${stepsPaths.join(", ")}`,
+        wkspSettings.uri);
       config.logger.logInfo(`Searching for step definitions...`, wkspSettings.uri);
       const result = await loadFromBehave(
         pythonExec,
@@ -285,6 +304,12 @@ export class FileParser {
       const loadBehaveElapsed = Math.round(performance.now() - loadBehaveStart);
       diagLog(`${caller}: _parseStepsFiles loadFromBehave took ${loadBehaveElapsed}ms, returned ${result.steps.length} steps and ${result.fixtures.length} fixtures`);
       config.logger.logInfo(`Step definition search complete in ${loadBehaveElapsed}ms`, wkspSettings.uri);
+      config.logger.logVerbose(
+        `step discovery: behave returned ${result.steps.length} step definition(s) and ${result.fixtures.length} fixture(s)` +
+        (result.failedFiles?.length ? `\n  file(s) that failed to load: ${result.failedFiles.map(f => `${f.filePath} (${f.kind}: ${f.errorMessage})`).join("; ")}` : "") +
+        (result.mockedModules?.length ? `\n  missing modules stubbed out: ${result.mockedModules.join(", ")}` : "") +
+        (result.duplicates?.length ? `\n  duplicate step definitions: ${result.duplicates.length}` : ""),
+        wkspSettings.uri);
 
       if (result.stderr) {
         config.logger.logInfo(`behave stderr output:\n${result.stderr}`, wkspSettings.uri);
@@ -350,7 +375,21 @@ export class FileParser {
       // code, so they keep the warning popup.
       const errMsg = e instanceof Error ? e.message : String(e);
       diagLog(`behave step loading error: ${errMsg}`);
-      config.logger.logInfo(`Failed to load step definitions: ${errMsg}`, wkspSettings.uri);
+      // Include the environment the search actually ran in. Without it this reads as "it just
+      // doesn't work"; with it, the usual causes (wrong interpreter/virtualenv, bundled behave
+      // missing from a broken install, a steps folder that isn't where the extension looked)
+      // are all visible in one place.
+      config.logger.logInfo(
+        `Failed to load step definitions: ${errMsg}\n` +
+        `  step definition search ran with:\n` +
+        `    project (cwd):    ${wkspSettings.projectUri.fsPath}\n` +
+        `    features paths:   ${wkspSettings.featuresUris.map(u => u.fsPath).join(", ")}\n` +
+        `    step files found: ${stepFiles.length}\n` +
+        `    importStrategy:   ${wkspSettings.importStrategy}\n` +
+        `    timeout:          ${wkspSettings.stepDefinitionSearchTimeout}s\n` +
+        `  No step definitions could be loaded, so step navigation (ctrl+click / F12), hover, and ` +
+        `missing-step diagnostics will not work for this workspace.`,
+        wkspSettings.uri);
       this._notifyStepLoadError(errMsg);
       this._showStepLoadWarning(errMsg, wkspSettings.uri);
       // Return the count of step files found (not 0) so callers know files exist even though loading failed
@@ -363,7 +402,17 @@ export class FileParser {
   // discover.py explicitly classified the error as environmental.
   private _handleWholesaleLoadError(result: BehaveDiscoveryResult, wkspSettings: WorkspaceSettings) {
     diagLog(`behave step loading error: ${result.error}`);
-    config.logger.logInfo(`Failed to load step definitions: ${result.error}`, wkspSettings.uri);
+    // This path is deliberately quiet in the UI for code-shaped errors (a syntax/import problem
+    // the user is probably mid-edit on), which means the log is the ONLY standing record of it -
+    // so spell out the consequence here rather than just the error string.
+    config.logger.logInfo(
+      `Failed to load step definitions: ${result.error}\n` +
+      `  Previously loaded step definitions (if any) have been kept, so step navigation may be ` +
+      `stale or unavailable until this is fixed. ` +
+      (result.errorKind === "code"
+        ? `This looks like a syntax or import error in your own files - see the Problems pane.`
+        : `This looks like an environment problem (interpreter, behave install, or timeout).`),
+      wkspSettings.uri);
     this._logDiscoveryDiagnostics(result, wkspSettings);
     this._notifyStepLoadError(result.error);
     if (result.errorKind === "environmental")
@@ -660,6 +709,9 @@ export class FileParser {
     // the initial activation block at extension.ts — never clears. Fire it here.
     if (wkspsToParse.length === 0) {
       this._notifyStatusChange(false);
+      config.logger.logVerbose(
+        `${intiator}: no workspace folders to parse - project discovery accepted none, so no step ` +
+        `definitions will be loaded (see the "project discovery" entry above for the per-folder reason)`);
     }
   }
 
@@ -713,6 +765,14 @@ export class FileParser {
       // don't hang and so a subsequent call (after the user fixes their settings) is not poisoned.
       if (!wkspSettings) {
         diagLog(`parseFilesForWorkspace: skipping ${wkspUri.path} — workspace settings unavailable (fatal config error already reported)`);
+        // The notification was shown once by the configuration getter and is easily missed/dismissed,
+        // after which nothing works for this workspace with no standing explanation anywhere. Leave
+        // a permanent record in the log so a diagnostic report shows why nothing was parsed.
+        config.logger.logInfo(
+          `Not parsing this workspace: its gs-behave-bdd settings could not be loaded (see the FATAL ` +
+          `settings error earlier in this log). No tests, step definitions, or step navigation will ` +
+          `be available here until that is fixed.`,
+          wkspUri);
         this._wkspsWithFatalSettings.add(wkspPath);
         this._finishedFeaturesParseForWorkspace[wkspPath] = true;
         this._finishedStepsParseForWorkspace[wkspPath] = true;
@@ -823,10 +883,19 @@ export class FileParser {
         this._cancelTokenSources[k].dispose();
         delete this._cancelTokenSources[k];
       });
-      // only log the first error (i.e. avoid logging the same error multiple times)
+      // Only POPUP the first error (avoids a stack of near-identical toasts when several
+      // workspaces fail together), but always write it to the log: previously a second
+      // workspace's parse failure vanished entirely if another had already failed, which made
+      // multi-root setups look like they had silently done nothing.
       if (!this._errored) {
         this._errored = true;
         config.logger.showError(e, wkspUri);
+      }
+      else {
+        config.logger.logInfo(
+          `Parsing failed for this workspace (error notification suppressed - another workspace ` +
+          `already reported one this pass): ${e instanceof Error ? e.message : e}`,
+          wkspUri);
       }
       // Clear the "Behave: Parsing..." status item — the happy path's status
       // notification at line 575 is unreachable when we throw, and prior code

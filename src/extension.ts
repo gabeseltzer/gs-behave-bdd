@@ -9,16 +9,21 @@ import {
   reloadSettingsAndSurfaceError, getConfiguredButExcludedWorkspaceFolders
 } from './common';
 import { setConfigParseErrorDiagnostic, clearConfigParseErrorDiagnostic } from './handlers/configDiagnostics';
-import { StepFileStep } from './parsers/stepsParser';
+import { StepFileStep, getStepFileSteps } from './parsers/stepsParser';
 import type { FailedFileInfo } from './parsers/behaveLoader';
 import { gotoStepHandler } from './handlers/gotoStepHandler';
+import { diagnosticReportHandler } from './handlers/diagnosticReportHandler';
 import { findStepReferencesHandler, nextStepReferenceHandler as nextStepReferenceHandler, prevStepReferenceHandler, treeView } from './handlers/findStepReferencesHandler';
 import { FileParser } from './parsers/fileParser';
 import { testRunHandler, checkRunGuard } from './runners/testRunHandler';
 import { TestWorkspaceConfigWithWkspUri } from './testWorkspaceConfig';
 import { diagLog } from './logger';
 import { performance } from 'perf_hooks';
-import { StepMapping, getStepFileStepForFeatureFileStep, getStepMappingsForStepsFileFunction } from './parsers/stepMappings';
+import {
+  StepMapping, getStepFileStepForFeatureFileStep, getStepMappingsForStepsFileFunction, getStepMappings,
+} from './parsers/stepMappings';
+import { getFeatureFileSteps } from './parsers/featureParser';
+import { diagnoseStepState } from './handlers/stepStateDiagnosis';
 import { autoCompleteProvider } from './handlers/autoCompleteProvider';
 import { executeStepsAutoCompleteProvider } from './handlers/executeStepsAutoCompleteProvider';
 import { ExecuteStepsCodeActionProvider } from './handlers/executeStepsCodeActionProvider';
@@ -289,6 +294,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       busy: boolean
     } = { error: undefined, failedFiles: [], lastCleanLoadTime: undefined, busy: true };
 
+    // Totals across every discovered workspace. Summing rather than reporting per-workspace
+    // keeps the single status item honest: if ANY workspace is healthy the user has a working
+    // setup and shouldn't be warned, and if none are, the diagnosis applies to all of them.
+    const diagnoseCombinedStepState = () => {
+      try {
+        let featureSteps = 0, stepDefs = 0, mappings = 0;
+        for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
+          const wkspSettings = config.workspaceSettings[wkspUri.path];
+          if (!wkspSettings)
+            continue;
+          featureSteps += wkspSettings.featuresUris.reduce((sum, u) => sum + getFeatureFileSteps(u).length, 0);
+          stepDefs += getStepFileSteps(wkspSettings.featuresUri).length;
+          mappings += wkspSettings.featuresUris.reduce((sum, u) => sum + getStepMappings(u).length, 0);
+        }
+        return diagnoseStepState(featureSteps, stepDefs, mappings);
+      }
+      catch {
+        // the status item must never be the thing that throws during activation
+        return undefined;
+      }
+    };
+
     const renderStatusItem = () => {
       statusItem.busy = stepLoadStatus.busy;
       if (stepLoadStatus.busy) {
@@ -323,6 +350,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         statusItem.detail = detail.length > 200 ? detail.substring(0, 200) + "..." : detail;
         return;
       }
+      // Nothing errored, but "no error" is not the same as "working": a wrong features path or a
+      // steps folder we never found produces a perfectly clean load of nothing. Surfacing that
+      // here is what stops a user seeing green "Ready" while ctrl+click silently does nothing.
+      const degenerate = diagnoseCombinedStepState();
+      if (degenerate) {
+        statusItem.text = `Behave: ${degenerate.title}`;
+        statusItem.severity = vscode.LanguageStatusSeverity.Warning;
+        statusItem.detail = degenerate.detail.length > 200
+          ? degenerate.detail.substring(0, 200) + "..."
+          : degenerate.detail;
+        return;
+      }
+
       statusItem.text = "Behave: Ready";
       statusItem.severity = vscode.LanguageStatusSeverity.Information;
       statusItem.detail = undefined;
@@ -525,6 +565,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         }
         await vscode.commands.executeCommand('gs-behave-bdd.findStepReferences');
       }),
+      vscode.commands.registerCommand('gs-behave-bdd.diagnosticReport', () => diagnosticReportHandler()),
       vscode.commands.registerCommand('gs-behave-bdd.recheckMigrations', () => recheckMigrationsCommandHandler()),
       // Phase 023 Plan 01: open the migrations Webview panel. Co-located
       // above MIGRATION_ACTION_COMMAND so 023-04's deletion sweep keeps a
