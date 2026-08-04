@@ -405,6 +405,17 @@ suite('gherkinPatterns', () => {
       assert.deepStrictEqual(highlighted("    Given I select the '' language", "I select the '.*' language"), []);
     });
 
+    test('does not use the d (hasIndices) regex flag, which some extension hosts reject', () => {
+      // regression guard: `new RegExp(source, "d")` throws "SyntaxError: Invalid flags: d"
+      // on some extension hosts (seen on a remote container), and because the callers
+      // catch and log, that silently disabled ALL parameter highlighting rather than
+      // degrading. node here supports the flag, so only inspecting the source catches a
+      // reintroduction.
+      const body = getStepParamSpans.toString();
+      assert.ok(!/new RegExp\([^)]*,\s*["'][^"']*d[^"']*["']\s*\)/.test(body),
+        'getStepParamSpans must not construct a RegExp with the "d" flag');
+    });
+
     test('works on execute_steps call text, which has no leading whitespace', () => {
       assert.deepStrictEqual(
         highlighted("Then the language setting is 'en'", "the language setting is '.*'",

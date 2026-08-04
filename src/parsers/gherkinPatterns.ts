@@ -27,12 +27,6 @@ export interface ParamSpan {
     length: number;
 }
 
-// RegExpExecArray.indices needs lib ES2022; we target ES2021, so describe just the part
-// we use rather than widening the lib for the whole project.
-type ExecArrayWithIndices = RegExpExecArray & {
-    indices?: (readonly [number, number] | undefined)[];
-};
-
 /**
  * Locates the parameter spans that a step definition's wildcards matched within `text`.
  *
@@ -41,15 +35,21 @@ type ExecArrayWithIndices = RegExpExecArray & {
  * (`featureFileStepRe` for feature file lines, `executeStepsKeywordRe` for execute_steps
  * call sites) — both expose the text following the keyword as group 2.
  *
- * Note: this deliberately uses the match's own capture group offsets (via the `d` flag)
- * rather than searching the line for the captured text. A parameter value frequently
- * occurs elsewhere on the line — `'en'` occurs inside the keyword `Then`, so an
- * indexOf() would report a position inside the keyword and paint the wrong characters.
+ * A parameter value frequently occurs elsewhere on the line, so a plain
+ * `text.indexOf(value)` finds the wrong characters — `'en'` occurs inside the keyword
+ * `Then`, which is exactly what used to be painted. Capture groups can only occur in
+ * order and within the overall match, so each value is located by searching forward from
+ * the end of the previous one, starting at the overall match. That excludes the keyword
+ * and distinguishes a value repeated within one step.
+ *
+ * NOTE: do NOT reach for the `d` (hasIndices) flag to get exact group offsets here. Some
+ * extension hosts this runs on - remote containers in particular - reject it with
+ * "SyntaxError: Invalid flags: d", which killed parameter highlighting entirely.
  */
 export function getStepParamSpans(text: string, groupedRe: string, keywordRe: RegExp): ParamSpan[] {
 
-    const match = new RegExp(groupedRe, "d").exec(text) as ExecArrayWithIndices | null;
-    if (!match || !match.indices || match.length < 2)
+    const match = new RegExp(groupedRe).exec(text);
+    if (!match || match.length < 2)
         return [];
 
     // an unanchored leading wildcard swallows the step keyword, which is not a parameter
@@ -57,13 +57,21 @@ export function getStepParamSpans(text: string, groupedRe: string, keywordRe: Re
     const keywordEnd = keywordMatch ? keywordMatch[0].length - keywordMatch[2].length : 0;
 
     const spans: ParamSpan[] = [];
+    let searchFrom = match.index;
 
-    for (let group = 1; group < match.indices.length; group++) {
-        const indices = match.indices[group];
-        if (!indices)
+    for (let group = 1; group < match.length; group++) {
+        const value = match[group];
+        if (value === undefined)
             continue;
 
-        let [start, end] = indices;
+        const found = text.indexOf(value, searchFrom);
+        if (found === -1)
+            continue;
+
+        let start = found;
+        let end = found + value.length;
+        searchFrom = end;
+
         if (start < keywordEnd)
             start = keywordEnd;
 
