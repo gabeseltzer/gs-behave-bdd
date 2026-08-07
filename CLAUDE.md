@@ -347,6 +347,20 @@ Use these entry points:
 Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
 <!-- GSD:workflow-end -->
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `gabeseltzer/gs-behave-bdd`, via the `gh` CLI — always pass `--repo`. This is a hard fork of `jimasp/behave-vsc` that we never merge back to, but GitHub still resolves bare `gh` commands to that parent. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, unchanged: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, created lazily. See `docs/agents/domain.md`.
+
 <!-- GSD:profile-start -->
 ## Developer Profile
 
