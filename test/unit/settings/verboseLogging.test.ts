@@ -1,7 +1,10 @@
-// Tests for the verboseLogging setting:
-// - WindowSettings reads the boolean correctly
-// - logSettings summarises presets by default (verboseLogging=false)
-// - logSettings dumps full preset contents when verboseLogging=true
+// Tests for the two logging settings:
+// - WindowSettings reads both booleans correctly
+// - logSettings summarises presets by default (logEnvVarPresetContents=false)
+// - logSettings dumps full preset contents when logEnvVarPresetContents=true
+//
+// Note: preset contents are deliberately gated on logEnvVarPresetContents and NOT on
+// verboseLogging, so that "turn on verboseLogging and send me the log" cannot leak secrets.
 
 import * as assert from 'assert';
 import * as sinon from 'sinon';
@@ -26,10 +29,10 @@ function makeConfig(values: Record<string, unknown>, explicitKeys: string[] = []
   };
 }
 
-const WIN_DEFAULTS = { multiRootRunWorkspacesInParallel: true, xRay: false, verboseLogging: false };
+const WIN_DEFAULTS = { multiRootRunWorkspacesInParallel: true, xRay: false, verboseLogging: false, logEnvVarPresetContents: false };
 
 
-suite('verboseLogging setting', () => {
+suite('logging settings', () => {
 
   suite('WindowSettings reads verboseLogging', () => {
 
@@ -43,6 +46,29 @@ suite('verboseLogging setting', () => {
       const cfg = makeConfig({ ...WIN_DEFAULTS, verboseLogging: true });
       const settings = new WindowSettings(cfg);
       assert.strictEqual(settings.verboseLogging, true);
+    });
+
+  });
+
+
+  suite('WindowSettings reads logEnvVarPresetContents', () => {
+
+    test('defaults to false', () => {
+      const cfg = makeConfig(WIN_DEFAULTS);
+      const settings = new WindowSettings(cfg);
+      assert.strictEqual(settings.logEnvVarPresetContents, false);
+    });
+
+    test('reads true when explicitly set', () => {
+      const cfg = makeConfig({ ...WIN_DEFAULTS, logEnvVarPresetContents: true });
+      const settings = new WindowSettings(cfg);
+      assert.strictEqual(settings.logEnvVarPresetContents, true);
+    });
+
+    test('verboseLogging alone does NOT enable preset content logging', () => {
+      const cfg = makeConfig({ ...WIN_DEFAULTS, verboseLogging: true });
+      const settings = new WindowSettings(cfg);
+      assert.strictEqual(settings.logEnvVarPresetContents, false);
     });
 
   });
@@ -99,10 +125,10 @@ suite('verboseLogging setting', () => {
 
     function callLogSettings(
       fakeWksp: ReturnType<typeof makeFakeWkspSettings>,
-      verboseLogging: boolean
+      logEnvVarPresetContents: boolean
     ): string {
       const winSettings = new WindowSettings(
-        makeConfig({ ...WIN_DEFAULTS, verboseLogging })
+        makeConfig({ ...WIN_DEFAULTS, logEnvVarPresetContents })
       );
 
       let loggedText = '';
@@ -128,7 +154,7 @@ suite('verboseLogging setting', () => {
     }
 
 
-    test('verboseLogging=false logs preset count instead of contents (multiple presets)', () => {
+    test('logEnvVarPresetContents=false logs preset count instead of contents (multiple presets)', () => {
       const fakeWksp = makeFakeWkspSettings({
         dev: { API_URL: 'http://localhost:3000' },
         staging: { API_URL: 'https://staging.example.com' },
@@ -140,7 +166,7 @@ suite('verboseLogging setting', () => {
       assert.strictEqual(settings['envVarPresets'], '2 presets loaded');
     });
 
-    test('verboseLogging=false logs singular "preset" for exactly 1 preset', () => {
+    test('logEnvVarPresetContents=false logs singular "preset" for exactly 1 preset', () => {
       const fakeWksp = makeFakeWkspSettings({
         dev: { API_URL: 'http://localhost:3000' },
       });
@@ -151,7 +177,7 @@ suite('verboseLogging setting', () => {
       assert.strictEqual(settings['envVarPresets'], '1 preset loaded');
     });
 
-    test('verboseLogging=false logs "0 presets loaded" when no presets configured', () => {
+    test('logEnvVarPresetContents=false logs "0 presets loaded" when no presets configured', () => {
       const fakeWksp = makeFakeWkspSettings({});
 
       const loggedText = callLogSettings(fakeWksp, false);
@@ -160,7 +186,7 @@ suite('verboseLogging setting', () => {
       assert.strictEqual(settings['envVarPresets'], '0 presets loaded');
     });
 
-    test('verboseLogging=true logs full preset contents', () => {
+    test('logEnvVarPresetContents=true logs full preset contents', () => {
       const presets = {
         dev: { API_URL: 'http://localhost:3000', DEBUG: 'true' },
         staging: { API_URL: 'https://staging.example.com' },
@@ -174,7 +200,7 @@ suite('verboseLogging setting', () => {
       assert.deepStrictEqual(settings['envVarPresets'], presets);
     });
 
-    test('verboseLogging=true with empty presets logs empty object', () => {
+    test('logEnvVarPresetContents=true with empty presets logs empty object', () => {
       const fakeWksp = makeFakeWkspSettings({});
 
       const loggedText = callLogSettings(fakeWksp, true);
@@ -183,7 +209,7 @@ suite('verboseLogging setting', () => {
       assert.deepStrictEqual(settings['envVarPresets'], {});
     });
 
-    test('preset values are not present in log output when verboseLogging=false', () => {
+    test('preset values are not present in log output when logEnvVarPresetContents=false', () => {
       const fakeWksp = makeFakeWkspSettings({
         secret: { SECRET_KEY: 'super-secret-value-12345' },
       });

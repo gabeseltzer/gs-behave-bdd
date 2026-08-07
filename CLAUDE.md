@@ -24,7 +24,6 @@ npm run test:unit
 
 Fix any failures before finishing.
 
-<!-- GSD:project-start source:PROJECT.md -->
 ## Project
 
 **Auto-Discover Behave Projects**
@@ -40,9 +39,7 @@ An enhancement to the gs-behave-bdd VS Code extension that automatically discove
 - **Bundle size**: Extension must remain lightweight. `smol-toml` adds ~5KB — acceptable.
 - **Tech stack**: TypeScript, VS Code Extension API, Mocha/Sinon for tests. No Python changes.
 - **Config fidelity**: INI/TOML parsing must match behave's own parsing behavior for the `paths` key.
-<!-- GSD:project-end -->
 
-<!-- GSD:stack-start source:codebase/STACK.md -->
 ## Technology Stack
 
 ## Languages
@@ -110,9 +107,7 @@ An enhancement to the gs-behave-bdd VS Code extension that automatically discove
 - No .env files detected (not used by this extension)
 - Environment variables for behave tests configured through:
 ## CI/CD Integration
-<!-- GSD:stack-end -->
 
-<!-- GSD:conventions-start source:CONVENTIONS.md -->
 ## Conventions
 
 ## Naming Patterns
@@ -208,9 +203,7 @@ An enhancement to the gs-behave-bdd VS Code extension that automatically discove
 - Parser modules depend on common utilities but not on handlers
 - Handlers depend on parsers and common utilities
 - Configuration singleton available globally via `import { config }`
-<!-- GSD:conventions-end -->
 
-<!-- GSD:architecture-start source:ARCHITECTURE.md -->
 ## Architecture
 
 ## Pattern Overview
@@ -326,30 +319,21 @@ An enhancement to the gs-behave-bdd VS Code extension that automatically discove
 - Test controller shared across workspaces (items grouped by workspace id)
 - Configuration changes re-sync all watchers and test items
 - Parallel test runs possible via `runParallel` setting (one behave instance per feature)
-<!-- GSD:architecture-end -->
 
-<!-- GSD:skills-start source:skills/ -->
 ## Project Skills
 
 No project skills found. Add skills to any of: `.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, or `.github/skills/` with a `SKILL.md` index file.
-<!-- GSD:skills-end -->
 
-<!-- GSD:workflow-start source:GSD defaults -->
-## GSD Workflow Enforcement
+## Agent skills
 
-Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
+### Issue tracker
 
-Use these entry points:
-- `/gsd-quick` for small fixes, doc updates, and ad-hoc tasks
-- `/gsd-debug` for investigation and bug fixing
-- `/gsd-execute-phase` for planned phase work
+GitHub Issues on `gabeseltzer/gs-behave-bdd`, via the `gh` CLI — always pass `--repo`. This is a hard fork of `jimasp/behave-vsc` that we never merge back to, but GitHub still resolves bare `gh` commands to that parent. See `docs/agents/issue-tracker.md`.
 
-Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
-<!-- GSD:workflow-end -->
+### Triage labels
 
-<!-- GSD:profile-start -->
-## Developer Profile
+The five canonical roles, unchanged: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
 
-> Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
-> This section is managed by `generate-claude-profile` -- do not edit manually.
-<!-- GSD:profile-end -->
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, created lazily. See `docs/agents/domain.md`.

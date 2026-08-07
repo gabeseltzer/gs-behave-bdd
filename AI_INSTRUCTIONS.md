@@ -349,19 +349,47 @@ Call `deleteFeatureFileSteps(featuresUri)` before reparsing to clear cache.
 
 ### Logging
 
+**Read `.planning/codebase/LOGGING.md` before adding logs, notifications, or an early return on a
+user-visible path.** It is the binding rule set; the most important rules are summarised below.
+
 ```typescript
-// To workspace output channel (preferred when workspace known)
+// To workspace output channel (preferred when workspace known).
+// Sparse: this is what ALL users see by default. Milestones and real problems only.
 config.logger.logInfo("message", wkspUri);
+
+// Exhaustive diagnostics. No-op unless the user enabled `verboseLogging`, so include
+// everything that might be relevant - this is what makes bug reports actionable.
+config.logger.logVerbose("message", wkspUri);
 
 // To all workspace output channels (rare, only when no specific workspace context)
 config.logger.logInfoAllWksps("message");
 
-// Extension developer diagnostics (visible in "Developer: Toggle Developer Tools" when xRay enabled)
+// Extension developer diagnostics (visible in "Developer: Toggle Developer Tools" when xRay enabled).
+// Prefer logVerbose for anything a USER might need to send you - they will not find this.
 diagLog("message");
 
 // Test run output (during test execution)
 run.appendOutput("message\r\n");
 ```
+
+**Never fail silently.** Every early return, swallowed exception, or "give up" branch on a
+user-visible feature path (navigation, hover, completion, diagnostics, discovery, step search,
+test runs) must log why:
+
+```typescript
+if (!stepFileStep) {
+  config.logger.logVerbose(`step navigation: no step definition mapped to "${lineText}"`, wkspUri);
+  return undefined;   // otherwise the user sees nothing happen, with no way to find out why
+}
+```
+
+Also:
+- Deduplicating a notification must **never** deduplicate the log.
+- State the **consequence** ("step navigation will not work for this workspace"), not just the error.
+- Include the **environment** on failures: interpreter, resolved paths, counts, and the exact
+  reproducible command where one exists.
+- Never re-derive control flow by pattern-matching a log message (they embed arbitrary paths).
+- Anything that could log secrets needs its own opt-in setting, never a general debug flag.
 
 **Don't** call logger for errors/warnings. Use `throw` for errors, `config.logger.showWarn()` for warnings.
 

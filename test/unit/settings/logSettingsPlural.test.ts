@@ -25,7 +25,7 @@ function makeConfig(values: Record<string, unknown>, explicitKeys: string[] = []
   };
 }
 
-const WIN_DEFAULTS = { multiRootRunWorkspacesInParallel: true, xRay: false, verboseLogging: false };
+const WIN_DEFAULTS = { multiRootRunWorkspacesInParallel: true, xRay: false, verboseLogging: false, logEnvVarPresetContents: false };
 
 
 suite('logSettings plural output', () => {

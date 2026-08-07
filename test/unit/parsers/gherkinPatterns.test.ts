@@ -11,8 +11,10 @@ import {
   ruleRe,
   stepRe,
   featureFileStepRe,
+  executeStepsKeywordRe,
   tagRe,
-  getSymbolStartLine
+  getSymbolStartLine,
+  getStepParamSpans
 } from '../../../src/parsers/gherkinPatterns';
 
 suite('gherkinPatterns', () => {
@@ -339,6 +341,86 @@ suite('gherkinPatterns', () => {
       ];
       const startLine = getSymbolStartLine(lines, 0);
       assert.strictEqual(startLine, 0);
+    });
+  });
+
+  suite('getStepParamSpans', () => {
+
+    // mirrors how the callers build the pattern: the step def text with each {param}
+    // already turned into the parse wildcard, then each wildcard wrapped in a group
+    const grouped = (textAsRe: string) => textAsRe.replaceAll('.*', '(.*)');
+
+    // asserts on the substrings the spans actually cover, which is what the user sees
+    const highlighted = (text: string, textAsRe: string, keywordRe = featureFileStepRe) =>
+      getStepParamSpans(text, grouped(textAsRe), keywordRe)
+        .map(s => text.substr(s.start, s.length));
+
+    test('locates a quoted parameter value', () => {
+      assert.deepStrictEqual(
+        highlighted("    Given I select the 'German' language", "I select the '.*' language"),
+        ["German"]);
+    });
+
+    test('does not match a value that also occurs inside the step keyword', () => {
+      // regression: 'en' occurs inside "Then", and locating the span with indexOf() found
+      // that one first, so the "en" of "Then" was painted as the parameter
+      const text = "        Then the printer language setting is 'en'";
+      const spans = getStepParamSpans(text, grouped("the printer language setting is '.*'"),
+        featureFileStepRe);
+
+      assert.strictEqual(spans.length, 1);
+      assert.strictEqual(text.substr(spans[0].start, spans[0].length), "en");
+      assert.strictEqual(spans[0].start, text.lastIndexOf("en"), 'must be the quoted value');
+      assert.ok(spans[0].start > text.indexOf("Then") + 4, 'must not land inside the keyword');
+    });
+
+    test('locates each of several parameters', () => {
+      assert.deepStrictEqual(
+        highlighted("    When I set 'width' to '10'", "I set '.*' to '.*'"),
+        ["width", "10"]);
+    });
+
+    test('distinguishes repeated identical values', () => {
+      const text = "    When I copy 'a1' onto 'a1'";
+      const spans = getStepParamSpans(text, grouped("I copy '.*' onto '.*'"), featureFileStepRe);
+
+      assert.strictEqual(spans.length, 2);
+      assert.notStrictEqual(spans[0].start, spans[1].start, 'each occurrence has its own span');
+      assert.strictEqual(text.substr(spans[0].start, spans[0].length), "a1");
+      assert.strictEqual(text.substr(spans[1].start, spans[1].length), "a1");
+      assert.strictEqual(spans[1].start, text.lastIndexOf("a1"));
+    });
+
+    test('excludes the step keyword when the step def starts with a wildcard', () => {
+      assert.deepStrictEqual(
+        highlighted("    Given some value is set", ".* is set"),
+        ["some value"]);
+    });
+
+    test('returns nothing when the step does not match', () => {
+      assert.deepStrictEqual(highlighted("    Given something else", "I select the '.*'"), []);
+    });
+
+    test('returns nothing for a wildcard that matched an empty value', () => {
+      assert.deepStrictEqual(highlighted("    Given I select the '' language", "I select the '.*' language"), []);
+    });
+
+    test('does not use the d (hasIndices) regex flag, which some extension hosts reject', () => {
+      // regression guard: `new RegExp(source, "d")` throws "SyntaxError: Invalid flags: d"
+      // on some extension hosts (seen on a remote container), and because the callers
+      // catch and log, that silently disabled ALL parameter highlighting rather than
+      // degrading. node here supports the flag, so only inspecting the source catches a
+      // reintroduction.
+      const body = getStepParamSpans.toString();
+      assert.ok(!/new RegExp\([^)]*,\s*["'][^"']*d[^"']*["']\s*\)/.test(body),
+        'getStepParamSpans must not construct a RegExp with the "d" flag');
+    });
+
+    test('works on execute_steps call text, which has no leading whitespace', () => {
+      assert.deepStrictEqual(
+        highlighted("Then the language setting is 'en'", "the language setting is '.*'",
+          executeStepsKeywordRe),
+        ["en"]);
     });
   });
 });

@@ -259,14 +259,20 @@ export async function loadFromBehave(
     const errMsg = e instanceof Error ? e.message : String(e);
     diagLog(`loadFromBehave error (${elapsed}ms): ${errMsg}`);
 
+    // Prefer the spawn error's own classification; only fall back to sniffing the message for
+    // errors raised elsewhere (e.g. a JSON parse failure).
+    const behaveNotInstalled = e instanceof PythonSpawnError
+      ? e.behaveNotInstalled
+      : isBehaveNotInstalledError(errMsg);
+
     // If behave is not installed and we weren't already using bundled, fall back to bundled
-    if (!bundledLibsPath && isBehaveNotInstalledError(errMsg)) {
+    if (!bundledLibsPath && behaveNotInstalled) {
       diagLog(`loadFromBehave: behave not found in environment, falling back to bundled behave`);
       return loadFromBehave(pythonExec, projectPath, stepsPaths, getBundledBehavePath(), timeoutMs, env);
     }
 
     // If bundled was already tried and still failed, give a clearer message than "pip install behave"
-    if (bundledLibsPath && isBehaveNotInstalledError(errMsg)) {
+    if (bundledLibsPath && behaveNotInstalled) {
       throw new Error(`Bundled behave at "${bundledLibsPath}" failed to import. This may indicate an extension installation issue.\n${errMsg}`);
     }
 
@@ -303,6 +309,21 @@ export function getDiscoveryScriptPath(): string {
 interface SpawnResult {
   stdout: string;
   stderr: string;
+}
+
+/**
+ * Spawn failure that carries its own "behave is missing" classification.
+ *
+ * The classification MUST NOT be re-derived from the message: the message embeds the full
+ * command line, whose discover.py path contains the string "behave", which made the
+ * isBehaveNotInstalledError() text heuristic match any import error and re-spawn the bundled
+ * fallback in a loop. Classify once, from stderr alone, and carry the answer.
+ */
+class PythonSpawnError extends Error {
+  constructor(message: string, public readonly behaveNotInstalled: boolean) {
+    super(message);
+    this.name = "PythonSpawnError";
+  }
 }
 
 /**
@@ -356,7 +377,13 @@ function spawnPython(
     });
 
     cp.on('error', (err) => {
-      settle(new Error(`Failed to spawn Python process: ${pythonExec} (${err.message})`));
+      // ENOENT here means the interpreter path itself is wrong/missing, which is a common
+      // setup failure - name the path and how to check it rather than just the errno.
+      const hint = (err as NodeJS.ErrnoException).code === "ENOENT"
+        ? ` The interpreter was not found or is not executable - check the interpreter selected via ` +
+          `the Python extension ("Python: Select Interpreter").`
+        : "";
+      settle(new Error(`Failed to spawn Python process: ${pythonExec} (${err.message}).${hint}`));
     });
 
     cp.on('close', (code) => {
@@ -364,16 +391,27 @@ function spawnPython(
         // Parse error messages for better user feedback
         const stderrLower = stderr.toLowerCase();
 
-        // Check if behave module itself is missing
-        if ((stderrLower.includes('modulenotfounderror') || stderrLower.includes('importerror'))
-          && stderrLower.includes('behave')) {
-          settle(new Error(`behave is not installed in the Python environment. Please install it: pip install behave\n[Details: ${stderr}]`));
-        } else if (stderrLower.includes('behave') && stderrLower.includes('not installed')) {
-          settle(new Error(`behave is not installed in the Python environment. Please install it: pip install behave\n[Details: ${stderr}]`));
+        // Always attach the exact command plus BOTH streams: discover.py can fail after having
+        // written partial JSON to stdout, and without stdout (and the reproducible command) a
+        // report of this failure is not actionable.
+        const cmd = `cd ${shellQuote(cwd)} && ${shellQuote(pythonExec)} ${allArgs.map(shellQuote).join(' ')}`;
+        const context = [
+          `command: ${cmd}`,
+          stdout.trim() && `stdout:\n${stdout.trim()}`,
+          stderr.trim() && `stderr:\n${stderr.trim()}`,
+        ].filter(Boolean).join('\n');
+
+        // classified from stderr ONLY - see PythonSpawnError
+        const behaveNotInstalled = isBehaveNotInstalledError(stderr);
+
+        if (behaveNotInstalled) {
+          settle(new PythonSpawnError(
+            `behave is not installed in the Python environment. Please install it: pip install behave\n${context}`,
+            true));
         } else if (stderrLower.includes('importerror') || stderrLower.includes('modulenotfounderror')) {
-          settle(new Error(`Import error in step files: ${stderr}`));
+          settle(new PythonSpawnError(`Import error in step files:\n${context}`, false));
         } else {
-          settle(new Error(`Python process exited with code ${code}: ${stderr}`));
+          settle(new PythonSpawnError(`Python process exited with code ${code}\n${context}`, false));
         }
       } else {
         settle();

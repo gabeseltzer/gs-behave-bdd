@@ -40,6 +40,35 @@ Last activity: 2026-07-16
 
 ## Accumulated Context
 
+### Cross-cutting: Logging & Diagnosability (260730-vlg, 2026-07-30)
+
+**Binding rules now live in `.planning/codebase/LOGGING.md`** — read it before adding any log,
+notification, or early-return on a user-visible path. Headlines:
+
+- **Never fail silently.** Every early return / swallowed error on a user-visible feature path logs
+  why. Deduplicating a *notification* must never deduplicate the *log*.
+- **Two audiences.** `logInfo` stays sparse (that is what all users see); `logVerbose` is
+  exhaustive and free when off — err heavily toward over-inclusion there.
+- **State the consequence**, log the **environment** (interpreter, resolved paths, counts,
+  reproducible command), and **diagnose** rather than just report (`>>>` prefix).
+- **`verboseLogging` is the flag to ask users for** and is safe to request — secrets live behind the
+  separate `logEnvVarPresetContents` opt-in. Never fold sensitive output into a general debug flag.
+- **The session log is unbounded and disk-backed** (`<temp>/gs-behave-bdd-logs/`), assembled
+  file-to-file into the report by `Behave BDD: Save Diagnostic Report`. Streaming, latched write
+  failures, and 7-day pruning of *previous* sessions are load-bearing — see Rule 8 before changing.
+- **Never re-derive control flow from a log message.** Shipped bug: the reproducible command
+  embedded in a spawn error contains "behave" (via the `discover.py` path), which made the
+  "behave not installed" heuristic match every `ImportError` and re-spawn the fallback in a loop.
+  Classify at the source from the narrowest input; carry it on a typed error.
+- **One flag to ask for.** `xRay` is deprecated (alias only); `verboseLogging` now covers console
+  diagnostics and stack traces too. Extend `verboseLogging` rather than adding a diagnostic flag.
+- **Diagnose in one place.** `diagnoseStepState()` is shared by the language-status item, the
+  diagnostic report and the navigation log. "No error" is not "working" — a status surface that
+  can show success must first check the success isn't degenerate (0 defs / 0 mappings).
+- **Migration order can be a security property.** `verboseLogging-self` must precede `xRay-self`
+  or an xRay-only user gets offered secret logging on a value they never set. Any new migration
+  that writes a flag another migration reads needs the same analysis.
+
 ### v1.6.0 Decisions
 
 - Coarse granularity → 4 phases for v1.6.0, matching the research-suggested build order exactly (scanner/mapping funnel → validation diagnostics → go-to-definition → integration/fixture/docs).

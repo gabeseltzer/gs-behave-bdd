@@ -3,7 +3,7 @@ import {
   downloadAndUnzipVSCode,
   runTests
 } from '@vscode/test-electron';
-import { getShortPathOnWindows, installMsPythonExtension } from './testRunUtils';
+import { getCleanTestEnv, getShortPathOnWindows, installMsPythonExtension } from './testRunUtils';
 import { snapshotFixtures, restoreFixtures } from './fixtureSnapshot';
 
 
@@ -39,6 +39,9 @@ async function runTestSuites() {
 
     console.log("starting test run...");
 
+    // strip the host extension host's env vars so the spawned VSCode does not start as plain node
+    const extensionTestsEnv = getCleanTestEnv();
+
     let launchArgs = [""];
     let extensionTestsPath = "";
 
@@ -49,7 +52,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = [`"example-projects/nested project"`];
@@ -58,7 +62,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = [`"example-projects/sibling steps folder 1"`];
@@ -67,7 +72,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = [`"example-projects/sibling steps folder 2"`];
@@ -76,7 +82,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = [`"example-projects/sibling steps folder 3"`];
@@ -85,7 +92,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = [`"example-projects/project A"`];
@@ -94,7 +102,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = [`"example-projects/project B"`];
@@ -103,7 +112,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = ["example-projects/multiroot.code-workspace"];
@@ -112,7 +122,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = ["example-projects/simple"];
@@ -121,7 +132,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = [`"example-projects/step library"`];
@@ -130,7 +142,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = ["example-projects/execute-steps"];
@@ -139,7 +152,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = ["example-projects/config-only"];
@@ -148,7 +162,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = ["example-projects/pyproject-config"];
@@ -157,7 +172,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = ["example-projects/malformed-config"];
@@ -166,7 +182,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = ["example-projects/watcher-integration"];
@@ -175,7 +192,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = ["example-projects/multi-path"];
@@ -184,7 +202,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = ["example-projects/multi-path-settings"];
@@ -193,7 +212,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = ["example-projects/monorepo-scan"];
@@ -202,7 +222,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
 
@@ -212,7 +233,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = ["example-projects/migration-stale"];
@@ -221,7 +243,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     launchArgs = ["example-projects/migration-consent"];
@@ -230,7 +253,8 @@ async function runTestSuites() {
       vscodeExecutablePath,
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs
+      launchArgs,
+      extensionTestsEnv
     });
 
     console.log("test run complete");

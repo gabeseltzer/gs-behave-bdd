@@ -241,6 +241,8 @@ The status bar indicator is hidden when only one project exists or when `project
   - (highly flexible) consider if you can use a feature/scenario/folder naming scheme that will allow you to leverage the filtering above the test tree to enable you to run just those tests.
   - (custom) use the `envVarOverrides` extension setting to set an environment variable that is only set when running from the extension. This adds endless possibilities, but the most obvious approaches are probably: (a) setting the `BEHAVE_STAGE` environment variable, (b) to control a behave `active_tag_value_provider`, (c) to control `scenario.skip()`, or (d) to control a behave `before_all` for a completely custom setup.
 - *How do I enable automatic feature file formatting on save?* You can do this via a standard vscode setting: `"[gherkin]": { "editor.formatOnSave": true }`
+- *How do I control the indentation the formatter uses?* You don't configure it in this extension — the formatter uses whatever indentation vscode has resolved for the document, so `editor.insertSpaces` and `editor.tabSize` are respected, including inside a `"[gherkin]": { ... }` block and including values coming from an `.editorconfig` file (via the [EditorConfig extension](https://marketplace.visualstudio.com/items?itemName=EditorConfig.EditorConfig)). One caveat: `editor.detectIndentation` is on by default, and it overrides your configured values based on what the file already contains — so an already-tab-indented feature file will keep reporting tabs until you convert it once (**Convert Indentation to Spaces** in the command palette), or until you set `"editor.detectIndentation": false`. Turn on `gs-behave-bdd.verboseLogging` and format the file to see the resolved indent unit and where it came from in the `Behave BDD` output channel.
+- *How do I stop the formatter restructuring my feature files?* Set `gs-behave-bdd.formatBlankLines` to `false` to stop it inserting blank lines before scenarios/examples/tags and collapsing blank line runs, and `gs-behave-bdd.formatAlignTables` to `false` to stop it padding table cells. With both off, the formatter only re-indents. The formatter also follows your `files.trimTrailingWhitespace`, `files.insertFinalNewline` and `files.trimFinalNewlines` settings, and never reformats the contents of a docstring (`"""` or ``` ``` ```) block.
 - *How do I disable feature file snippets?* You can do this via a standard vscode setting: `"[gherkin]": { "editor.suggest.showSnippets": false }`
 - *How do I disable autocomplete for feature file steps?* You can do this via a standard vscode setting: `"[gherkin]": { "editor.suggest.showFunctions": false }`
 - *Why can't I see print statements in the Behave BDD output window even though I have `stdout_capture=False` in my behave config file?* Because the extension depends on the `--junit` behave argument. As per the behave docs, with this flag set, all stdout and stderr will be redirected and dumped to the junit report, regardless of the capture/no-capture options. If you want to see print statements, copy/paste the outputted command and run it manually (or run `python -m behave` for all test output).
@@ -253,8 +255,40 @@ The status bar indicator is hidden when only one project exists or when `project
 
 ### If you have used a previous version of this extension
 
-- Please read through the [release notes](https://github.com/jimasp/behave-vsc/releases) for breaking changes. If that does not resolve your issue, then please rollback to the previous working version via the vscode uninstall dropdown and raise an [issue](https://github.com/jimasp/behave-vsc/issues).
+- Please read through the [release notes](https://github.com/gabeseltzer/gs-behave-bdd/releases) for breaking changes. If that does not resolve your issue, then please rollback to the previous working version via the vscode uninstall dropdown and raise an [issue](https://github.com/gabeseltzer/gs-behave-bdd/issues).
   
+### Start here: get a diagnostic report
+
+If the extension appears to do nothing — e.g. ctrl+click / F12 on a step doesn't jump to its Python
+definition, or no tests appear — collect a report rather than guessing:
+
+1. Turn on `gs-behave-bdd.verboseLogging` in settings. This makes the extension log *why* it gave up
+   at every point where it would otherwise fail silently (step navigation, hover, step discovery).
+2. Retry the thing that isn't working. If it's step navigation, leave the cursor on the step line.
+3. Run the vscode command **`Behave BDD: Save Diagnostic Report`**. This writes a `.log` file to your
+   temp folder and opens it. It contains versions, the resolved Python interpreter, the
+   features/steps paths actually in use, how many step definitions were loaded, — if the cursor is
+   on a step — why that specific step didn't resolve, and then the **complete log for the session**.
+   Nothing is truncated, so the file can be large; that's expected, attach it as-is.
+4. Skim the file (you can redact anything you'd rather not share), then attach it to a github
+   [issue](https://github.com/gabeseltzer/gs-behave-bdd/issues).
+
+> `verboseLogging` does **not** log your environment variable preset values. If you specifically
+> need those in the log, enable `gs-behave-bdd.logEnvVarPresetContents` as well — but note that
+> preset values may contain secrets, so review the file before sharing it.
+
+Everything the extension writes to the `Behave BDD` output channel is also mirrored to a session
+log in `<temp>/gs-behave-bdd-logs/`, one file per vscode window, which is what the report appends.
+These are never truncated; logs from sessions older than 7 days are cleaned up automatically.
+
+The three counts near the end of the report localise most problems:
+
+| Symptom in the report | Likely cause |
+| --- | --- |
+| `parsed feature file steps: 0` | the configured features path doesn't contain your `.feature` files |
+| `loaded step definitions: 0` | step discovery failed, or there's no `steps` folder where the extension looked |
+| both non-zero but `mappings: 0` | step text doesn't match any definition's pattern, or step files failed to load (check the Problems pane) |
+
 ### Otherwise
 
 - Does your project meet the [workspace requirements](#workspace-requirements) and have the [required project directory structure](#required-project-directory-structure)?
@@ -271,7 +305,7 @@ The status bar indicator is hidden when only one project exists or when `project
 - Check if the issue has already been reported in github [issues](https://github.com/gabeseltzer/gs-behave-bdd/issues?q=is%3Aissue).
 - Try temporarily disabling other extensions.
 - Have you recently upgraded vscode, and does your python/behave environment match the one tested for this release? You can check the environment tested for each release in [github](https://github.com/gabeseltzer/gs-behave-bdd/releases) and downgrade as required.
-- Any extension errors should pop up in a notification window, but you can also look at debug logs and error stacks by enabling `xRay` in the extension settings and using vscode command "Developer: Toggle Developer Tools".
+- Any extension errors should pop up in a notification window, but you can also look at debug logs and error stacks by enabling `verboseLogging` in the extension settings and using vscode command "Developer: Toggle Developer Tools". (`xRay` is the deprecated name for this; `verboseLogging` now covers both the console diagnostics and the output channel. The extension will offer to migrate the setting for you.)
 - The extension is only tested with a few example projects. It's possible that something specific to your project/setup/environment is not accounted for. See [Contributing](CONTRIBUTING.md) for instructions on debugging the extension with your own project. (If you debug with your own project, you may also wish to check whether the same issue occurs with one of the example project workspaces.)
 
 ---
