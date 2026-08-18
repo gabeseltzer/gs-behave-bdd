@@ -154,10 +154,16 @@ suite('behaveDebug', () => {
     const { getBundledBehavePath } = require('../../../src/bundledBehave');
     const bundledPath = getBundledBehavePath();
 
-    // When fromEnvironment, bundled path should be at the end (fallback)
+    // When fromEnvironment, bundled comes AFTER the environment's own entries so it
+    // acts as a fallback. It is no longer last overall: the shipped python helpers
+    // directory is appended after it, so assert the relative order instead.
+    const entries = (capturedConfig.env['PYTHONPATH'] as string).split(path.delimiter);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getPythonHelpersPath } = require('../../../src/bundledBehave');
+    const withoutHelpers = entries.filter(e => e !== getPythonHelpersPath());
     assert.ok(
-      capturedConfig.env['PYTHONPATH'].endsWith(bundledPath),
-      `PYTHONPATH should end with bundled path. Got: ${capturedConfig.env['PYTHONPATH']}`
+      withoutHelpers[withoutHelpers.length - 1] === bundledPath,
+      `bundled path should come last apart from the helpers dir. Got: ${capturedConfig.env['PYTHONPATH']}`
     );
   });
 

@@ -14,6 +14,8 @@ import { FileParser } from '../parsers/fileParser';
 import { diagLog, DiagLogType } from '../logger';
 import { getJunitWkspRunDirUri, JunitWatcher } from '../watchers/junitWatcher';
 import { getWkspQueueJunitFileMap, QueueItemMapEntry } from '../parsers/junitParser';
+import { getStreamFileUri, NdjsonTail } from './streamEvents';
+import { clearSettled, StreamResultReporter } from './streamResults';
 
 export class WkspRun {
   constructor(
@@ -27,7 +29,11 @@ export class WkspRun {
     public readonly pythonExec: string,
     public readonly allTestsForThisWkspIncluded: boolean,
     public readonly includedFeatures: vscode.TestItem[],
-    public readonly junitRunDirUri: vscode.Uri
+    public readonly junitRunDirUri: vscode.Uri,
+    /** Live per-scenario results are being read from the behave event stream. */
+    public readonly streaming: boolean = false,
+    /** NDJSON event file this workspace's behave instance writes to. */
+    public readonly streamFileUri: vscode.Uri = vscode.Uri.file("")
   ) { }
 }
 
@@ -81,6 +87,7 @@ export function testRunHandler(testData: TestData, ctrl: vscode.TestController, 
     finally {
       diagLog(`testRunHandler: completed run ${run.name}`);
       run.end();
+      clearSettled(run.name);
     }
   };
 
@@ -250,6 +257,7 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
   request: vscode.TestRunRequest, testData: TestData, debug: boolean, wkspQueue: QueueItem[]) {
 
   let wr: WkspRun | undefined = undefined;
+  let tail: NdjsonTail | undefined = undefined;
 
   diagLog(`runWorkspaceQueue: started for run ${run.name}`, wkspSettings.uri);
 
@@ -261,10 +269,25 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
     const sortedQueue = wkspQueue.sort((a, b) => a.test.id.localeCompare(b.test.id));
     const junitWkspRunDirUri = getJunitWkspRunDirUri(run, wkspSettings.name);
 
+    // Debug runs are excluded: behave's output is redirected to a file on that path
+    // and results come back through the debug session, not a live stream.
+    const streaming = wkspSettings.resultStreaming && !debug;
+    const streamFileUri = getStreamFileUri(run.name ?? "run", wkspSettings.name);
+
     wr = new WkspRun(
       wkspSettings, run, request, debug, ctrl, testData, sortedQueue, pythonExec,
-      allTestsForThisWkspIncluded, wkspIncludedFeatures, junitWkspRunDirUri
+      allTestsForThisWkspIncluded, wkspIncludedFeatures, junitWkspRunDirUri,
+      streaming, streamFileUri
     )
+
+    if (streaming) {
+      // The formatter opens this file itself, but its parent must exist first.
+      await vscode.workspace.fs.createDirectory(
+        vscode.Uri.joinPath(streamFileUri, ".."));
+      const reporter = new StreamResultReporter(run, wkspSettings.projectUri, sortedQueue);
+      tail = new NdjsonTail(streamFileUri.fsPath, events => reporter.handle(events));
+      tail.start();
+    }
 
     const start = performance.now();
     logWkspRunStarted(wr);
@@ -280,6 +303,11 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
     // unawaited async function (if multiRootRunWorkspacesInParallel) - show error
     config.logger.showError(e, wkspSettings.uri, run);
   }
+  finally {
+    // stop() drains whatever behave wrote between the last poll and exiting, then
+    // releases the file handle.
+    tail?.stop();
+  }
 
   diagLog(`runWorkspaceQueue: completed for run ${run.name}`, wkspSettings.uri);
 }
@@ -293,7 +321,8 @@ async function doRunType(wr: WkspRun) {
   }
 
   if (wr.allTestsForThisWkspIncluded) {
-    wr.sortedQueue.forEach(wkspQueueItem => startItemWithDescendants(wr.run, wkspQueueItem.test));
+    if (!wr.streaming)
+      wr.sortedQueue.forEach(wkspQueueItem => startItemWithDescendants(wr.run, wkspQueueItem.test));
     await runAllFeatures(wr);
     return;
   }
@@ -336,14 +365,16 @@ async function runFeaturesTogether(wr: WkspRun) {
       continue;
 
     const selectedScenarios = wr.sortedQueue.filter(qi => qi.test.id.includes(featureId));
-    selectedScenarios.forEach(qi => startItemWithDescendants(wr.run, qi.test));
+    if (!wr.streaming)
+      selectedScenarios.forEach(qi => startItemWithDescendants(wr.run, qi.test));
     await runOrDebugFeatureWithSelectedScenarios(wr, false, selectedScenarios);
   }
 
   if (runTogetherFeatures.length > 0) {
     const allChildScenarios: QueueItem[] = [];
     runTogetherFeatures.forEach(feature => allChildScenarios.push(...getChildScenariosForFeature(wr, feature)));
-    allChildScenarios.forEach(x => startItemWithDescendants(wr.run, x.test));
+    if (!wr.streaming)
+      allChildScenarios.forEach(x => startItemWithDescendants(wr.run, x.test));
 
     await runOrDebugFeatures(wr, false, allChildScenarios);
   }
@@ -376,7 +407,8 @@ async function runFeaturesParallel(wr: WkspRun) {
       featuresRun.push(runEntireFeature.id);
 
       const childScenarios: QueueItem[] = getChildScenariosForParentFeature(wr, wkspQueueItem);
-      childScenarios.forEach(x => startItemWithDescendants(wr.run, x.test));
+      if (!wr.streaming)
+        childScenarios.forEach(x => startItemWithDescendants(wr.run, x.test));
       const promise = runOrDebugFeatures(wr, true, childScenarios);
       asyncRunPromises.push(promise);
       continue;
@@ -387,7 +419,8 @@ async function runFeaturesParallel(wr: WkspRun) {
       continue;
 
     const selectedScenarios = wr.sortedQueue.filter(qi => qi.test.id.includes(featureId));
-    selectedScenarios.forEach(qi => startItemWithDescendants(wr.run, qi.test));
+    if (!wr.streaming)
+      selectedScenarios.forEach(qi => startItemWithDescendants(wr.run, qi.test));
     const promise = runOrDebugFeatureWithSelectedScenarios(wr, false, selectedScenarios);
     asyncRunPromises.push(promise);
   }

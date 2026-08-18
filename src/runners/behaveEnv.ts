@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { getBundledBehavePath } from '../bundledBehave';
+import { getBundledBehavePath, getPythonHelpersPath } from '../bundledBehave';
 import { WorkspaceSettings } from '../settings';
 
 /**
@@ -27,6 +27,17 @@ export function getBehaveEnv(wkspSettings: Pick<WorkspaceSettings, 'importStrate
     env['PYTHONPATH'] = existingPythonPath
       ? `${existingPythonPath}${path.delimiter}${bundledPath}`
       : bundledPath;
+  }
+
+  // The NDJSON stream formatter is imported by behave (unlike discover.py, which
+  // is spawned as a script), so its directory must be importable. Appended last so
+  // it can never shadow a module the user's own project or environment provides.
+  try {
+    env['PYTHONPATH'] = `${env['PYTHONPATH']}${path.delimiter}${getPythonHelpersPath()}`;
+  }
+  catch {
+    // Helpers missing (e.g. an incomplete build). Behave still runs; the extension
+    // falls back to junit results because the formatter will fail to import.
   }
 
   return env;

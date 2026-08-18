@@ -6,6 +6,7 @@ import { getContentFromFilesystem, showDebugWindow, WIN_MAX_PATH, WkspError, esc
 import { config } from '../configuration';
 import { getJunitWkspRunDirUri } from '../watchers/junitWatcher';
 import { WorkspaceSettings } from '../settings';
+import { isSettledByStream } from '../runners/streamResults';
 
 
 export type parseJunitFileResult = { junitContents: JunitContents, fsPath: string };
@@ -62,7 +63,16 @@ export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseRes
   const window = debug ? "debug console" : `Behave BDD output window`;
   let message: vscode.TestMessage;
 
-  if (run.token.isCancellationRequested)
+  // The live event stream already settled this one; junit is only a verifier now,
+  // so leave it alone rather than re-deriving it from a name match.
+  if (isSettledByStream(run.name, item.test.id))
+    return;
+
+  // On cancellation, only the SYNTHETIC "no junit file" result is suppressed - a
+  // scenario that never ran must not be reported as errored. A real result parsed
+  // from a junit file is still true and is kept: discarding those meant a cancelled
+  // run told you nothing about the work it had already completed.
+  if (run.token.isCancellationRequested && result.status === "no-junit-file")
     return;
 
   switch (result.status) {
@@ -508,7 +518,9 @@ function matchRowItemToResult(wkspSettings: WorkspaceSettings, debug: boolean,
 
 
 function reportResult(run: vscode.TestRun, debug: boolean, item: vscode.TestItem, result: ParseResult) {
-  if (run.token.isCancellationRequested)
+  if (isSettledByStream(run.name, item.id))
+    return;
+  if (run.token.isCancellationRequested && result.status === "no-junit-file")
     return;
   switch (result.status) {
     case "passed":

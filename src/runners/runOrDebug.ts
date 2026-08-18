@@ -5,6 +5,7 @@ import { runBehaveInstance } from './behaveRun';
 import { debugBehaveInstance } from './behaveDebug';
 import { QueueItem } from '../extension';
 import { WkspError, escapeRegex } from '../common';
+import { STREAM_FORMATTER_NAME } from '../bundledBehave';
 import { WkspRun } from './testRunHandler';
 import { ExampleRow } from '../parsers/testFile';
 
@@ -35,6 +36,28 @@ function featureStem(workspaceRelativePath: string): string {
 }
 
 
+/**
+ * Formatter args for live result streaming, or [] when it is off.
+ *
+ * Both formatters get an EXPLICIT outfile, which matters:
+ *  - Naming any formatter suppresses behave's default, so without "-f pretty" the
+ *    human-readable output disappears entirely (default_format only applies when
+ *    no formatters are configured).
+ *  - make_formatters() pairs config.format[i] with config.outputs[i] and falls back
+ *    to stdout beyond the end, so an unpaired "-f pretty" would be handed the
+ *    NDJSON file. "-o -" means stdout.
+ *
+ * A user's own "format=" in behave.ini is preserved: behave appends CLI formatters
+ * to the config's list, and format_outfiles_coupling() has already given each
+ * config formatter its own "<name>.output" file, so the index pairing still lines up.
+ */
+function getStreamFormatterArgs(wr: WkspRun): string[] {
+  if (!wr.streaming)
+    return [];
+  return ["-f", "pretty", "-o", "-", "-f", STREAM_FORMATTER_NAME, `-o`, `"${wr.streamFileUri.fsPath}"`];
+}
+
+
 // Convert a workspace-relative path to a project-relative path
 // e.g., "backend/features/test.feature" with projectPath "backend" becomes "features/test.feature"
 function toProjectRelativePath(workspaceRelativePath: string, projectPath: string): string {
@@ -58,7 +81,7 @@ export async function runOrDebugAllFeaturesInOneInstance(wr: WkspRun): Promise<v
   const friendlyEnvVars = getFriendlyEnvVars(wr.wkspSettings);
   const { ps1, ps2 } = getPSCmdModifyIfWindows();
 
-  const friendlyArgs = [...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`];
+  const friendlyArgs = [...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`, ...getStreamFormatterArgs(wr)];
   const args = friendlyArgs.map(x => x.replaceAll('"', ""));
 
   const friendlyCmd = `${ps1}cd "${wr.wkspSettings.projectUri.fsPath}"\n` +
@@ -87,7 +110,8 @@ export async function runOrDebugFeatures(wr: WkspRun, parallelMode: boolean, sce
     const friendlyEnvVars = getFriendlyEnvVars(wr.wkspSettings);
     const { ps1, ps2 } = getPSCmdModifyIfWindows();
 
-    const friendlyArgs = ["-i", `"${pipedPathPatterns}"`, ...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`];
+    const friendlyArgs = ["-i", `"${pipedPathPatterns}"`, ...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`,
+      ...getStreamFormatterArgs(wr)];
     const args = friendlyArgs.map(x => x.replaceAll('"', ""));
 
     const friendlyCmd = `${ps1}cd "${wr.wkspSettings.projectUri.fsPath}"\n` +
@@ -144,6 +168,7 @@ export async function runOrDebugFeatureWithSelectedScenarios(wr: WkspRun, parall
       "-i", `"${featureFileProjectRelativePath}$"`,
       "-n", `"${pipedScenarioNames}"`,
       ...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`,
+      ...getStreamFormatterArgs(wr),
     ];
     const args = friendlyArgs.map(x => x.replace(/^"(.*)"$/, '$1'));
 
