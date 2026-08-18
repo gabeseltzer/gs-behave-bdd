@@ -11,11 +11,28 @@ import { ExampleRow } from '../parsers/testFile';
 
 
 // hard-code any settings we MUST have (i.e. override user behave.ini file only where absolutely necessary)
+// NOTE: --junit-directory must stay LAST - callers append its value.
 const OVERRIDE_ARGS = [
+  // Without this, behave sees a pipe rather than a tty, runs monochrome, and its
+  // pretty formatter reports no step status at all: match() prints the step as
+  // Status.executing and result() deliberately does nothing ("Step.status is not
+  // used in monochrome mode", formatter/pretty.py:157-175). No colour, no
+  // timings, and a failed step that looks identical to a passed one.
+  // Use the "--color=on" form, NOT "--color on": behave special-cases a
+  // valueless --color followed by positional paths (configuration.py:946-957),
+  // and the "=" form avoids that path entirely.
+  "--color=on",
   "--show-skipped", // show-skipped is required for skipped tests to produce junit output
   "--junit",
   "--junit-directory"
 ];
+
+
+/** Feature file stem, used to attribute output lines when runs share a TestRun. */
+function featureStem(workspaceRelativePath: string): string {
+  const name = workspaceRelativePath.replaceAll("\\", "/").split("/").pop() ?? "";
+  return name.replace(/\.feature$/i, "");
+}
 
 
 // Convert a workspace-relative path to a project-relative path
@@ -52,7 +69,7 @@ export async function runOrDebugAllFeaturesInOneInstance(wr: WkspRun): Promise<v
     return;
   }
 
-  await runBehaveInstance(wr, false, args, friendlyCmd);
+  await runBehaveInstance(wr, args, friendlyCmd);
 }
 
 
@@ -81,11 +98,21 @@ export async function runOrDebugFeatures(wr: WkspRun, parallelMode: boolean, sce
       return;
     }
 
-    await runBehaveInstance(wr, parallelMode, args, friendlyCmd);
+    // In parallel mode this instance covers exactly one feature, so its output
+    // can be prefixed and attached to that feature's test item.
+    let outputPrefix = "";
+    let outputTest: vscode.TestItem | undefined;
+    if (parallelMode && scenarioQueueItems.length > 0) {
+      outputPrefix = `[${featureStem(scenarioQueueItems[0].scenario.featureFileWorkspaceRelativePath)}] `;
+      outputTest = scenarioQueueItems[0].test.parent;
+    }
+
+    await runBehaveInstance(wr, args, friendlyCmd, outputPrefix, outputTest);
   }
   catch (e: unknown) {
-    wr.run.end();
-    // unawaited (if runParallel) async func, must log the error 
+    // unawaited (if runParallel) async func, must log the error
+    // NOTE: do NOT end the run here - testRunHandler owns run.end() in its
+    // finally block, and ending early silently discards every later update.
     throw new WkspError(e, wr.wkspSettings.uri, wr.run);
   }
 
@@ -128,11 +155,21 @@ export async function runOrDebugFeatureWithSelectedScenarios(wr: WkspRun, parall
       return;
     }
 
-    await runBehaveInstance(wr, parallelMode, args, friendlyCmd);
+    // This form always targets a single feature file, so prefix and attach its
+    // output whenever the run may be sharing a TestRun with other instances.
+    const outputPrefix = wr.wkspSettings.runParallel && !wr.debug
+      ? `[${featureStem(featureFileWorkspaceRelativePath)}] `
+      : "";
+    const outputTest = wr.wkspSettings.runParallel && !wr.debug
+      ? selectedScenarioQueueItems[0].test.parent
+      : undefined;
+
+    await runBehaveInstance(wr, args, friendlyCmd, outputPrefix, outputTest);
   }
   catch (e: unknown) {
-    wr.run.end();
-    // unawaited (if runParallel) async func, must log the error 
+    // unawaited (if runParallel) async func, must log the error
+    // NOTE: do NOT end the run here - testRunHandler owns run.end() in its
+    // finally block, and ending early silently discards every later update.
     throw new WkspError(e, wr.wkspSettings.uri, wr.run);
   }
 

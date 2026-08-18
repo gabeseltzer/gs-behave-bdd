@@ -63,16 +63,18 @@ suite('testRunHandler', () => {
 
   suite('logWkspRunStarted', () => {
 
-    test('writes start message to run.appendOutput containing workspace name, run name, and timestamp', () => {
+    // The banner used to carry the run name (a random numeric id, meaningless to a
+    // reader) and an ISO timestamp, neither of which appears in behave's own output.
+    // The workspace name stays because multi-root parallel runs share one TestRun.
+    test('writes start message to run.appendOutput containing the workspace name', () => {
       const wr = createMockWr();
       logWkspRunStarted(wr as unknown as Parameters<typeof logWkspRunStarted>[0]);
 
       const allOutput = appendOutputCalls.join('');
       assert.ok(allOutput.includes('TestWorkspace'), 'Should contain workspace name');
-      assert.ok(allOutput.includes('run-42'), 'Should contain run name');
       assert.ok(allOutput.includes('tests started'), 'Should contain "tests started"');
-      // Should contain an ISO timestamp like 2026-02-10T...
-      assert.ok(/\d{4}-\d{2}-\d{2}T/.test(allOutput), 'Should contain ISO timestamp');
+      assert.ok(!/\d{4}-\d{2}-\d{2}T/.test(allOutput), 'Should not contain an ISO timestamp');
+      assert.ok(!allOutput.includes('run-42'), 'Should not contain the internal run name');
     });
 
     test('does NOT write "See Behave BDD" to output', () => {
@@ -100,16 +102,21 @@ suite('testRunHandler', () => {
 
   suite('logWkspRunComplete', () => {
 
-    test('writes complete message to run.appendOutput containing workspace name, run name, and elapsed time', () => {
+    test('writes complete message with the workspace name and a rounded elapsed time', () => {
       const wr = createMockWr();
       const start = performance.now() - 1500; // simulate 1.5 seconds ago
       logWkspRunComplete(wr as unknown as Parameters<typeof logWkspRunComplete>[0], start);
 
       const allOutput = appendOutputCalls.join('');
       assert.ok(allOutput.includes('TestWorkspace'), 'Should contain workspace name');
-      assert.ok(allOutput.includes('run-42'), 'Should contain run name');
       assert.ok(allOutput.includes('tests completed'), 'Should contain "tests completed"');
-      assert.ok(/\d+(\.\d+)?\s*secs/.test(allOutput), 'Should contain elapsed time in secs');
+      assert.ok(!allOutput.includes('run-42'), 'Should not contain the internal run name');
+
+      // Rounded to 3dp. Unrounded division used to emit values like
+      // "2.9110000000000005 secs" next to behave's own "Took 0min 5.508s".
+      const elapsed = /(\d+\.\d+)s/.exec(allOutput);
+      assert.ok(elapsed, `Should contain an elapsed time, got: ${JSON.stringify(allOutput)}`);
+      assert.strictEqual(elapsed[1].split('.')[1].length, 3, 'elapsed time should have 3 decimal places');
     });
 
     test('does NOT write "See Behave BDD" to output', () => {

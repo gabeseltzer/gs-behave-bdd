@@ -20,13 +20,22 @@ suite('behaveRun', () => {
   let diagLogStub: sinon.SinonStub;
   let mockProcess: MockChildProcess;
   let appendOutputCalls: string[];
+  let appendOutputTests: (unknown | undefined)[];
   let mockWr: MockWkspRun;
   let runBehaveInstance: typeof import('../../../src/runners/behaveRun').runBehaveInstance;
 
+  // behaveRun calls setEncoding() on both streams so chunks arrive already decoded
+  // as text - a multi-byte character split across a chunk boundary would otherwise
+  // be corrupted by a per-chunk Buffer.toString().
+  class MockStream extends EventEmitter {
+    encoding: string | undefined;
+    setEncoding = (enc: string) => { this.encoding = enc; return this; };
+  }
+
   class MockChildProcess extends EventEmitter {
     pid = 12345;
-    stdout = new EventEmitter();
-    stderr = new EventEmitter();
+    stdout = new MockStream();
+    stderr = new MockStream();
     kill = sinon.stub();
   }
 
@@ -44,14 +53,24 @@ suite('behaveRun', () => {
         isCancellationRequested: false,
         onCancellationRequested: () => ({ dispose: () => { /* mock */ } })
       },
-      appendOutput: (text: string) => {
+      appendOutput: (text: string, _location?: unknown, test?: unknown) => {
         appendOutputCalls.push(text);
+        appendOutputTests.push(test);
       }
     };
   }
 
+  const run = (prefix?: string, test?: unknown) => runBehaveInstance(
+    mockWr as unknown as Parameters<typeof runBehaveInstance>[0],
+    ['features/test.feature'],
+    'behave features/test.feature',
+    prefix,
+    test as Parameters<typeof runBehaveInstance>[4]
+  );
+
   setup(() => {
     appendOutputCalls = [];
+    appendOutputTests = [];
     mockProcess = new MockChildProcess();
     spawnStub = sinon.stub(childProcess, 'spawn').returns(mockProcess as unknown as childProcess.ChildProcess);
     diagLogStub = sinon.stub(loggerModule, 'diagLog');
@@ -74,29 +93,21 @@ suite('behaveRun', () => {
   });
 
   test('stdout is sent to run.appendOutput with \\r\\n normalization', async () => {
-    const promise = runBehaveInstance(
-      mockWr as unknown as Parameters<typeof runBehaveInstance>[0], false, ['features/test.feature'], 'behave features/test.feature'
-    );
+    const promise = run();
 
-    // Simulate stdout data
-    mockProcess.stdout.emit('data', Buffer.from('Feature: Test\nScenario: A\n'));
-    // Close the process
+    mockProcess.stdout.emit('data', 'Feature: Test\nScenario: A\n');
     mockProcess.emit('close');
     await promise;
 
-    // Should have output for friendlyCmd + stdout
     const allOutput = appendOutputCalls.join('');
-    // stdout content should be present with \r\n
     assert.ok(allOutput.includes('Feature: Test\r\nScenario: A\r\n'),
       `Expected normalized output, got: ${JSON.stringify(appendOutputCalls)}`);
   });
 
   test('stderr is sent to run.appendOutput', async () => {
-    const promise = runBehaveInstance(
-      mockWr as unknown as Parameters<typeof runBehaveInstance>[0], false, ['features/test.feature'], 'behave features/test.feature'
-    );
+    const promise = run();
 
-    mockProcess.stderr.emit('data', Buffer.from('ConfigError: something\n'));
+    mockProcess.stderr.emit('data', 'ConfigError: something\n');
     mockProcess.emit('close');
     await promise;
 
@@ -105,10 +116,8 @@ suite('behaveRun', () => {
       `Expected stderr in output, got: ${JSON.stringify(appendOutputCalls)}`);
   });
 
-  test('friendlyCmd is sent to run.appendOutput in non-parallel mode', async () => {
-    const promise = runBehaveInstance(
-      mockWr as unknown as Parameters<typeof runBehaveInstance>[0], false, ['features/test.feature'], 'behave features/test.feature'
-    );
+  test('friendlyCmd is sent to run.appendOutput', async () => {
+    const promise = run();
 
     mockProcess.emit('close');
     await promise;
@@ -118,48 +127,74 @@ suite('behaveRun', () => {
       `Expected friendlyCmd in output, got: ${JSON.stringify(appendOutputCalls)}`);
   });
 
-  test('parallel mode buffers output and writes with delimiters', async () => {
-    const promise = runBehaveInstance(
-      mockWr as unknown as Parameters<typeof runBehaveInstance>[0], true, ['features/test.feature'], 'behave features/test.feature'
-    );
+  test('setEncoding is applied to both streams', async () => {
+    const promise = run();
+    mockProcess.emit('close');
+    await promise;
 
-    mockProcess.stdout.emit('data', Buffer.from('Feature: Parallel\n'));
-    mockProcess.stdout.emit('data', Buffer.from('  Scenario: S1\n'));
+    assert.strictEqual(mockProcess.stdout.encoding, 'utf8', 'stdout should be decoded as utf8');
+    assert.strictEqual(mockProcess.stderr.encoding, 'utf8', 'stderr should be decoded as utf8');
+  });
+
+  // Replaces the previous "parallel mode buffers output and writes with delimiters"
+  // and "parallel mode does NOT send friendlyCmd before process runs" tests.
+  // Parallel runs used to hold every byte in a buffer until process close, so the
+  // mode chosen for speed gave the least live feedback. Output now streams, and a
+  // prefix keeps lines attributable when several processes share one TestRun.
+  test('output streams live rather than being held until close', async () => {
+    const promise = run();
+
+    mockProcess.stdout.emit('data', 'Feature: Parallel\n');
+    const outputBeforeClose = appendOutputCalls.join('');
+    assert.ok(outputBeforeClose.includes('Feature: Parallel'),
+      `Expected output before close, got: ${JSON.stringify(appendOutputCalls)}`);
+
+    mockProcess.emit('close');
+    await promise;
+  });
+
+  test('a prefix is applied to every output line', async () => {
+    const promise = run('[basic] ');
+
+    mockProcess.stdout.emit('data', 'Feature: Parallel\n  Scenario: S1\n');
     mockProcess.emit('close');
     await promise;
 
     const allOutput = appendOutputCalls.join('');
-    // Should contain delimiters
-    assert.ok(allOutput.includes('---'),
-      `Expected delimiter in parallel output, got: ${JSON.stringify(appendOutputCalls)}`);
-    // Should contain friendlyCmd
-    assert.ok(allOutput.includes('behave features/test.feature'),
-      `Expected friendlyCmd in parallel output, got: ${JSON.stringify(appendOutputCalls)}`);
-    // Should contain the buffered output
-    assert.ok(allOutput.includes('Feature: Parallel'),
-      `Expected buffered stdout in parallel output, got: ${JSON.stringify(appendOutputCalls)}`);
+    assert.ok(allOutput.includes('[basic] Feature: Parallel'),
+      `Expected prefixed feature line, got: ${JSON.stringify(allOutput)}`);
+    assert.ok(allOutput.includes('[basic]   Scenario: S1'),
+      `Expected prefixed scenario line, got: ${JSON.stringify(allOutput)}`);
   });
 
-  test('parallel mode does NOT send friendlyCmd before process runs', async () => {
-    const promise = runBehaveInstance(
-      mockWr as unknown as Parameters<typeof runBehaveInstance>[0], true, ['features/test.feature'], 'behave features/test.feature'
-    );
+  test('output is attached to the test item when one is supplied', async () => {
+    const featureItem = { id: 'feature-item' };
+    const promise = run('[basic] ', featureItem);
 
-    // Before close, nothing should be output in parallel mode
-    const outputBeforeClose = appendOutputCalls.length;
-    assert.strictEqual(outputBeforeClose, 0,
-      `Expected no output before close in parallel mode, got: ${JSON.stringify(appendOutputCalls)}`);
-
+    mockProcess.stdout.emit('data', 'Feature: Parallel\n');
     mockProcess.emit('close');
     await promise;
+
+    assert.ok(appendOutputTests.length > 0, 'expected at least one appendOutput call');
+    assert.ok(appendOutputTests.every(t => t === featureItem),
+      'every appendOutput call should carry the supplied test item');
+  });
+
+  test('no test item is passed when none is supplied', async () => {
+    const promise = run();
+
+    mockProcess.stdout.emit('data', 'Feature: Test\n');
+    mockProcess.emit('close');
+    await promise;
+
+    assert.ok(appendOutputTests.every(t => t === undefined),
+      'appendOutput should be called without a test item');
   });
 
   test('cancellation message is sent to run.appendOutput', async () => {
     mockWr.run.token.isCancellationRequested = false;
 
-    const promise = runBehaveInstance(
-      mockWr as unknown as Parameters<typeof runBehaveInstance>[0], false, ['features/test.feature'], 'behave features/test.feature'
-    );
+    const promise = run();
 
     // Set cancellation before close
     mockWr.run.token.isCancellationRequested = true;
@@ -173,11 +208,9 @@ suite('behaveRun', () => {
 
   test('config.logger is not called', async () => {
     // Verify the module doesn't import or use config from configuration
-    const promise = runBehaveInstance(
-      mockWr as unknown as Parameters<typeof runBehaveInstance>[0], false, ['features/test.feature'], 'behave features/test.feature'
-    );
+    const promise = run();
 
-    mockProcess.stdout.emit('data', Buffer.from('some output\n'));
+    mockProcess.stdout.emit('data', 'some output\n');
     mockProcess.emit('close');
     await promise;
 
@@ -186,36 +219,50 @@ suite('behaveRun', () => {
     assert.ok(true, 'runBehaveInstance completed without calling config.logger');
   });
 
-  test('ANSI escape sequences are cleaned from output', async () => {
-    const promise = runBehaveInstance(
-      mockWr as unknown as Parameters<typeof runBehaveInstance>[0], false, ['features/test.feature'], 'behave features/test.feature'
-    );
+  // Was "ANSI escape sequences are cleaned from output". The behaviour is now the
+  // opposite for colour: behave is run with --color=on precisely so the panel can
+  // show step status, so SGR is preserved and only cursor motion is removed.
+  test('SGR colour is preserved and cursor motion is removed', async () => {
+    const promise = run();
 
-    // Send text with ANSI escape sequences
-    mockProcess.stdout.emit('data', Buffer.from('\x1b[33mWarning text\x1b[0m\n'));
+    mockProcess.stdout.emit('data', '\x1b[33mWarning text\x1b[0m\n');
     mockProcess.emit('close');
     await promise;
 
     const allOutput = appendOutputCalls.join('');
-    assert.ok(!allOutput.includes('\x1b'), 'Should not contain ANSI escape character');
-    assert.ok(allOutput.includes('Warning text'), 'Should contain cleaned text');
+    assert.ok(allOutput.includes('\x1b[33m'), 'should keep the SGR colour code');
+    assert.ok(allOutput.includes('Warning text'), 'should keep the text');
+    assert.ok(!allOutput.includes('[1A'), 'should not contain a cursor-up sequence');
+  });
+
+  test('behave\'s grey-then-rewrite is resolved to one coloured line', async () => {
+    const promise = run();
+
+    // What behave actually emits with colour on: the step in grey (executing),
+    // then a cursor-up and the same step in its final colour.
+    mockProcess.stdout.emit('data',
+      '\x1b[90mGiven \x1b[0m\x1b[90mwe have behave installed\x1b[0m\n' +
+      '\x1b[1A\x1b[32mGiven \x1b[0m\x1b[32mwe have behave installed\x1b[0m\n');
+    mockProcess.emit('close');
+    await promise;
+
+    const allOutput = appendOutputCalls.join('');
+    assert.ok(allOutput.includes('\x1b[32m'), 'should contain the resolved green step');
+    assert.ok(!allOutput.includes('\x1b[90mGiven'), 'should not contain the grey executing pass');
+    const occurrences = allOutput.split('we have behave installed').length - 1;
+    assert.strictEqual(occurrences, 1, `step should appear once, got ${occurrences}`);
   });
 
   test('toRunOutput normalizes mixed line endings to \\r\\n', async () => {
-    const promise = runBehaveInstance(
-      mockWr as unknown as Parameters<typeof runBehaveInstance>[0], false, ['features/test.feature'], 'behave features/test.feature'
-    );
+    const promise = run();
 
-    // Send text with \r\n already (should not become \r\r\n)
-    mockProcess.stdout.emit('data', Buffer.from('line1\r\nline2\nline3\r\n'));
+    mockProcess.stdout.emit('data', 'line1\r\nline2\nline3\r\n');
     mockProcess.emit('close');
     await promise;
 
     const allOutput = appendOutputCalls.join('');
-    // Should not have \r\r\n (double carriage return)
     assert.ok(!allOutput.includes('\r\r\n'),
       `Should not have double \\r, got: ${JSON.stringify(allOutput)}`);
-    // Every \n should be preceded by \r
     const lines = allOutput.split('\n');
     for (let i = 0; i < lines.length - 1; i++) {
       assert.ok(lines[i].endsWith('\r'),
@@ -224,9 +271,7 @@ suite('behaveRun', () => {
   });
 
   test('spawn receives PYTHONPATH from getBehaveEnv including bundled libs path', async () => {
-    const promise = runBehaveInstance(
-      mockWr as unknown as Parameters<typeof runBehaveInstance>[0], false, ['features/test.feature'], 'behave features/test.feature'
-    );
+    const promise = run();
 
     mockProcess.emit('close');
     await promise;

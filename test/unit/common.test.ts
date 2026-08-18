@@ -4,7 +4,7 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
-import { sepr, beforeFirstSepr, afterFirstSepr, cleanBehaveText, getLines, getWorkspaceUriForFile } from '../../src/common';
+import { sepr, beforeFirstSepr, afterFirstSepr, getLines, getWorkspaceUriForFile } from '../../src/common';
 
 suite('common utilities', () => {
 
@@ -61,36 +61,10 @@ suite('common utilities', () => {
     });
   });
 
-  suite('cleanBehaveText', () => {
-    test('should remove ANSI escape sequences', () => {
-      const input = '\x1b[33mWarning\x1b[0m';
-      const result = cleanBehaveText(input);
-      assert.strictEqual(result, 'Warning');
-    });
-
-    test('should remove color codes', () => {
-      const input = '[33mYellow text[0m';
-      const result = cleanBehaveText(input);
-      assert.strictEqual(result, 'Yellow text');
-    });
-
-    test('should handle text with multiple escape sequences', () => {
-      const input = '\x1b[33mStart\x1b[0m middle \x1b[33mEnd\x1b[0m';
-      const result = cleanBehaveText(input);
-      assert.strictEqual(result, 'Start middle End');
-    });
-
-    test('should return unchanged text without escape sequences', () => {
-      const input = 'Plain text';
-      const result = cleanBehaveText(input);
-      assert.strictEqual(result, 'Plain text');
-    });
-
-    test('should handle empty string', () => {
-      const result = cleanBehaveText('');
-      assert.strictEqual(result, '');
-    });
-  });
+  // NOTE: the cleanBehaveText suite moved to test/unit/runners/behaveOutput.test.ts.
+  // The function was removed along with it - it only stripped the ESC byte and the
+  // literal strings "[33m" and "[0m", leaving every other SGR code as visible text.
+  // BehaveOutputFilter replaces it and keeps colour deliberately.
 
   suite('getLines', () => {
     test('should split text by newline', () => {

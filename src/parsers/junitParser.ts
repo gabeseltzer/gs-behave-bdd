@@ -99,12 +99,11 @@ export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseRes
   }
 
   item.scenario.result = result.status;
-  const statusOutput = result.status === "passed" || result.status === "skipped"
-    ? result.status.toUpperCase()
-    : result.status === "error" || result.status === "hook_error" || result.status === "cleanup_error"
-      ? "ERROR"
-      : "FAILED";
-  run.appendOutput(`Test item ${vscode.Uri.parse(item.test.id).fsPath}: ${statusOutput}\r\n`);
+  // NOTE: deliberately no "Test item <path>: STATUS" line here. It appeared in
+  // the same stream as behave's own output, but arrived in a burst once the
+  // feature's junit file was parsed - so out of order with the text it described
+  // - and nothing on the command line looks like it. The result still reaches
+  // the UI via run.passed()/failed()/errored() above.
 
   // Propagate failure/error results to ancestor items (group and outline) so the
   // error message is visible on parent nodes in the Test Explorer, not just the row.
@@ -535,7 +534,8 @@ function reportResult(run: vscode.TestRun, debug: boolean, item: vscode.TestItem
       break;
     }
   }
-  run.appendOutput(`Test item ${vscode.Uri.parse(item.id).fsPath}: ${result.status.toUpperCase()}\r\n`);
+  // see the note in updateTest(): no "Test item ..." line - the result reaches
+  // the UI through the run.* calls above.
 }
 
 

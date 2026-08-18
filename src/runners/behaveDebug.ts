@@ -11,6 +11,11 @@ export async function debugBehaveInstance(wr: WkspRun, args: string[], friendlyC
 
   diagLog(friendlyCmd, wr.wkspSettings.uri); // log debug friendlyCmd in diagnostics log only
 
+  // Debug output goes to the debug console, which nothing filters - behave's
+  // two-pass step drawing would leave its cursor-up sequences visible there.
+  // (BehaveOutputFilter only sits on the spawned-process path in behaveRun.)
+  args = args.filter(arg => arg !== "--color=on");
+
   // --outfile = remove stdout noise from debug console
   args.push("--no-summary", "--outfile",
     vscode.Uri.joinPath(config.extensionTempFilesUri, `${(wr.run.name ?? "")}-${wr.wkspSettings.name}-debug.log`).fsPath);

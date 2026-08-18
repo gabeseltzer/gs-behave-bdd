@@ -292,7 +292,9 @@ export class JunitWatcher {
     }
     catch (e: unknown) {
       const err = new Error(`junitWatcher error:${e as string}, caller:${caller}, file:${uri.fsPath}, run:${matchedRun?.run.name}`);
-      matchedRun?.run.end();
+      // NOTE: do NOT end the run here. One unparseable junit file used to end the
+      // whole run, which discarded the results of every other feature still to be
+      // reported. testRunHandler owns run.end().
       // entry point function (handler) - show error
       config.logger.showError(err);
     }

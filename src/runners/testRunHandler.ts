@@ -273,7 +273,10 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
 
   }
   catch (e: unknown) {
-    wr?.run.end();
+    // NOTE: do NOT call run.end() here. testRunHandler owns the end in its
+    // finally block; ending the run early means every state update that follows
+    // is dropped silently, so one failing workspace could erase another's
+    // results (and its own, reported later from the junit watcher).
     // unawaited async function (if multiRootRunWorkspacesInParallel) - show error
     config.logger.showError(e, wkspSettings.uri, run);
   }
@@ -429,7 +432,7 @@ function getFeatureIdIfFeatureNotAlreadyProcessed(alreadyProcessedFeatureIds: st
 
 export function logWkspRunStarted(wr: WkspRun) {
   if (!wr.debug) {
-    wr.run.appendOutput(`--- ${wr.wkspSettings.name} tests started for run ${wr.run.name} @${new Date().toISOString()} ---\r\n`);
+    wr.run.appendOutput(`--- ${wr.wkspSettings.name}: tests started ---\r\n`);
   }
 }
 
@@ -437,8 +440,10 @@ export function logWkspRunStarted(wr: WkspRun) {
 export function logWkspRunComplete(wr: WkspRun, start: number) {
   const end = performance.now();
   if (!wr.debug) {
-    wr.run.appendOutput(`\r\n--- ${wr.wkspSettings.name} tests completed for run ${wr.run.name} ` +
-      `@${new Date().toISOString()} (${(end - start) / 1000} secs) ---\r\n`);
+    // Rounded, and phrased like behave's own "Took 0min 5.508s" summary directly
+    // above it. Unrounded division used to print values like "2.9110000000000005".
+    const secs = ((end - start) / 1000).toFixed(3);
+    wr.run.appendOutput(`\r\n--- ${wr.wkspSettings.name}: tests completed in ${secs}s ---\r\n`);
   }
 }
 

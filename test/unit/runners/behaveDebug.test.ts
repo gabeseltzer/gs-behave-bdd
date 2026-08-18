@@ -97,6 +97,24 @@ suite('behaveDebug', () => {
     assert.strictEqual(capturedConfig.request, 'launch');
   });
 
+  // Runs pass --color=on so the Test Results panel gets step status, and
+  // BehaveOutputFilter resolves behave's two-pass step drawing. Nothing filters the
+  // debug console, so colour there would leave cursor-up sequences visible.
+  test('should strip --color=on from the debug launch args', async () => {
+    const mockWr = createMockWr();
+    await debugBehaveInstance(
+      mockWr as unknown as Parameters<typeof debugBehaveInstance>[0],
+      ['--color=on', '--show-skipped', 'features/test.feature'],
+      'behave features/test.feature'
+    );
+
+    assert.ok(capturedConfig, 'startDebugging should have been called');
+    const args = capturedConfig.args as string[];
+    assert.ok(!args.includes('--color=on'), `--color=on should be stripped, got: ${JSON.stringify(args)}`);
+    assert.ok(args.includes('--show-skipped'), 'other args should be preserved');
+    assert.ok(args.includes('features/test.feature'), 'paths should be preserved');
+  });
+
   test('should include bundled PYTHONPATH in env when importStrategy is useBundled', async () => {
     const mockWr = createMockWr({ importStrategy: 'useBundled' });
     await debugBehaveInstance(
