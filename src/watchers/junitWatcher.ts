@@ -4,6 +4,7 @@ import { uriId } from '../common';
 import { config } from '../configuration';
 import { diagLog, DiagLogType } from '../logger';
 import { QueueItemMapEntry, parseJunitFileAndUpdateTestResults, updateTestResultsForUnreadableJunitFile } from "../parsers/junitParser";
+import { isSettledByStream } from '../runners/streamResults';
 import { performance } from 'perf_hooks';
 
 
@@ -107,8 +108,12 @@ export class JunitWatcher {
       if (!stoppedRun)
         throw `junitWatcher: runEnded() could not find a current run with name "${run.name}"`
 
-      // get a refreshed notUpdated list
-      const notUpdated = () => stoppedRun?.queue.filter(q => !q.updated) ?? [];
+      // get a refreshed notUpdated list.
+      // An item the live event stream already settled is FINAL, so it must not hold the run
+      // open waiting for a junit file to land - that wait is precisely the latency streaming
+      // exists to remove, and paying it anyway made streaming pointless at the run end.
+      const notUpdated = () => stoppedRun?.queue.filter(q =>
+        !q.updated && !isSettledByStream(run.name, q.queueItem.test.id)) ?? [];
 
       // behave only just ended, give the file system watcher a small grace period to catch up.
       // note that run stop/debug stop buttons always wait the full grace period for updates from junit files that will never be written
@@ -117,6 +122,10 @@ export class JunitWatcher {
       // so keep the grace period low (<=500ms) for a good user experience.
       const poll = 50;
       const grace = config.integrationTestRun ? 2000 : 400; // give more time if an integration test to avoid throwing false positives       
+      // Checked BEFORE sleeping, so a fully streamed run pays no grace period at all
+      // rather than the one poll interval it would otherwise wait to discover it was done.
+      if (notUpdated().length === 0)
+        return;
       for (let ms = 0; ms < grace; ms += poll) {
         await new Promise(r => setTimeout(r, poll));
         if (notUpdated().length === 0)
@@ -279,6 +288,20 @@ export class JunitWatcher {
       // no match = run has been removed by stopWatchingRun (which will have already updated the tests for this file)
       if (!matchedRun)
         return;
+
+      // Every scenario in this file was already settled from the live event stream, so
+      // reading and parsing the xml would produce nothing at all: updateTest() early-returns
+      // on each one. The watcher raises onDidCreate AND onDidChange per file, so for a
+      // streamed run this is the difference between parsing a feature's xml twice over and
+      // not reading it at all.
+      const runForFile = matchedRun;
+      if (matches.every(m => isSettledByStream(runForFile.run.name, m.queueItem.test.id))) {
+        for (const match of matches)
+          match.updated = true;
+        diagLog(`junitWatcher: run ${runForFile.run.name} - updateResult(${caller}) skipped ${uri.fsPath}, ` +
+          `all ${matches.length} scenario(s) already settled by the event stream`);
+        return;
+      }
 
       // one junit file is created per feature, so update all tests belonging to this feature
       const matchedQueueItems = matches.map(m => m.queueItem);
