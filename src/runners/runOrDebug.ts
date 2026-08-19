@@ -51,10 +51,13 @@ function featureStem(workspaceRelativePath: string): string {
  * to the config's list, and format_outfiles_coupling() has already given each
  * config formatter its own "<name>.output" file, so the index pairing still lines up.
  */
-function getStreamFormatterArgs(wr: WkspRun): string[] {
-  if (!wr.streaming)
+function getStreamFormatterArgs(wr: WkspRun, label: string): string[] {
+  if (!wr.streaming || !wr.streamSession)
     return [];
-  return ["-f", "pretty", "-o", "-", "-f", STREAM_FORMATTER_NAME, `-o`, `"${wr.streamFileUri.fsPath}"`];
+  // NOTE: not pure - this allocates the stream file for the behave process about to
+  // be spawned and starts tailing it, so it must be called exactly once per spawn.
+  const streamFileUri = wr.streamSession.open(label);
+  return ["-f", "pretty", "-o", "-", "-f", STREAM_FORMATTER_NAME, `-o`, `"${streamFileUri.fsPath}"`];
 }
 
 
@@ -81,7 +84,8 @@ export async function runOrDebugAllFeaturesInOneInstance(wr: WkspRun): Promise<v
   const friendlyEnvVars = getFriendlyEnvVars(wr.wkspSettings);
   const { ps1, ps2 } = getPSCmdModifyIfWindows();
 
-  const friendlyArgs = [...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`, ...getStreamFormatterArgs(wr)];
+  const friendlyArgs = [...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`,
+    ...getStreamFormatterArgs(wr, "all-features")];
   const args = friendlyArgs.map(x => x.replaceAll('"', ""));
 
   const friendlyCmd = `${ps1}cd "${wr.wkspSettings.projectUri.fsPath}"\n` +
@@ -110,8 +114,14 @@ export async function runOrDebugFeatures(wr: WkspRun, parallelMode: boolean, sce
     const friendlyEnvVars = getFriendlyEnvVars(wr.wkspSettings);
     const { ps1, ps2 } = getPSCmdModifyIfWindows();
 
+    // In parallel mode this instance covers exactly one feature, so name its stream
+    // after that feature; otherwise it covers the lot.
+    const streamLabel = parallelMode && scenarioQueueItems.length > 0
+      ? featureStem(scenarioQueueItems[0].scenario.featureFileWorkspaceRelativePath)
+      : "features";
+
     const friendlyArgs = ["-i", `"${pipedPathPatterns}"`, ...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`,
-      ...getStreamFormatterArgs(wr)];
+      ...getStreamFormatterArgs(wr, streamLabel)];
     const args = friendlyArgs.map(x => x.replaceAll('"', ""));
 
     const friendlyCmd = `${ps1}cd "${wr.wkspSettings.projectUri.fsPath}"\n` +
@@ -127,7 +137,7 @@ export async function runOrDebugFeatures(wr: WkspRun, parallelMode: boolean, sce
     let outputPrefix = "";
     let outputTest: vscode.TestItem | undefined;
     if (parallelMode && scenarioQueueItems.length > 0) {
-      outputPrefix = `[${featureStem(scenarioQueueItems[0].scenario.featureFileWorkspaceRelativePath)}] `;
+      outputPrefix = `[${streamLabel}] `;
       outputTest = scenarioQueueItems[0].test.parent;
     }
 
@@ -168,7 +178,7 @@ export async function runOrDebugFeatureWithSelectedScenarios(wr: WkspRun, parall
       "-i", `"${featureFileProjectRelativePath}$"`,
       "-n", `"${pipedScenarioNames}"`,
       ...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`,
-      ...getStreamFormatterArgs(wr),
+      ...getStreamFormatterArgs(wr, featureStem(featureFileWorkspaceRelativePath)),
     ];
     const args = friendlyArgs.map(x => x.replace(/^"(.*)"$/, '$1'));
 

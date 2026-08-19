@@ -14,8 +14,9 @@ import { FileParser } from '../parsers/fileParser';
 import { diagLog, DiagLogType } from '../logger';
 import { getJunitWkspRunDirUri, JunitWatcher } from '../watchers/junitWatcher';
 import { getWkspQueueJunitFileMap, QueueItemMapEntry } from '../parsers/junitParser';
-import { getStreamFileUri, NdjsonTail } from './streamEvents';
+import { getStreamDirUri } from './streamEvents';
 import { clearSettled, StreamResultReporter } from './streamResults';
+import { StreamSession } from './streamSession';
 
 export class WkspRun {
   constructor(
@@ -32,8 +33,8 @@ export class WkspRun {
     public readonly junitRunDirUri: vscode.Uri,
     /** Live per-scenario results are being read from the behave event stream. */
     public readonly streaming: boolean = false,
-    /** NDJSON event file this workspace's behave instance writes to. */
-    public readonly streamFileUri: vscode.Uri = vscode.Uri.file("")
+    /** Owns one NDJSON stream per behave process spawned for this workspace. */
+    public readonly streamSession: StreamSession | undefined = undefined
   ) { }
 }
 
@@ -257,7 +258,7 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
   request: vscode.TestRunRequest, testData: TestData, debug: boolean, wkspQueue: QueueItem[]) {
 
   let wr: WkspRun | undefined = undefined;
-  let tail: NdjsonTail | undefined = undefined;
+  let streamSession: StreamSession | undefined = undefined;
 
   diagLog(`runWorkspaceQueue: started for run ${run.name}`, wkspSettings.uri);
 
@@ -272,22 +273,21 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
     // Debug runs are excluded: behave's output is redirected to a file on that path
     // and results come back through the debug session, not a live stream.
     const streaming = wkspSettings.resultStreaming && !debug;
-    const streamFileUri = getStreamFileUri(run.name ?? "run", wkspSettings.name);
+
+    if (streaming) {
+      // Each behave process opens its own stream file, but the directory holding
+      // them has to exist before the first one does.
+      const runName = run.name ?? "run";
+      await vscode.workspace.fs.createDirectory(getStreamDirUri(runName, wkspSettings.name));
+      const reporter = new StreamResultReporter(run, wkspSettings.projectUri, sortedQueue);
+      streamSession = new StreamSession(runName, wkspSettings.name, reporter);
+    }
 
     wr = new WkspRun(
       wkspSettings, run, request, debug, ctrl, testData, sortedQueue, pythonExec,
       allTestsForThisWkspIncluded, wkspIncludedFeatures, junitWkspRunDirUri,
-      streaming, streamFileUri
+      streaming, streamSession
     )
-
-    if (streaming) {
-      // The formatter opens this file itself, but its parent must exist first.
-      await vscode.workspace.fs.createDirectory(
-        vscode.Uri.joinPath(streamFileUri, ".."));
-      const reporter = new StreamResultReporter(run, wkspSettings.projectUri, sortedQueue);
-      tail = new NdjsonTail(streamFileUri.fsPath, events => reporter.handle(events));
-      tail.start();
-    }
 
     const start = performance.now();
     logWkspRunStarted(wr);
@@ -304,9 +304,9 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
     config.logger.showError(e, wkspSettings.uri, run);
   }
   finally {
-    // stop() drains whatever behave wrote between the last poll and exiting, then
-    // releases the file handle.
-    tail?.stop();
+    // stopAll() drains whatever each behave process wrote between its last poll and
+    // exiting, then releases the file handles.
+    streamSession?.stopAll();
   }
 
   diagLog(`runWorkspaceQueue: completed for run ${run.name}`, wkspSettings.uri);

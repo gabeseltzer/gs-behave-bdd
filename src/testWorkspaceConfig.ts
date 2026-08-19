@@ -40,6 +40,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   private justMyCode: boolean | undefined;
   private multiRootRunWorkspacesInParallel: boolean | undefined;
   private runParallel: boolean | undefined;
+  private resultStreaming: boolean | undefined;
   private xRay: boolean | undefined;
   private verboseLogging: boolean | undefined;
   private logEnvVarPresetContents: boolean | undefined;
@@ -53,7 +54,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
   constructor({
     envVarOverrides, envVarPresets, activeEnvVarPreset, projectPath, featuresPaths, justMyCode,
     multiRootRunWorkspacesInParallel,
-    runParallel, xRay, verboseLogging, logEnvVarPresetContents, importStrategy, stepDefinitionSearchTimeout, discoveryDepth, discoveryStopOnFirstHit, suppressedNotifications
+    runParallel, resultStreaming, xRay, verboseLogging, logEnvVarPresetContents, importStrategy, stepDefinitionSearchTimeout, discoveryDepth, discoveryStopOnFirstHit, suppressedNotifications
   }: {
     envVarOverrides: { [name: string]: string } | undefined,
     envVarPresets?: { [presetName: string]: { [name: string]: string } } | undefined,
@@ -63,6 +64,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     justMyCode: boolean | undefined,
     multiRootRunWorkspacesInParallel: boolean | undefined,
     runParallel: boolean | undefined,
+    resultStreaming?: boolean | undefined,
     xRay: boolean | undefined,
     verboseLogging?: boolean | undefined,
     logEnvVarPresetContents?: boolean | undefined,
@@ -79,6 +81,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
     this.featuresPaths = featuresPaths;
     this.justMyCode = justMyCode;
     this.runParallel = runParallel;
+    this.resultStreaming = resultStreaming;
     this.multiRootRunWorkspacesInParallel = multiRootRunWorkspacesInParallel;
     this.xRay = xRay;
     this.verboseLogging = verboseLogging;
@@ -116,6 +119,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.justMyCode === undefined ? true : this.justMyCode);
       case "runParallel":
         return <T><unknown>(this.runParallel === undefined ? false : this.runParallel);
+      case "resultStreaming":
+        return <T><unknown>(this.resultStreaming === undefined ? false : this.resultStreaming);
       case "xRay":
         return <T><unknown>(this.xRay === undefined ? false : this.xRay);
       case "verboseLogging":
@@ -173,6 +178,9 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         break;
       case "runParallel":
         response = <T><unknown>this.runParallel;
+        break;
+      case "resultStreaming":
+        response = <T><unknown>this.resultStreaming;
         break;
       case "xRay":
         response = <T><unknown>this.xRay;
@@ -281,6 +289,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.get("multiRootRunWorkspacesInParallel"));
       case "runParallel":
         return <T><unknown>(this.get("runParallel"));
+      case "resultStreaming":
+        return <T><unknown>(this.get("resultStreaming"));
       case "xRay":
         return <T><unknown>(this.get("xRay"));
       case "importStrategy":

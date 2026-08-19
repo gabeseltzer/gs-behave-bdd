@@ -18,9 +18,22 @@ import { diagLog, DiagLogType } from '../logger';
 export const EXPECTED_PROTOCOL_VERSION = 1;
 
 
-/** Where one workspace's event stream for one run is written. */
-export function getStreamFileUri(runName: string, wkspName: string): vscode.Uri {
-  return vscode.Uri.joinPath(config.extensionTempFilesUri, "events", runName, `${wkspName}.ndjson`);
+/** Directory holding every event stream one workspace writes during one run. */
+export function getStreamDirUri(runName: string, wkspName: string): vscode.Uri {
+  return vscode.Uri.joinPath(config.extensionTempFilesUri, "events", runName, wkspName);
+}
+
+
+/**
+ * Where ONE behave process's event stream is written.
+ *
+ * Per process, not per workspace: behave's StreamOpener opens a formatter outfile
+ * with codecs.open(name, "w"), so parallel instances sharing one path would each
+ * TRUNCATE it on open and then interleave their writes into it - while the tail
+ * reads it through a single fd at a monotonically increasing offset.
+ */
+export function getStreamFileUri(runName: string, wkspName: string, spawnId: string): vscode.Uri {
+  return vscode.Uri.joinPath(getStreamDirUri(runName, wkspName), `${spawnId}.ndjson`);
 }
 
 export interface BehaveEvent {

@@ -9,7 +9,6 @@
 
 import * as vscode from 'vscode';
 import { QueueItem } from '../extension';
-import { urisMatch } from '../common';
 import { diagLog } from '../logger';
 import { BehaveEvent } from './streamEvents';
 
@@ -133,6 +132,13 @@ export class StreamResultReporter {
     item.scenario.result = status;
     this.reported.add(item.test.id);
     markSettled(this.run.name, item.test.id);
+
+    // Positive evidence that the STREAM set this result, not the junit verifier.
+    // Without it the two paths are indistinguishable from the outside: the junit
+    // watcher logs "updated the result" unconditionally, whether or not updateTest
+    // then early-returned on isSettledByStream - so a streaming test that silently
+    // fell back to junit would look exactly like one that worked.
+    diagLog(`streamResults: stream settled ${item.test.id} as ${status}`);
   }
 
 
@@ -171,13 +177,6 @@ export class StreamResultReporter {
     // path has to be part of the key, and it must be compared case-insensitively
     // for the same reason urisMatch() exists (Windows drive-letter casing).
     return `${uri.path.toLowerCase()}:${line}`;
-  }
-
-
-  /** Exposed for tests: does this queue item correspond to that file and line? */
-  public static matches(item: QueueItem, uri: vscode.Uri, line: number): boolean {
-    return !!item.test.uri && urisMatch(item.test.uri, uri)
-      && !!item.test.range && item.test.range.start.line + 1 === line;
   }
 
 }

@@ -13,6 +13,13 @@ suite(`project A suite`, () => {
 	test("runParallel", async () =>
 		await sharedWorkspaceTests.runParallel(folderName, "behave tests/some tests/", getExpectedCounts, getExpectedResults)).timeout(300000);
 
+	test("runStreaming", async () =>
+		await sharedWorkspaceTests.runStreaming(folderName, "/behave tests/some tests/", getExpectedCounts, getExpectedResults)).timeout(300000);
+
+	test("runStreamingParallel", async () =>
+		await sharedWorkspaceTests.runStreamingParallel(folderName, "/behave tests/some tests/", getExpectedCounts, getExpectedResults,
+			undefined, 2)).timeout(300000);
+
 	test("runDebug", async () =>
 		await sharedWorkspaceTests.runDebug(folderName, "/behave tests/some tests/", getExpectedCounts, getExpectedResults)).timeout(300000);
 
