@@ -122,8 +122,8 @@ export class WorkspaceSettings {
     const runParallelCfg: boolean | undefined = get("runParallel");
     if (runParallelCfg === undefined)
       throw "runParallel is undefined";
-    // Defaulted rather than thrown on: an older settings.json that predates this
-    // setting must keep working, and false is the pre-streaming behaviour.
+    // Defaulted rather than thrown on, so a settings.json predating this setting
+    // still works. Must mirror the default in package.json.
     const resultStreamingCfg: boolean | undefined = get("resultStreaming");
     const importStrategyCfg: string | undefined = get("importStrategy");
     if (importStrategyCfg === undefined)
@@ -146,7 +146,7 @@ export class WorkspaceSettings {
 
     this.justMyCode = justMyCodeCfg;
     this.runParallel = runParallelCfg;
-    this.resultStreaming = resultStreamingCfg ?? false;
+    this.resultStreaming = resultStreamingCfg ?? true;
     this.importStrategy = importStrategyCfg;
     this.stepDefinitionSearchTimeout = Math.max(1, stepDefinitionSearchTimeoutCfg);
     this.activeEnvVarPreset = activeEnvVarPresetCfg;

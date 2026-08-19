@@ -63,7 +63,9 @@ export class SharedWorkspaceTests {
     projectPath?: string
   ) => {
 
-    // default = everything undefined (except projectPath if provided for nested projects)
+    // default = everything undefined (except projectPath if provided for nested projects).
+    // Deliberately left undefined for resultStreaming too, so this run is what asserts
+    // that the shipped default (streaming ON) works with no settings.json at all.
     const testConfig = new TestWorkspaceConfig({
       runParallel: undefined, multiRootRunWorkspacesInParallel: undefined,
       envVarOverrides: undefined, projectPath: projectPath,
@@ -81,10 +83,14 @@ export class SharedWorkspaceTests {
     projectPath?: string
   ) => {
 
+    // resultStreaming is pinned OFF here, and in runParallel below. Since streaming
+    // became the default these are the only runs still covering the junit-only result
+    // path, which a debug run always takes and which streaming falls back to.
     const testConfig = new TestWorkspaceConfig({
       runParallel: false, multiRootRunWorkspacesInParallel: true,
       envVarOverrides: envVarOverrides, projectPath: projectPath,
       featuresPaths: [wkspRelativeFeaturesPath],
+      resultStreaming: false,
       justMyCode: undefined, xRay: true
     });
 
@@ -103,6 +109,7 @@ export class SharedWorkspaceTests {
       runParallel: true, multiRootRunWorkspacesInParallel: true,
       envVarOverrides: envVarOverrides, projectPath: projectPath,
       featuresPaths: [wkspRelativeFeaturesPath],
+      resultStreaming: false,
       justMyCode: true, xRay: true
     });
 

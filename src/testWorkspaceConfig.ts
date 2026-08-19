@@ -120,7 +120,7 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
       case "runParallel":
         return <T><unknown>(this.runParallel === undefined ? false : this.runParallel);
       case "resultStreaming":
-        return <T><unknown>(this.resultStreaming === undefined ? false : this.resultStreaming);
+        return <T><unknown>(this.resultStreaming === undefined ? true : this.resultStreaming);
       case "xRay":
         return <T><unknown>(this.xRay === undefined ? false : this.xRay);
       case "verboseLogging":

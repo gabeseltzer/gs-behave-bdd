@@ -77,8 +77,8 @@
 				"gs-behave-bdd.resultStreaming": {
 					"scope": "resource",
 					"type": "boolean",
-					"markdownDescription": "Update the Test Explorer as each scenario finishes, instead of waiting for the whole feature. behave only writes its JUnit results once a feature has completed, so with this off a long feature shows no results until it ends. Requires the extension's bundled Python helper; if it cannot be loaded, results fall back to JUnit automatically.",
-					"default": false
+					"markdownDescription": "Update the Test Explorer as each scenario finishes, instead of waiting for the whole feature to finish.",
+					"default": true
 				},
 				"gs-behave-bdd.xRay": {
 					"scope": "window",
