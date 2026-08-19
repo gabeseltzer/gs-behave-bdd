@@ -386,7 +386,7 @@
 		"compile-tests": "tsc -p test/tsconfig.json",
 		"watch-tests": "tsc -p test/tsconfig.json -w",
 		"lint": "eslint src --ext ts",
-		"lint:python": "uv run ruff check src/python example-projects && uv run ruff format --check src/python example-projects && uv run python -m mypy src/python",
+		"lint:python": "uv run --locked ruff check src/python example-projects && uv run --locked ruff format --check src/python example-projects && uv run --locked python -m mypy src/python",
 		"test:unit": "npm run compile-tests && node ./out/test/test/unit/run.js",
 		"test:integration": "webpack && npm run compile-tests && node ./out/test/test/integration/runTestSuites.js --stable",
 		"test:debug-suite": "webpack && npm run compile-tests && node ./out/test/test/integration/runDebugSuite.js --insiders",
