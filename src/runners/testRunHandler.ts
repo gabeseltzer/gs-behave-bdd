@@ -284,19 +284,24 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
     // other run.
     const streaming = wkspSettings.resultStreaming;
 
+    // ONE index, shared by the result reporter and the output attributor. They must
+    // agree on which line is which item, and testData is what reaches Scenario
+    // Outline example rows - the queue holds only their outline parent.
+    const itemIndex = new FeatureLineIndex(sortedQueue, testData);
+
     if (streaming) {
       // Each behave process opens its own stream file, but the directory holding
       // them has to exist before the first one does.
       const runName = run.name ?? "run";
       await vscode.workspace.fs.createDirectory(getStreamDirUri(runName, wkspSettings.name));
-      const reporter = new StreamResultReporter(run, wkspSettings.projectUri, sortedQueue);
+      const reporter = new StreamResultReporter(run, wkspSettings.projectUri, itemIndex);
       streamSession = new StreamSession(runName, wkspSettings.name, reporter);
     }
 
     wr = new WkspRun(
       wkspSettings, run, request, debug, ctrl, testData, sortedQueue, pythonExec,
       allTestsForThisWkspIncluded, wkspIncludedFeatures, junitWkspRunDirUri,
-      new FeatureLineIndex(sortedQueue), streaming, streamSession
+      itemIndex, streaming, streamSession
     )
 
     const start = performance.now();

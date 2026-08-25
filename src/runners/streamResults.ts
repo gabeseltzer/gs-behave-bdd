@@ -80,12 +80,18 @@ export class StreamResultReporter {
   // step's line is not inside it either.
   private readonly stepTrail = new Map<string, BehaveEvent[]>();
 
+  /**
+   * @param index built ONCE by the caller and shared with OutputAttributor. Building
+   * a second one here is what let results and output disagree about which lines
+   * exist: this reporter's copy was built from the queue alone, which omits Scenario
+   * Outline example rows.
+   */
   constructor(
     private readonly run: vscode.TestRun,
     private readonly projectUri: vscode.Uri,
-    queue: QueueItem[],
+    index: FeatureLineIndex,
   ) {
-    this.index = new FeatureLineIndex(queue);
+    this.index = index;
   }
 
 

@@ -9,6 +9,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { StreamResultReporter, isSettledByStream, markSettled, clearSettled } from '../../../src/runners/streamResults';
 import { BehaveEvent } from '../../../src/runners/streamEvents';
+import { FeatureLineIndex } from '../../../src/runners/itemIndex';
 import { QueueItem } from '../../../src/extension';
 
 suite('streamResults', () => {
@@ -63,7 +64,7 @@ suite('streamResults', () => {
 
   test('maps a passed scenario by file and line', () => {
     const item = makeItem('s1', 'features/simple.feature', 2); // behave line 3
-    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
     r.handle([ev({ status: 'passed', duration: 0.25 })]);
 
@@ -73,7 +74,7 @@ suite('streamResults', () => {
   test('marks only the executing scenario as started', () => {
     const a = makeItem('s1', 'features/simple.feature', 2);
     const b = makeItem('s2', 'features/simple.feature', 7);
-    const r = new StreamResultReporter(makeRun(), projectUri, [a, b]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([a, b]));
 
     r.handle([ev({ phase: 'start', line: 3 })]);
 
@@ -88,7 +89,7 @@ suite('streamResults', () => {
   // path already reported for the same scenario.
   test('a failed scenario takes its message from the failing step event', () => {
     const item = makeItem('s1', 'features/simple.feature', 7); // behave line 8
-    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
     r.handle([
       ev({ phase: 'start', line: 8 }),
@@ -107,7 +108,7 @@ suite('streamResults', () => {
 
   test('the failure is anchored on the failing step line, not the scenario header', () => {
     const item = makeItem('s1', 'features/simple.feature', 7); // behave line 8
-    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
     r.handle([
       ev({ phase: 'start', line: 8 }),
@@ -121,7 +122,7 @@ suite('streamResults', () => {
 
   test('falls back to the scenario range when no step event identified a failure', () => {
     const item = makeItem('s1', 'features/simple.feature', 7);
-    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
     r.handle([ev({ phase: 'start', line: 8 }), ev({ line: 8, status: 'failed' })]);
 
@@ -132,7 +133,7 @@ suite('streamResults', () => {
 
   test('the FIRST bad step is the reported cause, not a later skipped one', () => {
     const item = makeItem('s1', 'features/simple.feature', 7);
-    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
     r.handle([
       ev({ phase: 'start', line: 8 }),
@@ -150,7 +151,7 @@ suite('streamResults', () => {
   test('a failing step does not leak into the NEXT scenario on the same stream', () => {
     const a = makeItem('s1', 'features/simple.feature', 7);
     const b = makeItem('s2', 'features/simple.feature', 20);
-    const r = new StreamResultReporter(makeRun(), projectUri, [a, b]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([a, b]));
 
     r.handle([
       ev({ phase: 'start', line: 8 }),
@@ -171,7 +172,7 @@ suite('streamResults', () => {
   test('failing steps are tracked per stream, not globally', () => {
     const a = makeItem('s1', 'featuresA/a.feature', 7);
     const b = makeItem('s2', 'featuresB/b.feature', 7);
-    const r = new StreamResultReporter(makeRun(), projectUri, [a, b]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([a, b]));
 
     r.handle([ev({ phase: 'start', file: 'featuresA/a.feature', line: 8 })], 'stream-a');
     r.handle([ev({ phase: 'start', file: 'featuresB/b.feature', line: 8 })], 'stream-b');
@@ -191,7 +192,7 @@ suite('streamResults', () => {
 
   test('a stated expected/actual comparison becomes a diff', () => {
     const item = makeItem('s1', 'features/simple.feature', 7);
-    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
     r.handle([
       ev({ phase: 'start', line: 8 }),
@@ -210,7 +211,7 @@ suite('streamResults', () => {
   test('hook_error and cleanup_error are reported as errored, not failed', () => {
     const a = makeItem('s1', 'features/simple.feature', 2);
     const b = makeItem('s2', 'features/simple.feature', 7);
-    const r = new StreamResultReporter(makeRun(), projectUri, [a, b]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([a, b]));
 
     r.handle([
       ev({ line: 3, status: 'hook_error', error: 'before_scenario blew up' }),
@@ -223,7 +224,7 @@ suite('streamResults', () => {
   test('skipped and untested both report as skipped', () => {
     const a = makeItem('s1', 'features/simple.feature', 2);
     const b = makeItem('s2', 'features/simple.feature', 7);
-    const r = new StreamResultReporter(makeRun(), projectUri, [a, b]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([a, b]));
 
     r.handle([ev({ line: 3, status: 'skipped' }), ev({ line: 8, status: 'untested' })]);
 
@@ -235,7 +236,7 @@ suite('streamResults', () => {
   test('distinguishes Scenario Outline example rows by row line', () => {
     const row1 = makeItem('outline/row1', 'features/outline.feature', 9);  // behave line 10
     const row2 = makeItem('outline/row2', 'features/outline.feature', 13); // behave line 14
-    const r = new StreamResultReporter(makeRun(), projectUri, [row1, row2]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([row1, row2]));
 
     r.handle([
       ev({ file: 'features/outline.feature', line: 14, status: 'failed', error: 'boom' }),
@@ -249,7 +250,7 @@ suite('streamResults', () => {
   test('same line in a different feature file does not collide', () => {
     const a = makeItem('a3', 'features/a.feature', 2);
     const b = makeItem('b3', 'features/b.feature', 2);
-    const r = new StreamResultReporter(makeRun(), projectUri, [a, b]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([a, b]));
 
     r.handle([ev({ file: 'features/b.feature', line: 3, status: 'passed' })]);
 
@@ -258,7 +259,7 @@ suite('streamResults', () => {
 
   test('accepts backslash separators from behave on windows', () => {
     const item = makeItem('s1', 'features/simple.feature', 2);
-    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
     r.handle([ev({ file: 'features\\simple.feature', line: 3, status: 'passed' })]);
 
@@ -267,7 +268,7 @@ suite('streamResults', () => {
 
   test('an unknown file or line is ignored rather than throwing', () => {
     const item = makeItem('s1', 'features/simple.feature', 2);
-    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
     assert.doesNotThrow(() => r.handle([
       ev({ line: 999, status: 'passed' }),
@@ -279,7 +280,7 @@ suite('streamResults', () => {
 
   test('an unrecognised status is ignored rather than throwing', () => {
     const item = makeItem('s1', 'features/simple.feature', 2);
-    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
     assert.doesNotThrow(() => r.handle([ev({ status: 'wat' })]));
     assert.deepStrictEqual(calls, []);
@@ -289,7 +290,7 @@ suite('streamResults', () => {
   // report a result themselves - only the scenario event settles an item.
   test('step and feature events do not report a result', () => {
     const item = makeItem('s1', 'features/simple.feature', 2);
-    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
     r.handle([
       { event: 'feature', phase: 'end', file: 'features/simple.feature', line: 1, status: 'failed' },
@@ -303,7 +304,7 @@ suite('streamResults', () => {
   test('reportedIds records settled scenarios so junit can skip them', () => {
     const a = makeItem('s1', 'features/simple.feature', 2);
     const b = makeItem('s2', 'features/simple.feature', 7);
-    const r = new StreamResultReporter(makeRun(), projectUri, [a, b]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([a, b]));
 
     r.handle([ev({ line: 3, status: 'passed' }), ev({ line: 8, phase: 'start' })]);
 
@@ -320,7 +321,7 @@ suite('streamResults', () => {
       const item = makeItem('s1', 'features/simple.feature', 2);
       const run = makeRun() as unknown as { name?: string };
       run.name = 'run-1';
-      const r = new StreamResultReporter(run as unknown as vscode.TestRun, projectUri, [item]);
+      const r = new StreamResultReporter(run as unknown as vscode.TestRun, projectUri, new FeatureLineIndex([item]));
 
       assert.ok(!isSettledByStream('run-1', 's1'), 'not settled before any event');
       r.handle([ev({ status: 'passed' })]);
@@ -334,7 +335,7 @@ suite('streamResults', () => {
       const item = makeItem('s1', 'features/simple.feature', 2);
       const run = makeRun() as unknown as { name?: string };
       run.name = 'run-2';
-      const r = new StreamResultReporter(run as unknown as vscode.TestRun, projectUri, [item]);
+      const r = new StreamResultReporter(run as unknown as vscode.TestRun, projectUri, new FeatureLineIndex([item]));
 
       r.handle([ev({ phase: 'start' })]);
       assert.ok(!isSettledByStream('run-2', 's1'));
@@ -345,7 +346,7 @@ suite('streamResults', () => {
       const item = makeItem('s1', 'features/simple.feature', 2);
       const run = makeRun() as unknown as { name?: string };
       run.name = 'run-3';
-      const r = new StreamResultReporter(run as unknown as vscode.TestRun, projectUri, [item]);
+      const r = new StreamResultReporter(run as unknown as vscode.TestRun, projectUri, new FeatureLineIndex([item]));
       r.handle([ev({ status: 'passed' })]);
 
       assert.ok(!isSettledByStream('run-4', 's1'), 'a different run must not see it');
@@ -361,7 +362,7 @@ suite('streamResults', () => {
 
   test('sets scenario.result so downstream code sees the outcome', () => {
     const item = makeItem('s1', 'features/simple.feature', 2);
-    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+    const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
     r.handle([ev({ status: 'failed', error: 'boom' })]);
 
@@ -383,7 +384,7 @@ suite('streamResults', () => {
 
     test('the whole trail is shown, not just the failing step', () => {
       const item = makeItem('s1', 'features/simple.feature', 2);
-      const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+      const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
       r.handle([step({ ...PASSED }), step({ ...FAILED }), step({ ...SKIPPED }),
         ev({ status: 'failed' })]);
@@ -398,7 +399,7 @@ suite('streamResults', () => {
       // behave stops at the first failure; later steps report skipped or undefined,
       // and naming one of those would bury the cause.
       const item = makeItem('s1', 'features/simple.feature', 2);
-      const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+      const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
       r.handle([step({ ...PASSED }), step({ ...FAILED }),
         step({ keyword: 'Then ', name: 'later', line: 6, status: 'undefined' }),
@@ -413,7 +414,7 @@ suite('streamResults', () => {
     test('a scenario does not inherit the previous scenario trail', () => {
       const one = makeItem('s1', 'features/simple.feature', 2);  // behave line 3
       const two = makeItem('s2', 'features/simple.feature', 9);  // behave line 10
-      const r = new StreamResultReporter(makeRun(), projectUri, [one, two]);
+      const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([one, two]));
 
       r.handle([
         ev({ phase: 'start', line: 3 }), step({ ...PASSED }), step({ ...FAILED }), ev({ status: 'failed', line: 3 }),
@@ -433,7 +434,7 @@ suite('streamResults', () => {
     test('two streams do not blend their trails', () => {
       const one = makeItem('s1', 'features/one.feature', 2);
       const two = makeItem('s2', 'features/two.feature', 2);
-      const r = new StreamResultReporter(makeRun(), projectUri, [one, two]);
+      const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([one, two]));
 
       const aStep = (over: Partial<BehaveEvent>) => step({ file: 'features/one.feature', ...over });
       const bStep = (over: Partial<BehaveEvent>) => step({ file: 'features/two.feature', ...over });
@@ -458,7 +459,7 @@ suite('streamResults', () => {
     test('a hook error having run no steps still produces a message', () => {
       // Otherwise the peek view is blank, which is the regression pass 3 fixed.
       const item = makeItem('s1', 'features/simple.feature', 2);
-      const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+      const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
       r.handle([ev({ status: 'hook_error', error: 'before_scenario blew up' })]);
 
@@ -474,7 +475,7 @@ suite('streamResults', () => {
       // TestRun.passed() takes no message - there is nowhere to put a trail, which is
       // why the output view remains the only surface a green scenario has.
       const item = makeItem('s1', 'features/simple.feature', 2);
-      const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+      const r = new StreamResultReporter(makeRun(), projectUri, new FeatureLineIndex([item]));
 
       r.handle([step({ ...PASSED }), ev({ status: 'passed' })]);
 
