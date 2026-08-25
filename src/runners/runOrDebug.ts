@@ -2,20 +2,89 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import { WorkspaceSettings } from "../settings";
 import { runBehaveInstance } from './behaveRun';
-import { debugBehaveInstance } from './behaveDebug';
+import { debugBehaveInstance, getDebugOutputFileUri } from './behaveDebug';
 import { QueueItem } from '../extension';
 import { WkspError, escapeRegex } from '../common';
+import { STREAM_FORMATTER_NAME } from '../bundledBehave';
 import { WkspRun } from './testRunHandler';
 import { ExampleRow } from '../parsers/testFile';
 
 
 
 // hard-code any settings we MUST have (i.e. override user behave.ini file only where absolutely necessary)
+// NOTE: --junit-directory must stay LAST - callers append its value.
 const OVERRIDE_ARGS = [
+  // Without this, behave sees a pipe rather than a tty, runs monochrome, and its
+  // pretty formatter reports no step status at all: match() prints the step as
+  // Status.executing and result() deliberately does nothing ("Step.status is not
+  // used in monochrome mode", formatter/pretty.py:157-175). No colour, no
+  // timings, and a failed step that looks identical to a passed one.
+  // Use the "--color=on" form, NOT "--color on": behave special-cases a
+  // valueless --color followed by positional paths (configuration.py:946-957),
+  // and the "=" form avoids that path entirely.
+  "--color=on",
+  // Pinned, not merely relied on. It is behave's default, but a user can turn it
+  // off in behave.ini, and it is what appends " # <file>:<line>" to every feature
+  // and scenario header (formatter/pretty.py:123-126,349-351). That comment is how
+  // output lines are attributed to a scenario - it travels in the output itself,
+  // so unlike the event stream it cannot arrive out of order with the lines it
+  // describes. Without it, output falls back to feature-level attribution.
+  "--show-source",
   "--show-skipped", // show-skipped is required for skipped tests to produce junit output
   "--junit",
   "--junit-directory"
 ];
+
+
+/** Feature file stem, used to attribute output lines when runs share a TestRun. */
+function featureStem(workspaceRelativePath: string): string {
+  const name = workspaceRelativePath.replaceAll("\\", "/").split("/").pop() ?? "";
+  return name.replace(/\.feature$/i, "");
+}
+
+
+/**
+ * Formatter args for this behave process, or [] to leave behave's defaults alone.
+ *
+ * Two independent questions decide these: where behave's human-readable output
+ * should go, and whether the event stream is wanted alongside it.
+ *
+ *  - On a RUN, pretty goes to stdout ("-o -"), which is piped and filtered.
+ *  - On a DEBUG run, stdout is the debug console and belongs to the user's own
+ *    print() output, so pretty goes to a file that behaveDebug tails instead.
+ *    That is why a debug run names a formatter even when streaming is off.
+ *
+ * Both formatters get an EXPLICIT outfile, which matters:
+ *  - Naming any formatter suppresses behave's default, so without "-f pretty" the
+ *    human-readable output disappears entirely (default_format only applies when
+ *    no formatters are configured).
+ *  - make_formatters() pairs config.format[i] with config.outputs[i] and falls back
+ *    to stdout beyond the end, so an unpaired "-f pretty" would be handed the
+ *    NDJSON file.
+ *
+ * A user's own "format=" in behave.ini is preserved: behave appends CLI formatters
+ * to the config's list, and format_outfiles_coupling() has already given each
+ * config formatter its own "<name>.output" file, so the index pairing still lines up.
+ */
+export function getFormatterArgs(wr: WkspRun, label: string): string[] {
+
+  // A run with streaming off wants behave's stock behaviour exactly - naming
+  // nothing is both correct and one less pairing to keep aligned.
+  if (!wr.debug && !wr.streaming)
+    return [];
+
+  const prettyOutfile = wr.debug ? `"${getDebugOutputFileUri(wr).fsPath}"` : "-";
+  const args = ["-f", "pretty", "-o", prettyOutfile];
+
+  if (wr.streaming && wr.streamSession) {
+    // NOTE: not pure - this allocates the stream file for the behave process about to
+    // be spawned and starts tailing it, so it must be called exactly once per spawn.
+    const streamFileUri = wr.streamSession.open(label);
+    args.push("-f", STREAM_FORMATTER_NAME, "-o", `"${streamFileUri.fsPath}"`);
+  }
+
+  return args;
+}
 
 
 // Convert a workspace-relative path to a project-relative path
@@ -41,7 +110,8 @@ export async function runOrDebugAllFeaturesInOneInstance(wr: WkspRun): Promise<v
   const friendlyEnvVars = getFriendlyEnvVars(wr.wkspSettings);
   const { ps1, ps2 } = getPSCmdModifyIfWindows();
 
-  const friendlyArgs = [...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`];
+  const friendlyArgs = [...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`,
+    ...getFormatterArgs(wr, "all-features")];
   const args = friendlyArgs.map(x => x.replaceAll('"', ""));
 
   const friendlyCmd = `${ps1}cd "${wr.wkspSettings.projectUri.fsPath}"\n` +
@@ -52,7 +122,7 @@ export async function runOrDebugAllFeaturesInOneInstance(wr: WkspRun): Promise<v
     return;
   }
 
-  await runBehaveInstance(wr, false, args, friendlyCmd);
+  await runBehaveInstance(wr, args, friendlyCmd);
 }
 
 
@@ -70,7 +140,14 @@ export async function runOrDebugFeatures(wr: WkspRun, parallelMode: boolean, sce
     const friendlyEnvVars = getFriendlyEnvVars(wr.wkspSettings);
     const { ps1, ps2 } = getPSCmdModifyIfWindows();
 
-    const friendlyArgs = ["-i", `"${pipedPathPatterns}"`, ...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`];
+    // In parallel mode this instance covers exactly one feature, so name its stream
+    // after that feature; otherwise it covers the lot.
+    const streamLabel = parallelMode && scenarioQueueItems.length > 0
+      ? featureStem(scenarioQueueItems[0].scenario.featureFileWorkspaceRelativePath)
+      : "features";
+
+    const friendlyArgs = ["-i", `"${pipedPathPatterns}"`, ...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`,
+      ...getFormatterArgs(wr, streamLabel)];
     const args = friendlyArgs.map(x => x.replaceAll('"', ""));
 
     const friendlyCmd = `${ps1}cd "${wr.wkspSettings.projectUri.fsPath}"\n` +
@@ -81,11 +158,21 @@ export async function runOrDebugFeatures(wr: WkspRun, parallelMode: boolean, sce
       return;
     }
 
-    await runBehaveInstance(wr, parallelMode, args, friendlyCmd);
+    // In parallel mode this instance covers exactly one feature, so its output
+    // can be prefixed and attached to that feature's test item.
+    let outputPrefix = "";
+    let outputTest: vscode.TestItem | undefined;
+    if (parallelMode && scenarioQueueItems.length > 0) {
+      outputPrefix = `[${streamLabel}] `;
+      outputTest = scenarioQueueItems[0].test.parent;
+    }
+
+    await runBehaveInstance(wr, args, friendlyCmd, outputPrefix, outputTest);
   }
   catch (e: unknown) {
-    wr.run.end();
-    // unawaited (if runParallel) async func, must log the error 
+    // unawaited (if runParallel) async func, must log the error
+    // NOTE: do NOT end the run here - testRunHandler owns run.end() in its
+    // finally block, and ending early silently discards every later update.
     throw new WkspError(e, wr.wkspSettings.uri, wr.run);
   }
 
@@ -117,6 +204,7 @@ export async function runOrDebugFeatureWithSelectedScenarios(wr: WkspRun, parall
       "-i", `"${featureFileProjectRelativePath}$"`,
       "-n", `"${pipedScenarioNames}"`,
       ...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`,
+      ...getFormatterArgs(wr, featureStem(featureFileWorkspaceRelativePath)),
     ];
     const args = friendlyArgs.map(x => x.replace(/^"(.*)"$/, '$1'));
 
@@ -128,11 +216,21 @@ export async function runOrDebugFeatureWithSelectedScenarios(wr: WkspRun, parall
       return;
     }
 
-    await runBehaveInstance(wr, parallelMode, args, friendlyCmd);
+    // This form always targets a single feature file, so prefix and attach its
+    // output whenever the run may be sharing a TestRun with other instances.
+    const outputPrefix = wr.wkspSettings.runParallel && !wr.debug
+      ? `[${featureStem(featureFileWorkspaceRelativePath)}] `
+      : "";
+    const outputTest = wr.wkspSettings.runParallel && !wr.debug
+      ? selectedScenarioQueueItems[0].test.parent
+      : undefined;
+
+    await runBehaveInstance(wr, args, friendlyCmd, outputPrefix, outputTest);
   }
   catch (e: unknown) {
-    wr.run.end();
-    // unawaited (if runParallel) async func, must log the error 
+    // unawaited (if runParallel) async func, must log the error
+    // NOTE: do NOT end the run here - testRunHandler owns run.end() in its
+    // finally block, and ending early silently discards every later update.
     throw new WkspError(e, wr.wkspSettings.uri, wr.run);
   }
 

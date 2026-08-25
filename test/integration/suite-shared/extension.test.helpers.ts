@@ -91,6 +91,7 @@ function assertWorkspaceSettingsAsExpected(wkspName: string, wkspUri: vscode.Uri
 	assert.strictEqual(true, urisMatch(wkspSettings.stepsSearchUri, expectedStepsSearchUri), wkspName);
 	assert.strictEqual(wkspSettings.justMyCode, testConfig.getExpected("justMyCode"), wkspName);
 	assert.strictEqual(wkspSettings.runParallel, testConfig.getExpected("runParallel"), wkspName);
+	assert.strictEqual(wkspSettings.resultStreaming, testConfig.getExpected("resultStreaming"), wkspName);
 }
 
 

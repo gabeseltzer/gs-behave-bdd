@@ -17,6 +17,12 @@ suite(`simple suite`, () => {
 	test("runTogether", async () =>
 		await sharedWorkspaceTests.runTogether(folderName, "", getExpectedCounts, getExpectedResults)).timeout(300000);
 
+	test("runStreaming", async () =>
+		await sharedWorkspaceTests.runStreaming(folderName, "", getExpectedCounts, getExpectedResults)).timeout(300000);
+
+	test("runStreamingParallel", async () =>
+		await sharedWorkspaceTests.runStreamingParallel(folderName, "", getExpectedCounts, getExpectedResults)).timeout(300000);
+
 }).timeout(900000);
 
 

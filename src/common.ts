@@ -778,9 +778,11 @@ export const countTestItems = (testData: TestData, items: vscode.TestItem[]): Te
 }
 
 
-export function cleanBehaveText(text: string) {
-  return text.replaceAll("\x1b", "").replaceAll("[33m", "").replaceAll("[0m", "");
-}
+// NOTE: cleanBehaveText() was removed here. It stripped the ESC byte and the
+// literal strings "[33m" and "[0m", which left every other SGR code visible as
+// text - so behave's colour could not be turned on at all. Behave output now goes
+// through BehaveOutputFilter in src/runners/behaveOutput.ts, which keeps colour,
+// strips cursor motion, and works across chunk boundaries.
 
 
 // Directories that never contain useful Python/feature files — skipped by findFiles

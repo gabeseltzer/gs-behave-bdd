@@ -14,6 +14,10 @@ import { FileParser } from '../parsers/fileParser';
 import { diagLog, DiagLogType } from '../logger';
 import { getJunitWkspRunDirUri, JunitWatcher } from '../watchers/junitWatcher';
 import { getWkspQueueJunitFileMap, QueueItemMapEntry } from '../parsers/junitParser';
+import { FeatureLineIndex } from './itemIndex';
+import { getStreamDirUri } from './streamEvents';
+import { clearSettled, StreamResultReporter } from './streamResults';
+import { StreamSession } from './streamSession';
 
 export class WkspRun {
   constructor(
@@ -27,7 +31,17 @@ export class WkspRun {
     public readonly pythonExec: string,
     public readonly allTestsForThisWkspIncluded: boolean,
     public readonly includedFeatures: vscode.TestItem[],
-    public readonly junitRunDirUri: vscode.Uri
+    public readonly junitRunDirUri: vscode.Uri,
+    /**
+     * Feature-file line index for this run's queue. Used to attribute each line of
+     * behave's output to a scenario, which is independent of result streaming -
+     * attribution reads behave's own source comments, not the event stream.
+     */
+    public readonly outputIndex: FeatureLineIndex,
+    /** Live per-scenario results are being read from the behave event stream. */
+    public readonly streaming: boolean = false,
+    /** Owns one NDJSON stream per behave process spawned for this workspace. */
+    public readonly streamSession: StreamSession | undefined = undefined
   ) { }
 }
 
@@ -81,6 +95,7 @@ export function testRunHandler(testData: TestData, ctrl: vscode.TestController, 
     finally {
       diagLog(`testRunHandler: completed run ${run.name}`);
       run.end();
+      clearSettled(run.name);
     }
   };
 
@@ -250,6 +265,7 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
   request: vscode.TestRunRequest, testData: TestData, debug: boolean, wkspQueue: QueueItem[]) {
 
   let wr: WkspRun | undefined = undefined;
+  let streamSession: StreamSession | undefined = undefined;
 
   diagLog(`runWorkspaceQueue: started for run ${run.name}`, wkspSettings.uri);
 
@@ -261,9 +277,31 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
     const sortedQueue = wkspQueue.sort((a, b) => a.test.id.localeCompare(b.test.id));
     const junitWkspRunDirUri = getJunitWkspRunDirUri(run, wkspSettings.name);
 
+    // Debug runs stream too. They used to be excluded because behave's output is
+    // redirected to a file on that path - but that redirect is what makes it
+    // readable, not what prevents it: the file is tailed the same way the event
+    // stream is, so a debug run gets live results and attributed output like any
+    // other run.
+    const streaming = wkspSettings.resultStreaming;
+
+    // ONE index, shared by the result reporter and the output attributor. They must
+    // agree on which line is which item, and testData is what reaches Scenario
+    // Outline example rows - the queue holds only their outline parent.
+    const itemIndex = new FeatureLineIndex(sortedQueue, testData);
+
+    if (streaming) {
+      // Each behave process opens its own stream file, but the directory holding
+      // them has to exist before the first one does.
+      const runName = run.name ?? "run";
+      await vscode.workspace.fs.createDirectory(getStreamDirUri(runName, wkspSettings.name));
+      const reporter = new StreamResultReporter(run, wkspSettings.projectUri, itemIndex);
+      streamSession = new StreamSession(runName, wkspSettings.name, reporter);
+    }
+
     wr = new WkspRun(
       wkspSettings, run, request, debug, ctrl, testData, sortedQueue, pythonExec,
-      allTestsForThisWkspIncluded, wkspIncludedFeatures, junitWkspRunDirUri
+      allTestsForThisWkspIncluded, wkspIncludedFeatures, junitWkspRunDirUri,
+      itemIndex, streaming, streamSession
     )
 
     const start = performance.now();
@@ -273,9 +311,17 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
 
   }
   catch (e: unknown) {
-    wr?.run.end();
+    // NOTE: do NOT call run.end() here. testRunHandler owns the end in its
+    // finally block; ending the run early means every state update that follows
+    // is dropped silently, so one failing workspace could erase another's
+    // results (and its own, reported later from the junit watcher).
     // unawaited async function (if multiRootRunWorkspacesInParallel) - show error
     config.logger.showError(e, wkspSettings.uri, run);
+  }
+  finally {
+    // stopAll() drains whatever each behave process wrote between its last poll and
+    // exiting, then releases the file handles.
+    streamSession?.stopAll();
   }
 
   diagLog(`runWorkspaceQueue: completed for run ${run.name}`, wkspSettings.uri);
@@ -290,7 +336,8 @@ async function doRunType(wr: WkspRun) {
   }
 
   if (wr.allTestsForThisWkspIncluded) {
-    wr.sortedQueue.forEach(wkspQueueItem => startItemWithDescendants(wr.run, wkspQueueItem.test));
+    if (!wr.streaming)
+      wr.sortedQueue.forEach(wkspQueueItem => startItemWithDescendants(wr.run, wkspQueueItem.test));
     await runAllFeatures(wr);
     return;
   }
@@ -333,14 +380,16 @@ async function runFeaturesTogether(wr: WkspRun) {
       continue;
 
     const selectedScenarios = wr.sortedQueue.filter(qi => qi.test.id.includes(featureId));
-    selectedScenarios.forEach(qi => startItemWithDescendants(wr.run, qi.test));
+    if (!wr.streaming)
+      selectedScenarios.forEach(qi => startItemWithDescendants(wr.run, qi.test));
     await runOrDebugFeatureWithSelectedScenarios(wr, false, selectedScenarios);
   }
 
   if (runTogetherFeatures.length > 0) {
     const allChildScenarios: QueueItem[] = [];
     runTogetherFeatures.forEach(feature => allChildScenarios.push(...getChildScenariosForFeature(wr, feature)));
-    allChildScenarios.forEach(x => startItemWithDescendants(wr.run, x.test));
+    if (!wr.streaming)
+      allChildScenarios.forEach(x => startItemWithDescendants(wr.run, x.test));
 
     await runOrDebugFeatures(wr, false, allChildScenarios);
   }
@@ -373,7 +422,8 @@ async function runFeaturesParallel(wr: WkspRun) {
       featuresRun.push(runEntireFeature.id);
 
       const childScenarios: QueueItem[] = getChildScenariosForParentFeature(wr, wkspQueueItem);
-      childScenarios.forEach(x => startItemWithDescendants(wr.run, x.test));
+      if (!wr.streaming)
+        childScenarios.forEach(x => startItemWithDescendants(wr.run, x.test));
       const promise = runOrDebugFeatures(wr, true, childScenarios);
       asyncRunPromises.push(promise);
       continue;
@@ -384,7 +434,8 @@ async function runFeaturesParallel(wr: WkspRun) {
       continue;
 
     const selectedScenarios = wr.sortedQueue.filter(qi => qi.test.id.includes(featureId));
-    selectedScenarios.forEach(qi => startItemWithDescendants(wr.run, qi.test));
+    if (!wr.streaming)
+      selectedScenarios.forEach(qi => startItemWithDescendants(wr.run, qi.test));
     const promise = runOrDebugFeatureWithSelectedScenarios(wr, false, selectedScenarios);
     asyncRunPromises.push(promise);
   }
@@ -428,18 +479,18 @@ function getFeatureIdIfFeatureNotAlreadyProcessed(alreadyProcessedFeatureIds: st
 
 
 export function logWkspRunStarted(wr: WkspRun) {
-  if (!wr.debug) {
-    wr.run.appendOutput(`--- ${wr.wkspSettings.name} tests started for run ${wr.run.name} @${new Date().toISOString()} ---\r\n`);
-  }
+  // Not gated on !debug any more: a debug run's output now goes to the TestRun
+  // like a normal run's, so it gets the same banners.
+  wr.run.appendOutput(`--- ${wr.wkspSettings.name}: tests started ---\r\n`);
 }
 
 
 export function logWkspRunComplete(wr: WkspRun, start: number) {
   const end = performance.now();
-  if (!wr.debug) {
-    wr.run.appendOutput(`\r\n--- ${wr.wkspSettings.name} tests completed for run ${wr.run.name} ` +
-      `@${new Date().toISOString()} (${(end - start) / 1000} secs) ---\r\n`);
-  }
+  // Rounded, and phrased like behave's own "Took 0min 5.508s" summary directly
+  // above it. Unrounded division used to print values like "2.9110000000000005".
+  const secs = ((end - start) / 1000).toFixed(3);
+  wr.run.appendOutput(`\r\n--- ${wr.wkspSettings.name}: tests completed in ${secs}s ---\r\n`);
 }
 
 

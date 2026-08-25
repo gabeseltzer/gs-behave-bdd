@@ -97,6 +97,26 @@ suite('behaveDebug', () => {
     assert.strictEqual(capturedConfig.request, 'launch');
   });
 
+  // --color=on used to be stripped here, because nothing filtered the debug console
+  // and colour would have left cursor-up sequences visible in it. behave's output no
+  // longer goes to the console - it goes to a file the run tails and filters - so the
+  // flag stays, and it has to: without it behave sees no tty, runs monochrome, and
+  // its pretty formatter reports no step status at all (formatter/pretty.py:157-175).
+  test('keeps --color=on in the debug launch args, so steps report a status', async () => {
+    const mockWr = createMockWr();
+    await debugBehaveInstance(
+      mockWr as unknown as Parameters<typeof debugBehaveInstance>[0],
+      ['--color=on', '--show-skipped', 'features/test.feature'],
+      'behave features/test.feature'
+    );
+
+    assert.ok(capturedConfig, 'startDebugging should have been called');
+    const args = capturedConfig.args as string[];
+    assert.ok(args.includes('--color=on'), `--color=on should be kept, got: ${JSON.stringify(args)}`);
+    assert.ok(args.includes('--show-skipped'), 'other args should be preserved');
+    assert.ok(args.includes('features/test.feature'), 'paths should be preserved');
+  });
+
   test('should include bundled PYTHONPATH in env when importStrategy is useBundled', async () => {
     const mockWr = createMockWr({ importStrategy: 'useBundled' });
     await debugBehaveInstance(
@@ -136,10 +156,16 @@ suite('behaveDebug', () => {
     const { getBundledBehavePath } = require('../../../src/bundledBehave');
     const bundledPath = getBundledBehavePath();
 
-    // When fromEnvironment, bundled path should be at the end (fallback)
+    // When fromEnvironment, bundled comes AFTER the environment's own entries so it
+    // acts as a fallback. It is no longer last overall: the shipped python helpers
+    // directory is appended after it, so assert the relative order instead.
+    const entries = (capturedConfig.env['PYTHONPATH'] as string).split(path.delimiter);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getPythonHelpersPath } = require('../../../src/bundledBehave');
+    const withoutHelpers = entries.filter(e => e !== getPythonHelpersPath());
     assert.ok(
-      capturedConfig.env['PYTHONPATH'].endsWith(bundledPath),
-      `PYTHONPATH should end with bundled path. Got: ${capturedConfig.env['PYTHONPATH']}`
+      withoutHelpers[withoutHelpers.length - 1] === bundledPath,
+      `bundled path should come last apart from the helpers dir. Got: ${capturedConfig.env['PYTHONPATH']}`
     );
   });
 
@@ -467,4 +493,119 @@ suite('behaveDebug', () => {
       }
     });
   });
+
+
+  // Pass 4. behave's output on this path goes to a file rather than the debug
+  // console; these cover the file actually reaching the TestRun, which is the whole
+  // difference between "written and discarded" (what it did before) and "written and
+  // shown" (what it does now).
+  suite('output reaches the TestRun', () => {
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { FeatureLineIndex } = require('../../../src/runners/itemIndex');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fs = require('fs');
+
+    const FEATURE = 'features/basic.feature';
+
+    /** A wr whose output we can inspect, with one queued scenario at behave line 5. */
+    const createCollectingWr = (appended: string[]) => {
+      const base = createMockWr();
+      const item = {
+        test: {
+          id: 'scenario-1',
+          uri: vscode.Uri.joinPath(vscode.Uri.file('/test/project'), FEATURE),
+          range: new vscode.Range(new vscode.Position(4, 0), new vscode.Position(4, 10)),
+        },
+        scenario: {},
+      };
+      return {
+        ...base,
+        outputIndex: new FeatureLineIndex([item]),
+        wkspSettings: { ...base.wkspSettings, projectUri: vscode.Uri.file('/test/project') },
+        run: { ...base.run, appendOutput: (text: string) => appended.push(text) },
+      };
+    };
+
+    /** Path the module and the arg builder both derive; written to as behave would. */
+    const outputFileFor = (wr: ReturnType<typeof createCollectingWr>) => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { getDebugOutputFileUri } = require('../../../src/runners/behaveDebug');
+      return getDebugOutputFileUri(wr).fsPath;
+    };
+
+
+    test('lines behave writes to its outfile are appended to the run', async () => {
+      const appended: string[] = [];
+      const mockWr = createCollectingWr(appended);
+      const outFile = outputFileFor(mockWr);
+
+      // behave only starts writing once the session is launched, so write from the
+      // startDebugging stub - that is when the real process would begin producing.
+      startDebuggingStub.callsFake(async (_folder: unknown, config: unknown) => {
+        capturedConfig = config;
+        fs.mkdirSync(path.dirname(outFile), { recursive: true });
+        fs.writeFileSync(outFile,
+          'Feature: Basic # ' + FEATURE + ':1\n'
+          + '  Scenario: does a thing # ' + FEATURE + ':5\n'
+          + '    Given something\n', 'utf8');
+        return true;
+      });
+
+      await debugBehaveInstance(
+        mockWr as unknown as Parameters<typeof debugBehaveInstance>[0],
+        ['features/test.feature'],
+        'behave features/test.feature'
+      );
+
+      const all = appended.join('');
+      assert.ok(all.includes('Scenario: does a thing'),
+        `behave's output should reach the run, got: ${JSON.stringify(all)}`);
+      assert.ok(all.includes('Given something'), 'step lines should reach the run too');
+    });
+
+
+    test('the final read happens on terminate, not on a poll tick', async () => {
+      // The tail polls every 50ms but the mock terminates on setTimeout(0), so
+      // nothing below can have been delivered by a tick. It is stop()'s drain in the
+      // finally block that must produce it - a debug run has no process close event
+      // to hang the drain off, which is the trap this pins.
+      const appended: string[] = [];
+      const mockWr = createCollectingWr(appended);
+      const outFile = outputFileFor(mockWr);
+
+      startDebuggingStub.callsFake(async (_folder: unknown, config: unknown) => {
+        capturedConfig = config;
+        fs.mkdirSync(path.dirname(outFile), { recursive: true });
+        fs.writeFileSync(outFile, '  Scenario: written just before terminate # ' + FEATURE + ':5\n', 'utf8');
+        return true;
+      });
+
+      await debugBehaveInstance(
+        mockWr as unknown as Parameters<typeof debugBehaveInstance>[0],
+        ['features/test.feature'],
+        'behave features/test.feature'
+      );
+
+      assert.ok(appended.join('').includes('written just before terminate'),
+        'output written between the last poll and termination must not be lost');
+    });
+
+
+    test('the command banner is written to the run, as it is on a normal run', async () => {
+      const appended: string[] = [];
+      const mockWr = createCollectingWr(appended);
+
+      await debugBehaveInstance(
+        mockWr as unknown as Parameters<typeof debugBehaveInstance>[0],
+        ['features/test.feature'],
+        'behave -i features/test.feature'
+      );
+
+      assert.ok(appended.join('').includes('behave -i features/test.feature'),
+        'a debug run should show the command it ran, like a normal run does');
+    });
+
+  });
+
 });

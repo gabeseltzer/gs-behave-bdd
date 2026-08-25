@@ -54,6 +54,7 @@ export class WorkspaceSettings {
   public readonly activeEnvVarPreset: string;
   public readonly justMyCode: boolean;
   public readonly runParallel: boolean;
+  public readonly resultStreaming: boolean;
   public readonly importStrategy: string;
   public readonly stepDefinitionSearchTimeout: number;
   public readonly discoveryDepth: number;
@@ -121,6 +122,9 @@ export class WorkspaceSettings {
     const runParallelCfg: boolean | undefined = get("runParallel");
     if (runParallelCfg === undefined)
       throw "runParallel is undefined";
+    // Defaulted rather than thrown on, so a settings.json predating this setting
+    // still works. Must mirror the default in package.json.
+    const resultStreamingCfg: boolean | undefined = get("resultStreaming");
     const importStrategyCfg: string | undefined = get("importStrategy");
     if (importStrategyCfg === undefined)
       throw "importStrategy is undefined";
@@ -142,6 +146,7 @@ export class WorkspaceSettings {
 
     this.justMyCode = justMyCodeCfg;
     this.runParallel = runParallelCfg;
+    this.resultStreaming = resultStreamingCfg ?? true;
     this.importStrategy = importStrategyCfg;
     this.stepDefinitionSearchTimeout = Math.max(1, stepDefinitionSearchTimeoutCfg);
     this.activeEnvVarPreset = activeEnvVarPresetCfg;

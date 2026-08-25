@@ -32,15 +32,9 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
 12. **Project switching** for workspaces with multiple behave projects. A status bar indicator and "Select Project" command let you switch between discovered projects.
 13. **Per-notification suppression.** Click "Don't Show Again" on any suppressible notification and it stays dismissed for that workspace folder. Backed by the `gs-behave-bdd.suppressedNotifications` array setting — visible in Settings UI, editable by hand, and scoped per workspace folder.
 14. **Migration from `behave-vsc`.** This fork now reads settings only from its own `gs-behave-bdd.*` namespace. On activation it scans your existing `behave-vsc.*` settings and offers per-scope consent prompts to migrate them forward. The new `gs-behave-bdd.migrationMode` and `gs-behave-bdd.completedMigrations` settings, plus the *Behave BDD: Recheck Migrations* command, give you control over when and how the migration runs.
-15. **`execute_steps` IDE support.** Steps embedded in [`context.execute_steps("...")`](https://behave.readthedocs.io/en/latest/api/#behave.runner.Context.execute_steps) string literals in your Python files get the same IDE features as feature-file steps:
-    - **Validation** — a Warning squiggle when an embedded step matches no step definition, and an Error squiggle on lines behave's parser would reject at runtime with a `ParserError` (junk lines, `@tags`, `Scenario:`, a leading `And`/`But`). Squiggles track the live document as you type.
-    - **Go to definition** — Ctrl+Click / F12 on an embedded step jumps straight to its step definition function.
-    - **Hover info** — hovering an embedded step shows the same decorator + docstring popup you get for steps in feature files.
-    - **Parameter highlighting** — `{parameter}` values in embedded steps are colorized like feature-file step parameters. The color is the `gsBehaveBdd.executeStepsParameter` theme color (override it via `workbench.colorCustomizations`).
-    - **Auto-completion** — typing a step inside an `execute_steps` string suggests known step definitions, with the same smart type filtering as feature files (an `And` after a `When` only suggests `@when`/`@step` definitions).
-    - **Create-step quick-fix** — the lightbulb (Ctrl+.) on an undefined embedded step scaffolds a behave step-definition skeleton into the current steps file (or the workspace's largest steps file when triggered from a helper module).
-    - **Reference counting** — `execute_steps` call sites are counted in the step definition's CodeLens, in "Find All Step References", and in native Find All References. The CodeLens distinguishes sources, e.g. `3 references (1 in steps)`.
-    - Supported string forms: triple-quoted and single-line literals, `u`/`r` prefixes, `textwrap.dedent(...)` wrapping, and `.format(...)`/`%`-formatted literals (placeholder-bearing lines are treated as dynamic and never flagged). f-strings and non-literal arguments (variables, concatenation) are skipped entirely — they produce no diagnostics, navigation, or references. Scanned files: every `.py` under the extension's watched roots, plus any step-library file behave's registry pulls in from outside them (e.g. a `lib/` package next to `features/`). Limitations: English Gherkin keywords only (the invoking feature's `# language:` is unknowable from the Python file), and on-disk-only changes to files outside the watched roots aren't detected until the next full parse (in-editor edits are picked up immediately).
+15. **`execute_steps` IDE support.** Steps embedded in [`context.execute_steps("...")`](https://behave.readthedocs.io/en/latest/api/#behave.runner.Context.execute_steps) string literals in your Python files get the same IDE features as feature-file steps.
+16. **Live test results.** The Test Explorer updates as each scenario finishes, rather than waiting for the whole feature to finish.
+17. **Colored test results** in the vscode Test Results view.
 
 #### Migrating from `behave-vsc`
 
@@ -204,6 +198,7 @@ The status bar indicator is hidden when only one project exists or when `project
 - This extension has various options to customise your test run via `settings.json`, e.g. `runParallel`, `featuresPaths`, and `envVarOverrides`.
 - By default, the extension uses its own bundled copy of behave. If you want to use behave from your Python environment instead (e.g. for a newer version), set `importStrategy` to `"fromEnvironment"` in your `settings.json`.
 - You can also disable/enable `justMyCode` for debug (via `settings.json` not `launch.json`).
+- Test results appear as each scenario finishes. If you would rather have them arrive per-feature from behave's JUnit output, set `resultStreaming` to `false`.
 - If you are using a multi-root workspace with multiple projects that contain feature files, you can set up default settings in your `*.code-workspace` file, then optionally override these as required in the `settings.json` in each workspace folder.
 - For more information on available options, go to the extension settings in vscode.
 

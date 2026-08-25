@@ -1,17 +1,20 @@
+import * as vscode from 'vscode';
 import { ChildProcess, spawn, SpawnOptions } from 'child_process';
-import { cleanBehaveText } from '../common';
 import { diagLog } from '../logger';
 import { getBehaveEnv } from './behaveEnv';
+import { RunOutputPipeline } from './outputPipeline';
 import { WkspRun } from './testRunHandler';
 
-function toRunOutput(text: string): string {
-  return text.replace(/\r\n/g, "\n").replace(/\n/g, "\r\n");
-}
 
 
-
-export async function runBehaveInstance(wr: WkspRun, parallelMode: boolean,
-  args: string[], friendlyCmd: string): Promise<void> {
+/**
+ * @param outputPrefix prepended to every output line. Set when more than one
+ * behave process writes to the same TestRun, so lines stay attributable.
+ * @param outputTest associates this process's output with a test item, so the
+ * Test Explorer can show output for that item alone.
+ */
+export async function runBehaveInstance(wr: WkspRun, args: string[], friendlyCmd: string,
+  outputPrefix = "", outputTest?: vscode.TestItem): Promise<void> {
 
   let cp: ChildProcess;
   const cancellationHandler = wr.run.token.onCancellationRequested(() => cp?.kill());
@@ -33,34 +36,33 @@ export async function runBehaveInstance(wr: WkspRun, parallelMode: boolean,
       `working directory:${projectUri.fsPath}\nenv vars: ${JSON.stringify(effectiveEnvVars)}`;
     }
 
-    // if parallel mode, use a buffer so logs gets written out in a human-readable order
-    const asyncBuff: string[] = [];
-    const log = (str: string) => {
-      if (!str)
-        return;
-      str = cleanBehaveText(str);
-      if (parallelMode)
-        asyncBuff.push(str);
-      else
-        wr.run.appendOutput(toRunOutput(str));
-    }
+    // Output streams live, including in parallel mode. Several behave processes
+    // can be writing to one TestRun there, so each line carries a prefix naming
+    // the feature it came from - previously the whole stream was buffered to
+    // process close to keep it readable, which meant no live feedback at all in
+    // the mode chosen for speed.
+    //
+    // stdout and stderr are fed separately: each is its own byte stream, so a
+    // sequence split across chunks must be reassembled per stream.
+    const pipeline = new RunOutputPipeline(wr.run, wr.outputIndex,
+      wr.wkspSettings.projectUri, outputPrefix, outputTest);
 
-    cp.stderr?.on('data', chunk => log(chunk.toString()));
-    cp.stdout?.on('data', chunk => log(chunk.toString()));
+    // Decode as text on the stream rather than per chunk, so a multi-byte
+    // character straddling a chunk boundary is not corrupted.
+    cp.stdout?.setEncoding("utf8");
+    cp.stderr?.setEncoding("utf8");
+    cp.stdout?.on('data', (chunk: string) => pipeline.write("stdout", chunk));
+    cp.stderr?.on('data', (chunk: string) => pipeline.write("stderr", chunk));
 
-    if (!parallelMode)
-      wr.run.appendOutput(toRunOutput(`\n${friendlyCmd}\n`));
+    pipeline.writeDirect(`\n${outputPrefix}${friendlyCmd}\n`);
 
     await new Promise((resolve) => cp.on('close', () => resolve("")));
 
-    if (asyncBuff.length > 0) {
-      wr.run.appendOutput(toRunOutput(`\n---\n${friendlyCmd}\n`));
-      wr.run.appendOutput(toRunOutput(asyncBuff.join("").trim()) + "\r\n");
-      wr.run.appendOutput("---\r\n");
-    }
+    // Release any held or partial output now the process has gone.
+    pipeline.flushAll();
 
     if (wr.run.token.isCancellationRequested)
-      wr.run.appendOutput(toRunOutput(`\n-- TEST RUN ${wr.run.name} CANCELLED --\n`));
+      pipeline.writeDirect(`\n${outputPrefix}-- TEST RUN ${wr.run.name} CANCELLED --\n`);
 
   }
   finally {
@@ -68,5 +70,3 @@ export async function runBehaveInstance(wr: WkspRun, parallelMode: boolean,
   }
 
 }
-
-

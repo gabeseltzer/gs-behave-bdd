@@ -6,6 +6,8 @@ import { getContentFromFilesystem, showDebugWindow, WIN_MAX_PATH, WkspError, esc
 import { config } from '../configuration';
 import { getJunitWkspRunDirUri } from '../watchers/junitWatcher';
 import { WorkspaceSettings } from '../settings';
+import { isSettledByStream } from '../runners/streamResults';
+import { buildFailureMessage } from '../runners/failureMessage';
 
 
 export type parseJunitFileResult = { junitContents: JunitContents, fsPath: string };
@@ -53,16 +55,73 @@ type ParseResult = {
   status: string,
   duration: number,
   failedText?: string,
+  /**
+   * Feature file and 1-based line of the failing step, from the "Location:" line
+   * behave writes into the junit failure body (reporter/junit.py:506-512). It is
+   * stripped from the displayed text, but the position itself is the most precise
+   * the junit path has - previously it was parsed off and thrown away, and the
+   * message was anchored on the scenario header instead.
+   */
+  failedAt?: { file: string, line: number },
 }
 
 
-export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseResult, item: QueueItem,
-  reportedAncestors = new Set<string>()): void {
+/** Statuses that make an outline or Examples group failed rather than merely not passed. */
+const PROBLEM_STATUSES = new Set(["failed", "error", "hook_error", "cleanup_error"]);
+
+
+/** One example row's outcome, for the rollup shown on its outline and its group. */
+export type RowOutcome = { label: string, status: string };
+
+
+/**
+ * The message shown on an outline or Examples group when one of its rows failed.
+ *
+ * A Scenario Outline has no runtime existence in behave: ScenarioOutlineBuilder
+ * treats it as a template and expands it into one generated scenario per example row
+ * (model.py:1281-1285), and there is no before_outline hook. So behave never prints a
+ * line for the outline itself, there is nothing to attribute to it, and the node
+ * shows "The test case did not report any output" - doubly unhelpful on something
+ * that is not a test case.
+ *
+ * The information actually wanted there is WHICH row broke, so it goes in the
+ * message. That costs nothing in the run's output stream, unlike copying the rows'
+ * output onto the parent, which would duplicate every outline's output in the
+ * terminal. Rendered through the same aligned status list as a step trail, so a
+ * rollup and a trail read alike.
+ */
+function rollupMessage(item: vscode.TestItem, rows: RowOutcome[]): vscode.TestMessage {
+  const failed = rows.filter(r => PROBLEM_STATUSES.has(r.status)).length;
+  const summary = `${item.label} - ${failed} of ${rows.length} example row${rows.length === 1 ? "" : "s"} failed`;
+  const location = item.uri && item.range
+    ? new vscode.Location(item.uri, item.range)
+    : undefined;
+  return buildFailureMessage(summary, location, rows.map(r => ({ name: r.label, status: r.status })));
+}
+
+
+/**
+ * @param rollupRows the outcomes of this item's example rows, when it is a Scenario
+ * Outline. Given, the failure message becomes a rollup naming the row that broke
+ * instead of repeating one row's text on a node that did not run.
+ */
+export function updateTest(wkspSettings: WorkspaceSettings, run: vscode.TestRun, debug: boolean,
+  result: ParseResult, item: QueueItem, reportedAncestors = new Set<string>(),
+  rollupRows?: RowOutcome[]): void {
 
   const window = debug ? "debug console" : `Behave BDD output window`;
   let message: vscode.TestMessage;
 
-  if (run.token.isCancellationRequested)
+  // The live event stream already settled this one; junit is only a verifier now,
+  // so leave it alone rather than re-deriving it from a name match.
+  if (isSettledByStream(run.name, item.test.id))
+    return;
+
+  // On cancellation, only the SYNTHETIC "no junit file" result is suppressed - a
+  // scenario that never ran must not be reported as errored. A real result parsed
+  // from a junit file is still true and is kept: discarding those meant a cancelled
+  // run told you nothing about the work it had already completed.
+  if (run.token.isCancellationRequested && result.status === "no-junit-file")
     return;
 
   switch (result.status) {
@@ -81,8 +140,9 @@ export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseRes
     case "failed":
       if (!item.test.uri || !item.test.range)
         throw "invalid test item";
-      message = new vscode.TestMessage(result.failedText ?? "failed");
-      message.location = new vscode.Location(item.test.uri, item.test.range);
+      message = rollupRows
+        ? rollupMessage(item.test, rollupRows)
+        : buildFailureMessage(result.failedText ?? "failed", failureLocation(wkspSettings, result, item.test));
       run.failed(item.test, message, result.duration);
       break;
     case "error":
@@ -90,8 +150,9 @@ export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseRes
     case "cleanup_error":
       if (!item.test.uri || !item.test.range)
         throw "invalid test item";
-      message = new vscode.TestMessage(result.failedText ?? "error");
-      message.location = new vscode.Location(item.test.uri, item.test.range);
+      message = rollupRows
+        ? rollupMessage(item.test, rollupRows)
+        : buildFailureMessage(result.failedText ?? "error", failureLocation(wkspSettings, result, item.test));
       run.errored(item.test, message, result.duration);
       break;
     default:
@@ -99,12 +160,11 @@ export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseRes
   }
 
   item.scenario.result = result.status;
-  const statusOutput = result.status === "passed" || result.status === "skipped"
-    ? result.status.toUpperCase()
-    : result.status === "error" || result.status === "hook_error" || result.status === "cleanup_error"
-      ? "ERROR"
-      : "FAILED";
-  run.appendOutput(`Test item ${vscode.Uri.parse(item.test.id).fsPath}: ${statusOutput}\r\n`);
+  // NOTE: deliberately no "Test item <path>: STATUS" line here. It appeared in
+  // the same stream as behave's own output, but arrived in a burst once the
+  // feature's junit file was parsed - so out of order with the text it described
+  // - and nothing on the command line looks like it. The result still reaches
+  // the UI via run.passed()/failed()/errored() above.
 
   // Propagate failure/error results to ancestor items (group and outline) so the
   // error message is visible on parent nodes in the Test Explorer, not just the row.
@@ -115,9 +175,12 @@ export function updateTest(run: vscode.TestRun, debug: boolean, result: ParseRes
       if (reportedAncestors.has(ancestor.id))
         break;
       reportedAncestors.add(ancestor.id);
-      const msg = new vscode.TestMessage(result.failedText ?? result.status);
-      if (ancestor.uri && ancestor.range)
-        msg.location = new vscode.Location(ancestor.uri, ancestor.range);
+      // An ancestor is anchored at its OWN position, not the failing step's: the
+      // outline/group header is what the user clicks on in the tree.
+      const ancestorLocation = ancestor.uri && ancestor.range
+        ? new vscode.Location(ancestor.uri, ancestor.range)
+        : undefined;
+      const msg = buildFailureMessage(result.failedText ?? result.status, ancestorLocation);
       if (result.status === "failed")
         run.failed(ancestor, msg, result.duration);
       else
@@ -180,19 +243,61 @@ function CreateParseResult(wkspSettings: WorkspaceSettings, debug: boolean, test
   if (reasonBlocks.length === 0)
     throw new Error("Failed test has no failure or error message");
 
-  // remove any error text we don't need in the UI
+  // remove any error text we don't need in the UI. The "Location:" line is parsed
+  // out rather than merely skipped: it names the failing step's line in the feature
+  // file, which is a better place to anchor the message than the scenario header.
   let errText = "";
+  let failedAt: { file: string, line: number } | undefined;
   reasonBlocks.forEach(reason => {
     const lines = reason.split("\n");
     lines.forEach(line => {
-      if (!line.startsWith("Location: ") && /None$/.exec(line) === null) {
+      if (line.startsWith("Location: ")) {
+        failedAt = failedAt ?? parseFailureLocation(line);
+        return;
+      }
+      if (/None$/.exec(line) === null) {
         errText += line.replace(/ ... failed in .+\..+s$/, " ... failed").replace(/ ... undefined in .+\..+s$/, " ... undefined") + "\n";
       }
     });
   });
   errText = errText.trim();
 
-  return { status: xmlStatus, duration: xmlDuration, failedText: errText };
+  return { status: xmlStatus, duration: xmlDuration, failedText: errText, failedAt };
+}
+
+
+/**
+ * Parse behave's "Location: <feature file>:<line>" failure line.
+ *
+ * The path is relative to behave's working directory (the project), matching the
+ * event stream's own "file" field, so both paths resolve it the same way.
+ */
+function parseFailureLocation(line: string): { file: string, line: number } | undefined {
+  const match = /^Location: (.+):(\d+)$/.exec(line.trim());
+  if (!match)
+    return undefined;
+  return { file: match[1], line: parseInt(match[2], 10) };
+}
+
+
+/** Resolve a junit failure location onto the feature file it names. */
+function failureLocation(wkspSettings: WorkspaceSettings, result: ParseResult,
+  item: vscode.TestItem): vscode.Location | undefined {
+
+  // projectUri is what behave's relative path is relative to; without it the path
+  // cannot be resolved, so fall back rather than guessing at a location.
+  if (result.failedAt && wkspSettings.projectUri) {
+    const uri = vscode.Uri.joinPath(wkspSettings.projectUri, result.failedAt.file.replace(/\\/g, "/"));
+    // A Range, not a bare Position: Location accepts either, but every other
+    // location here is a Range and consumers read .range.start.
+    const at = new vscode.Position(Math.max(0, result.failedAt.line - 1), 0);
+    return new vscode.Location(uri, new vscode.Range(at, at));
+  }
+
+  if (item.uri && item.range)
+    return new vscode.Location(item.uri, item.range);
+
+  return undefined;
 }
 
 
@@ -359,12 +464,12 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
         const nonSkipped = queueItemResults.find(tc => tc.$.status !== "skipped");
         if (nonSkipped) {
           const parseResult = CreateParseResult(wkspSettings, debug, nonSkipped);
-          updateTest(run, debug, parseResult, queueItem, reportedAncestors);
+          updateTest(wkspSettings, run, debug, parseResult, queueItem, reportedAncestors);
           continue;
         }
       }
       const parseResult = CreateParseResult(wkspSettings, debug, queueItemResults[0]);
-      updateTest(run, debug, parseResult, queueItem, reportedAncestors);
+      updateTest(wkspSettings, run, debug, parseResult, queueItem, reportedAncestors);
       continue;
     }
 
@@ -410,13 +515,16 @@ export async function parseJunitFileAndUpdateTestResults(wkspSettings: Workspace
     }
 
     const parseResult = CreateParseResult(wkspSettings, debug, queueItemResult);
-    updateTest(run, debug, parseResult, queueItem, reportedAncestors);
+    // Rows and groups are resolved BEFORE the outline itself, because their outcomes
+    // are what the outline's own message summarises. behave never reports the outline
+    // - it expands it into one scenario per row - so its rows are the only thing it
+    // can honestly say anything about.
+    const rollupRows = queueItem.scenario.isOutline && queueItemResults.length > 1
+      ? updateOutlineChildResults(wkspSettings, run, debug, queueItem.test, queueItemResults)
+      : undefined;
 
-    // When an outline is run directly, also update child group and row items
-    // so individual example results are visible in the Test Explorer.
-    if (queueItem.scenario.isOutline && queueItemResults.length > 1) {
-      updateOutlineChildResults(wkspSettings, run, debug, queueItem.test, queueItemResults);
-    }
+    updateTest(wkspSettings, run, debug, parseResult, queueItem, reportedAncestors, rollupRows);
+
   }
 }
 
@@ -426,7 +534,7 @@ export function updateTestResultsForUnreadableJunitFile(wkspSettings: WorkspaceS
 
   const parseResult = { status: "no-junit-file", duration: 0 };
   for (const queueItem of queueItems) {
-    updateTest(run, false, parseResult, queueItem);
+    updateTest(wkspSettings, run, false, parseResult, queueItem);
   }
 
   if (config.exampleProject) {
@@ -445,7 +553,7 @@ export function updateTestResultsForUnreadableJunitFile(wkspSettings: WorkspaceS
  * ran the outline as a whole rather than individual rows.
  */
 function updateOutlineChildResults(wkspSettings: WorkspaceSettings, run: vscode.TestRun, debug: boolean,
-  outlineItem: vscode.TestItem, testCases: TestCase[]) {
+  outlineItem: vscode.TestItem, testCases: TestCase[]): RowOutcome[] {
 
   // Build a lookup from the " -- @x.y name" suffix to testcase(s).
   // Multiple outlines can share the same suffix; use an array to avoid silent overwrites.
@@ -463,14 +571,20 @@ function updateOutlineChildResults(wkspSettings: WorkspaceSettings, run: vscode.
   }
 
   // Walk outline children: groups → rows
+  const allRows: RowOutcome[] = [];
+
   outlineItem.children.forEach(groupOrRow => {
     let groupWorstStatus: string | undefined;
     let groupWorstResult: ParseResult | undefined;
+    const groupRows: RowOutcome[] = [];
 
     groupOrRow.children.forEach(rowItem => {
       const result = matchRowItemToResult(wkspSettings, debug, rowItem, suffixMap);
       if (result) {
-        reportResult(run, debug, rowItem, result);
+        reportResult(wkspSettings, run, debug, rowItem, result);
+        // Collected even when reportResult skipped a row the stream already settled:
+        // the rollup describes what happened, not who reported it.
+        groupRows.push({ label: rowItem.label, status: result.status });
         // Track worst result for the group
         if (!groupWorstResult || isWorse(result.status, groupWorstStatus ?? "passed")) {
           groupWorstResult = result;
@@ -479,11 +593,41 @@ function updateOutlineChildResults(wkspSettings: WorkspaceSettings, run: vscode.
       }
     });
 
+    allRows.push(...groupRows);
+
     // Update the group item with its worst child result
     if (groupWorstResult) {
-      reportResult(run, debug, groupOrRow, groupWorstResult);
+      reportGroupResult(wkspSettings, run, debug, groupOrRow, groupWorstResult, groupRows);
     }
   });
+
+  return allRows;
+}
+
+
+/**
+ * Report an Examples group, carrying a rollup of its rows when one of them failed.
+ *
+ * Only a failing group gets the rollup: TestRun.passed() takes no message, so a green
+ * group has nowhere to put one - the same API limit that leaves a passing scenario
+ * with no message at all.
+ */
+function reportGroupResult(wkspSettings: WorkspaceSettings, run: vscode.TestRun, debug: boolean,
+  groupItem: vscode.TestItem, worst: ParseResult, rows: RowOutcome[]) {
+
+  if (!PROBLEM_STATUSES.has(worst.status)) {
+    reportResult(wkspSettings, run, debug, groupItem, worst);
+    return;
+  }
+
+  if (isSettledByStream(run.name, groupItem.id))
+    return;
+
+  const msg = rollupMessage(groupItem, rows);
+  if (worst.status === "failed")
+    run.failed(groupItem, msg, worst.duration);
+  else
+    run.errored(groupItem, msg, worst.duration);
 }
 
 
@@ -508,8 +652,11 @@ function matchRowItemToResult(wkspSettings: WorkspaceSettings, debug: boolean,
 }
 
 
-function reportResult(run: vscode.TestRun, debug: boolean, item: vscode.TestItem, result: ParseResult) {
-  if (run.token.isCancellationRequested)
+function reportResult(wkspSettings: WorkspaceSettings, run: vscode.TestRun, debug: boolean,
+  item: vscode.TestItem, result: ParseResult) {
+  if (isSettledByStream(run.name, item.id))
+    return;
+  if (run.token.isCancellationRequested && result.status === "no-junit-file")
     return;
   switch (result.status) {
     case "passed":
@@ -519,23 +666,20 @@ function reportResult(run: vscode.TestRun, debug: boolean, item: vscode.TestItem
       run.skipped(item);
       break;
     case "failed": {
-      const msg = new vscode.TestMessage(result.failedText ?? "failed");
-      if (item.uri && item.range)
-        msg.location = new vscode.Location(item.uri, item.range);
-      run.failed(item, msg, result.duration);
+      run.failed(item, buildFailureMessage(result.failedText ?? "failed",
+        failureLocation(wkspSettings, result, item)), result.duration);
       break;
     }
     case "error":
     case "hook_error":
     case "cleanup_error": {
-      const msg = new vscode.TestMessage(result.failedText ?? "error");
-      if (item.uri && item.range)
-        msg.location = new vscode.Location(item.uri, item.range);
-      run.errored(item, msg, result.duration);
+      run.errored(item, buildFailureMessage(result.failedText ?? "error",
+        failureLocation(wkspSettings, result, item)), result.duration);
       break;
     }
   }
-  run.appendOutput(`Test item ${vscode.Uri.parse(item.id).fsPath}: ${result.status.toUpperCase()}\r\n`);
+  // see the note in updateTest(): no "Test item ..." line - the result reaches
+  // the UI through the run.* calls above.
 }
 
 
