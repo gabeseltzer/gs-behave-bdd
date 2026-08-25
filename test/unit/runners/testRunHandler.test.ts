@@ -93,10 +93,16 @@ suite('testRunHandler', () => {
       assert.ok(true, 'Completed without calling config.logger.logInfo');
     });
 
-    test('does nothing when debug is true', () => {
+    // Used to be silent on a debug run, because behave's output never reached the
+    // TestRun on that path. It does now, so the banner belongs there too - a debug
+    // run's output should read like any other run's.
+    test('writes the start banner on a debug run too', () => {
       const wr = createMockWr(true);
       logWkspRunStarted(wr as unknown as Parameters<typeof logWkspRunStarted>[0]);
-      assert.strictEqual(appendOutputCalls.length, 0, 'Should not write output in debug mode');
+
+      const allOutput = appendOutputCalls.join('');
+      assert.ok(allOutput.includes('TestWorkspace'), 'Should contain workspace name');
+      assert.ok(allOutput.includes('tests started'), 'Should contain "tests started"');
     });
   });
 
@@ -135,11 +141,14 @@ suite('testRunHandler', () => {
       assert.ok(true, 'Completed without calling config.logger.logInfo');
     });
 
-    test('does nothing when debug is true', () => {
+    test('writes the complete banner on a debug run too', () => {
       const wr = createMockWr(true);
-      const start = performance.now() - 100;
+      const start = performance.now() - 500;
       logWkspRunComplete(wr as unknown as Parameters<typeof logWkspRunComplete>[0], start);
-      assert.strictEqual(appendOutputCalls.length, 0, 'Should not write output in debug mode');
+
+      const allOutput = appendOutputCalls.join('');
+      assert.ok(allOutput.includes('TestWorkspace'), 'Should contain workspace name');
+      assert.ok(allOutput.includes('tests completed'), 'Should contain "tests completed"');
     });
   });
 });

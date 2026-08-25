@@ -277,9 +277,12 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
     const sortedQueue = wkspQueue.sort((a, b) => a.test.id.localeCompare(b.test.id));
     const junitWkspRunDirUri = getJunitWkspRunDirUri(run, wkspSettings.name);
 
-    // Debug runs are excluded: behave's output is redirected to a file on that path
-    // and results come back through the debug session, not a live stream.
-    const streaming = wkspSettings.resultStreaming && !debug;
+    // Debug runs stream too. They used to be excluded because behave's output is
+    // redirected to a file on that path - but that redirect is what makes it
+    // readable, not what prevents it: the file is tailed the same way the event
+    // stream is, so a debug run gets live results and attributed output like any
+    // other run.
+    const streaming = wkspSettings.resultStreaming;
 
     if (streaming) {
       // Each behave process opens its own stream file, but the directory holding
@@ -471,20 +474,18 @@ function getFeatureIdIfFeatureNotAlreadyProcessed(alreadyProcessedFeatureIds: st
 
 
 export function logWkspRunStarted(wr: WkspRun) {
-  if (!wr.debug) {
-    wr.run.appendOutput(`--- ${wr.wkspSettings.name}: tests started ---\r\n`);
-  }
+  // Not gated on !debug any more: a debug run's output now goes to the TestRun
+  // like a normal run's, so it gets the same banners.
+  wr.run.appendOutput(`--- ${wr.wkspSettings.name}: tests started ---\r\n`);
 }
 
 
 export function logWkspRunComplete(wr: WkspRun, start: number) {
   const end = performance.now();
-  if (!wr.debug) {
-    // Rounded, and phrased like behave's own "Took 0min 5.508s" summary directly
-    // above it. Unrounded division used to print values like "2.9110000000000005".
-    const secs = ((end - start) / 1000).toFixed(3);
-    wr.run.appendOutput(`\r\n--- ${wr.wkspSettings.name}: tests completed in ${secs}s ---\r\n`);
-  }
+  // Rounded, and phrased like behave's own "Took 0min 5.508s" summary directly
+  // above it. Unrounded division used to print values like "2.9110000000000005".
+  const secs = ((end - start) / 1000).toFixed(3);
+  wr.run.appendOutput(`\r\n--- ${wr.wkspSettings.name}: tests completed in ${secs}s ---\r\n`);
 }
 
 

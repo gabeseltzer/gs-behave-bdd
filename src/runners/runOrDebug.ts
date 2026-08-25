@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import { WorkspaceSettings } from "../settings";
 import { runBehaveInstance } from './behaveRun';
-import { debugBehaveInstance } from './behaveDebug';
+import { debugBehaveInstance, getDebugOutputFileUri } from './behaveDebug';
 import { QueueItem } from '../extension';
 import { WkspError, escapeRegex } from '../common';
 import { STREAM_FORMATTER_NAME } from '../bundledBehave';
@@ -44,7 +44,15 @@ function featureStem(workspaceRelativePath: string): string {
 
 
 /**
- * Formatter args for live result streaming, or [] when it is off.
+ * Formatter args for this behave process, or [] to leave behave's defaults alone.
+ *
+ * Two independent questions decide these: where behave's human-readable output
+ * should go, and whether the event stream is wanted alongside it.
+ *
+ *  - On a RUN, pretty goes to stdout ("-o -"), which is piped and filtered.
+ *  - On a DEBUG run, stdout is the debug console and belongs to the user's own
+ *    print() output, so pretty goes to a file that behaveDebug tails instead.
+ *    That is why a debug run names a formatter even when streaming is off.
  *
  * Both formatters get an EXPLICIT outfile, which matters:
  *  - Naming any formatter suppresses behave's default, so without "-f pretty" the
@@ -52,19 +60,30 @@ function featureStem(workspaceRelativePath: string): string {
  *    no formatters are configured).
  *  - make_formatters() pairs config.format[i] with config.outputs[i] and falls back
  *    to stdout beyond the end, so an unpaired "-f pretty" would be handed the
- *    NDJSON file. "-o -" means stdout.
+ *    NDJSON file.
  *
  * A user's own "format=" in behave.ini is preserved: behave appends CLI formatters
  * to the config's list, and format_outfiles_coupling() has already given each
  * config formatter its own "<name>.output" file, so the index pairing still lines up.
  */
-function getStreamFormatterArgs(wr: WkspRun, label: string): string[] {
-  if (!wr.streaming || !wr.streamSession)
+export function getFormatterArgs(wr: WkspRun, label: string): string[] {
+
+  // A run with streaming off wants behave's stock behaviour exactly - naming
+  // nothing is both correct and one less pairing to keep aligned.
+  if (!wr.debug && !wr.streaming)
     return [];
-  // NOTE: not pure - this allocates the stream file for the behave process about to
-  // be spawned and starts tailing it, so it must be called exactly once per spawn.
-  const streamFileUri = wr.streamSession.open(label);
-  return ["-f", "pretty", "-o", "-", "-f", STREAM_FORMATTER_NAME, `-o`, `"${streamFileUri.fsPath}"`];
+
+  const prettyOutfile = wr.debug ? `"${getDebugOutputFileUri(wr).fsPath}"` : "-";
+  const args = ["-f", "pretty", "-o", prettyOutfile];
+
+  if (wr.streaming && wr.streamSession) {
+    // NOTE: not pure - this allocates the stream file for the behave process about to
+    // be spawned and starts tailing it, so it must be called exactly once per spawn.
+    const streamFileUri = wr.streamSession.open(label);
+    args.push("-f", STREAM_FORMATTER_NAME, "-o", `"${streamFileUri.fsPath}"`);
+  }
+
+  return args;
 }
 
 
@@ -92,7 +111,7 @@ export async function runOrDebugAllFeaturesInOneInstance(wr: WkspRun): Promise<v
   const { ps1, ps2 } = getPSCmdModifyIfWindows();
 
   const friendlyArgs = [...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`,
-    ...getStreamFormatterArgs(wr, "all-features")];
+    ...getFormatterArgs(wr, "all-features")];
   const args = friendlyArgs.map(x => x.replaceAll('"', ""));
 
   const friendlyCmd = `${ps1}cd "${wr.wkspSettings.projectUri.fsPath}"\n` +
@@ -128,7 +147,7 @@ export async function runOrDebugFeatures(wr: WkspRun, parallelMode: boolean, sce
       : "features";
 
     const friendlyArgs = ["-i", `"${pipedPathPatterns}"`, ...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`,
-      ...getStreamFormatterArgs(wr, streamLabel)];
+      ...getFormatterArgs(wr, streamLabel)];
     const args = friendlyArgs.map(x => x.replaceAll('"', ""));
 
     const friendlyCmd = `${ps1}cd "${wr.wkspSettings.projectUri.fsPath}"\n` +
@@ -185,7 +204,7 @@ export async function runOrDebugFeatureWithSelectedScenarios(wr: WkspRun, parall
       "-i", `"${featureFileProjectRelativePath}$"`,
       "-n", `"${pipedScenarioNames}"`,
       ...OVERRIDE_ARGS, `"${wr.junitRunDirUri.fsPath}"`,
-      ...getStreamFormatterArgs(wr, featureStem(featureFileWorkspaceRelativePath)),
+      ...getFormatterArgs(wr, featureStem(featureFileWorkspaceRelativePath)),
     ];
     const args = friendlyArgs.map(x => x.replace(/^"(.*)"$/, '$1'));
 
