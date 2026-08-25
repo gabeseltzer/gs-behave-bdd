@@ -160,8 +160,15 @@ export function buildFailureMessage(text: string, location?: vscode.Location,
 }
 
 
+/**
+ * Escape markdown punctuation in the summary line.
+ *
+ * "<" is in the set for Gherkin's sake: outline names carry <param> placeholders,
+ * and a raw "<" is the one character here that can start something a renderer treats
+ * as markup rather than as text.
+ */
 function escapeMarkdown(text: string): string {
-  return text.replace(/([\\`*_{}[\]()#+\-.!|>~])/g, "\\$1");
+  return text.replace(/([\\`*_{}[\]()#+\-.!|<>~])/g, "\\$1");
 }
 
 
