@@ -2,7 +2,7 @@
 
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { parseFeatureContent, getFeatureFileSteps, getFeatureParseErrors, deleteFeatureFileSteps } from '../../../src/parsers/featureParser';
+import { parseFeatureContent, getFeatureFileSteps, getFeatureParseErrors, deleteFeatureFileSteps, getFeatureTags, getFeatureTagByPosition } from '../../../src/parsers/featureParser';
 import { WorkspaceSettings } from '../../../src/settings';
 
 suite('featureParser', () => {
@@ -313,6 +313,103 @@ Feature: Test
       assert.strictEqual(steps.length, 2, 'Should have 2 steps');
       // The @tag2 inside the text block should not be added as a tag
       // This is indirectly tested by ensuring text block content is skipped
+    });
+  });
+
+  // A tag line may carry several tags. Only the first used to be recorded, because
+  // tagRe's "\S+" stops at the first whitespace and was exec'd once per line - so
+  // "@slow" in "@smoke @slow" never reached fixture diagnostics or hovers at all.
+  suite('parseFeatureContent - multiple tags on one line', () => {
+
+    const featuresRoot = vscode.Uri.file('c:/test/features');
+
+    const parse = (content: string) => {
+      let _scenarios = 0;
+      let _featureLines = 0;
+      parseFeatureContent(wkspSettings, testUri, content, 'test', () => { _scenarios++; }, () => { _featureLines++; });
+    };
+
+    test('records every tag on the line', () => {
+      parse(`
+Feature: Test
+  @smoke @slow @wip
+  Scenario: Test scenario
+    Given a precondition
+`);
+      const tags = getFeatureTags(featuresRoot).map(t => t.tag);
+      assert.deepStrictEqual(tags, ['smoke', 'slow', 'wip']);
+    });
+
+    test('gives each tag its own range, so they can be told apart', () => {
+      parse(`
+Feature: Test
+  @smoke @slow
+  Scenario: Test scenario
+    Given a precondition
+`);
+      const tags = getFeatureTags(featuresRoot);
+      assert.strictEqual(tags.length, 2);
+
+      // "  @smoke @slow" on line 2: @smoke at col 2, @slow at col 9.
+      assert.strictEqual(tags[0].range.start.character, 2);
+      assert.strictEqual(tags[0].range.end.character, 8, '"@smoke"');
+      assert.strictEqual(tags[1].range.start.character, 9);
+      assert.strictEqual(tags[1].range.end.character, 14, '"@slow"');
+      assert.strictEqual(tags[0].range.start.line, tags[1].range.start.line, 'same line');
+    });
+
+    test('the position picks out which tag was hovered', () => {
+      parse(`
+Feature: Test
+  @smoke @slow
+  Scenario: Test scenario
+    Given a precondition
+`);
+      const at = (char: number) => getFeatureTagByPosition(testUri, new vscode.Position(2, char))?.tag;
+
+      assert.strictEqual(at(4), 'smoke', 'inside @smoke');
+      assert.strictEqual(at(11), 'slow', 'inside @slow - this used to find nothing');
+      assert.strictEqual(at(20), undefined, 'past the end of the line');
+    });
+
+    test('tags on separate lines still work', () => {
+      parse(`
+Feature: Test
+  @smoke
+  @slow
+  Scenario: Test scenario
+    Given a precondition
+`);
+      assert.deepStrictEqual(getFeatureTags(featuresRoot).map(t => t.tag), ['smoke', 'slow']);
+      assert.strictEqual(getFeatureTagByPosition(testUri, new vscode.Position(2, 3))?.tag, 'smoke');
+      assert.strictEqual(getFeatureTagByPosition(testUri, new vscode.Position(3, 3))?.tag, 'slow');
+    });
+
+    test('a reparse replaces the previous tags rather than accumulating them', () => {
+      parse(`
+Feature: Test
+  @smoke @slow
+  Scenario: Test scenario
+    Given a precondition
+`);
+      parse(`
+Feature: Test
+  @wip
+  Scenario: Test scenario
+    Given a precondition
+`);
+      assert.deepStrictEqual(getFeatureTags(featuresRoot).map(t => t.tag), ['wip'],
+        'the per-file clear must handle a line holding several tags');
+    });
+
+    test('a step mentioning an @ is not a tag line', () => {
+      parse(`
+Feature: Test
+  Scenario: Test scenario
+    Given I email @bob and @jane
+`);
+      assert.deepStrictEqual(getFeatureTags(featuresRoot).map(t => t.tag), [],
+        'tagRe is anchored, and that gate still decides what counts as a tag line');
     });
   });
 

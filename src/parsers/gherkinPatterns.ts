@@ -11,6 +11,9 @@ export const stepRe = /^\s*(Given|When|Then|And|But|\*)(.*)$/i;
 // Leading step keywords. `* ` is behave's generic bullet keyword (valid for any step
 // type — it inherits the previous step's type, defaulting to "given" as the first step).
 export const featureFileStepRe = /^\s*(Given |When |Then |And |But |\* )(.*)/i;
+// Identifies a tag LINE. Deliberately anchored: a step like "Given I email @bob"
+// must not be read as a tag. It captures only the FIRST tag on the line, so use
+// getTagSpans() to read them all - see there.
 export const tagRe = /^\s*@(\S+)/;
 
 // Keyword pattern for embedded execute_steps() call-site scanning.
@@ -25,6 +28,37 @@ export const tableRowRe = /^\s*\|/;
 export interface ParamSpan {
     start: number;
     length: number;
+}
+
+/** One tag on a line, and where it sits within that line. */
+export interface TagSpan {
+    /** The tag without its leading "@". */
+    tag: string;
+    /** Offset of the "@" within the line. */
+    start: number;
+    /** Length including the "@". */
+    length: number;
+}
+
+/**
+ * Every tag on a tag line.
+ *
+ * A line may carry several - `@smoke @slow` is ordinary Gherkin - and each one needs
+ * its own span so hovers and diagnostics land on the tag under the cursor rather than
+ * on the first one. `tagRe` cannot do this: its `\S+` stops at the first whitespace
+ * and it is exec'd once, so reading only its match silently dropped every tag after
+ * the first.
+ *
+ * The regex is built per call on purpose: a module-level /g regex carries `lastIndex`
+ * between calls, so a shared one would skip tags depending on what was parsed before.
+ */
+export function getTagSpans(line: string): TagSpan[] {
+    const spans: TagSpan[] = [];
+    const re = /@(\S+)/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(line)) !== null)
+        spans.push({ tag: match[1], start: match.index, length: match[0].length });
+    return spans;
 }
 
 /**
