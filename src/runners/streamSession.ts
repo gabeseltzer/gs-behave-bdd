@@ -60,7 +60,9 @@ export class StreamSession {
           undefined, DiagLogType.warn);
         return;
       }
-      this.reporter.handle(events);
+      // Pass the spawn id: the reporter associates a failing step with its scenario
+      // by per-stream ordering, so events from different processes must stay separate.
+      this.reporter.handle(events, spawnId);
     });
 
     tail.start();

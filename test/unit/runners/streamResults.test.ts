@@ -15,7 +15,23 @@ suite('streamResults', () => {
 
   const projectUri = vscode.Uri.file('/proj');
 
-  interface Call { kind: string; id: string; duration?: number; message?: string }
+  interface Call {
+    kind: string; id: string; duration?: number; message?: string;
+    locLine?: number; expected?: string; actual?: string;
+  }
+
+  /** TestMessage.message is a MarkdownString now, so read its rendered value. */
+  const msgText = (m: vscode.TestMessage): string => {
+    const v = m.message as unknown as { value?: string };
+    return typeof v === 'string' ? v : (v.value ?? '');
+  };
+
+  const detail = (m: vscode.TestMessage) => ({
+    message: msgText(m),
+    locLine: m.location?.range.start.line,
+    expected: m.expectedOutput,
+    actual: m.actualOutput,
+  });
 
   let calls: Call[];
 
@@ -24,9 +40,9 @@ suite('streamResults', () => {
     passed: (t: { id: string }, d?: number) => calls.push({ kind: 'passed', id: t.id, duration: d }),
     skipped: (t: { id: string }) => calls.push({ kind: 'skipped', id: t.id }),
     failed: (t: { id: string }, m: vscode.TestMessage, d?: number) =>
-      calls.push({ kind: 'failed', id: t.id, duration: d, message: String(m.message) }),
+      calls.push({ kind: 'failed', id: t.id, duration: d, ...detail(m) }),
     errored: (t: { id: string }, m: vscode.TestMessage, d?: number) =>
-      calls.push({ kind: 'errored', id: t.id, duration: d, message: String(m.message) }),
+      calls.push({ kind: 'errored', id: t.id, duration: d, ...detail(m) }),
   }) as unknown as vscode.TestRun;
 
   /** A queue item whose test item sits at a 0-based line (behave line - 1). */
@@ -65,15 +81,130 @@ suite('streamResults', () => {
       'the other queued scenario must not be started');
   });
 
-  test('a failed scenario carries the error text as the message', () => {
+  // Verified against a real behave run: the scenario "end" event carries only status
+  // and duration. The error text and the failing step's line arrive on the STEP event
+  // just before it, so the reporter has to hold that and use it here - without which
+  // every streamed failure showed the bare word "failed", strictly less than the junit
+  // path already reported for the same scenario.
+  test('a failed scenario takes its message from the failing step event', () => {
+    const item = makeItem('s1', 'features/simple.feature', 7); // behave line 8
+    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+
+    r.handle([
+      ev({ phase: 'start', line: 8 }),
+      ev({
+        event: 'step', line: 10, keyword: 'When ', name: 'we implement a failing test',
+        status: 'failed', error: '  ASSERT FAILED: nope  ',
+      }),
+      ev({ line: 8, status: 'failed' }),
+    ]);
+
+    const failed = calls.find(c => c.kind === 'failed');
+    assert.ok(failed, 'expected a failed call');
+    assert.match(failed.message ?? '', /Failing step: When we implement a failing test/);
+    assert.match(failed.message ?? '', /ASSERT FAILED: nope/);
+  });
+
+  test('the failure is anchored on the failing step line, not the scenario header', () => {
+    const item = makeItem('s1', 'features/simple.feature', 7); // behave line 8
+    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+
+    r.handle([
+      ev({ phase: 'start', line: 8 }),
+      ev({ event: 'step', line: 10, keyword: 'When ', name: 'boom', status: 'failed', error: 'nope' }),
+      ev({ line: 8, status: 'failed' }),
+    ]);
+
+    // behave line 10 -> 0-based 9. The scenario header would be 7.
+    assert.strictEqual(calls.find(c => c.kind === 'failed')?.locLine, 9);
+  });
+
+  test('falls back to the scenario range when no step event identified a failure', () => {
     const item = makeItem('s1', 'features/simple.feature', 7);
     const r = new StreamResultReporter(makeRun(), projectUri, [item]);
 
-    r.handle([ev({ line: 8, status: 'failed', error: '  ASSERT FAILED: nope  ' })]);
+    r.handle([ev({ phase: 'start', line: 8 }), ev({ line: 8, status: 'failed' })]);
 
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(calls[0].kind, 'failed');
-    assert.strictEqual(calls[0].message, 'ASSERT FAILED: nope');
+    const failed = calls.find(c => c.kind === 'failed');
+    assert.strictEqual(failed?.locLine, 7, 'should anchor on the scenario header');
+    assert.match(failed?.message ?? '', /failed/);
+  });
+
+  test('the FIRST bad step is the reported cause, not a later skipped one', () => {
+    const item = makeItem('s1', 'features/simple.feature', 7);
+    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+
+    r.handle([
+      ev({ phase: 'start', line: 8 }),
+      ev({ event: 'step', line: 9, keyword: 'Given ', name: 'ok', status: 'passed' }),
+      ev({ event: 'step', line: 10, keyword: 'When ', name: 'the real cause', status: 'failed', error: 'boom' }),
+      ev({ event: 'step', line: 11, keyword: 'Then ', name: 'never ran', status: 'undefined' }),
+      ev({ line: 8, status: 'failed' }),
+    ]);
+
+    const failed = calls.find(c => c.kind === 'failed');
+    assert.match(failed?.message ?? '', /the real cause/);
+    assert.strictEqual(failed?.locLine, 9, 'behave line 10 -> 0-based 9');
+  });
+
+  test('a failing step does not leak into the NEXT scenario on the same stream', () => {
+    const a = makeItem('s1', 'features/simple.feature', 7);
+    const b = makeItem('s2', 'features/simple.feature', 20);
+    const r = new StreamResultReporter(makeRun(), projectUri, [a, b]);
+
+    r.handle([
+      ev({ phase: 'start', line: 8 }),
+      ev({ event: 'step', line: 10, keyword: 'When ', name: 'first failure', status: 'failed', error: 'boom' }),
+      ev({ line: 8, status: 'failed' }),
+      ev({ phase: 'start', line: 21 }),
+      ev({ line: 21, status: 'failed' }),
+    ]);
+
+    const second = calls.filter(c => c.kind === 'failed').find(c => c.id === 's2');
+    assert.ok(second);
+    assert.doesNotMatch(second.message ?? '', /first failure/,
+      'the previous scenario failing step must not be reused');
+  });
+
+  // In parallel mode every behave process feeds ONE reporter, so failing-step state
+  // has to be per stream or a failure lands on whichever scenario reported next.
+  test('failing steps are tracked per stream, not globally', () => {
+    const a = makeItem('s1', 'featuresA/a.feature', 7);
+    const b = makeItem('s2', 'featuresB/b.feature', 7);
+    const r = new StreamResultReporter(makeRun(), projectUri, [a, b]);
+
+    r.handle([ev({ phase: 'start', file: 'featuresA/a.feature', line: 8 })], 'stream-a');
+    r.handle([ev({ phase: 'start', file: 'featuresB/b.feature', line: 8 })], 'stream-b');
+    r.handle([ev({
+      event: 'step', file: 'featuresA/a.feature', line: 10,
+      keyword: 'When ', name: 'only A broke', status: 'failed', error: 'boom',
+    })], 'stream-a');
+    r.handle([ev({ file: 'featuresB/b.feature', line: 8, status: 'failed' })], 'stream-b');
+    r.handle([ev({ file: 'featuresA/a.feature', line: 8, status: 'failed' })], 'stream-a');
+
+    const bFail = calls.filter(c => c.kind === 'failed').find(c => c.id === 's2');
+    const aFail = calls.filter(c => c.kind === 'failed').find(c => c.id === 's1');
+    assert.doesNotMatch(bFail?.message ?? '', /only A broke/,
+      'stream B must not inherit stream A failing step');
+    assert.match(aFail?.message ?? '', /only A broke/);
+  });
+
+  test('a stated expected/actual comparison becomes a diff', () => {
+    const item = makeItem('s1', 'features/simple.feature', 7);
+    const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+
+    r.handle([
+      ev({ phase: 'start', line: 8 }),
+      ev({
+        event: 'step', line: 10, keyword: 'Then ', name: 'it matches', status: 'failed',
+        error: 'AssertionError: expected mush but got toxic waste',
+      }),
+      ev({ line: 8, status: 'failed' }),
+    ]);
+
+    const failed = calls.find(c => c.kind === 'failed');
+    assert.strictEqual(failed?.expected, 'mush');
+    assert.strictEqual(failed?.actual, 'toxic waste');
   });
 
   test('hook_error and cleanup_error are reported as errored, not failed', () => {
@@ -154,7 +285,9 @@ suite('streamResults', () => {
     assert.deepStrictEqual(calls, []);
   });
 
-  test('step and feature events do not touch item state', () => {
+  // Step events now feed the failing-step detail used above, but they still must not
+  // report a result themselves - only the scenario event settles an item.
+  test('step and feature events do not report a result', () => {
     const item = makeItem('s1', 'features/simple.feature', 2);
     const r = new StreamResultReporter(makeRun(), projectUri, [item]);
 

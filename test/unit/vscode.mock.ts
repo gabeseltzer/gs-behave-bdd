@@ -540,7 +540,9 @@ export class Location {
 
 export class TestMessage {
   public location?: Location;
-  constructor(public readonly message: string) { }
+  public expectedOutput?: string;
+  public actualOutput?: string;
+  constructor(public readonly message: string | MarkdownString) { }
 }
 
 export class SemanticTokens {

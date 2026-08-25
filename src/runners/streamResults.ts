@@ -10,12 +10,17 @@
 import * as vscode from 'vscode';
 import { QueueItem } from '../extension';
 import { diagLog } from '../logger';
+import { buildFailureMessage, failureText } from './failureMessage';
+import { FeatureLineIndex } from './itemIndex';
 import { BehaveEvent } from './streamEvents';
 
 /** Resolved scenario statuses, as behave's Status enum names them. */
 const TERMINAL_STATUSES = new Set([
   "passed", "failed", "error", "hook_error", "cleanup_error", "skipped", "untested",
 ]);
+
+/** Step statuses that are not a problem, so cannot be the cause of a failure. */
+const BENIGN_STEP_STATUSES = new Set(["passed", "skipped", "untested"]);
 
 
 // Which test items the live stream has already settled, per run.
@@ -56,18 +61,28 @@ export class StreamResultReporter {
   /** Test ids already reported, so junit reconciliation can skip them. */
   private readonly reported = new Set<string>();
   /** Feature-file line index, built once per run. */
-  private readonly byLine = new Map<string, QueueItem>();
+  private readonly index: FeatureLineIndex;
+
+  // The step that broke the scenario currently running on each stream.
+  //
+  // Per stream, not one field: in parallel mode every behave process feeds this
+  // one reporter, so a single "current failure" would be overwritten by whichever
+  // process happened to emit next and failures would land on the wrong scenario.
+  // Within ONE stream the events are strictly ordered and only one scenario runs
+  // at a time, so the association is exact.
+  //
+  // It has to come from ordering at all because a step event carries the STEP's
+  // line (e.g. 20), not its scenario's (18) - there is no parent key on the event
+  // to join on, and a scenario item's range covers only its header line, so the
+  // step's line is not inside it either.
+  private readonly failingStep = new Map<string, BehaveEvent>();
 
   constructor(
     private readonly run: vscode.TestRun,
     private readonly projectUri: vscode.Uri,
     queue: QueueItem[],
   ) {
-    for (const item of queue) {
-      const key = this.itemKey(item);
-      if (key)
-        this.byLine.set(key, item);
-    }
+    this.index = new FeatureLineIndex(queue);
   }
 
 
@@ -77,19 +92,31 @@ export class StreamResultReporter {
   }
 
 
-  public handle(events: BehaveEvent[]): void {
+  /**
+   * @param streamId identifies the behave process these events came from. Several
+   * streams feed one reporter in parallel mode, and the failing-step association
+   * relies on per-stream ordering, so events from different processes must not
+   * share state.
+   */
+  public handle(events: BehaveEvent[], streamId = ""): void {
     for (const event of events) {
+      if (event.event === "step") {
+        this.onStepEnd(event, streamId);
+        continue;
+      }
       if (event.event !== "scenario")
-        continue; // steps are output-only for now; features carry no item state
+        continue; // features carry no item state
       if (event.phase === "start")
-        this.onScenarioStart(event);
+        this.onScenarioStart(event, streamId);
       else if (event.phase === "end")
-        this.onScenarioEnd(event);
+        this.onScenarioEnd(event, streamId);
     }
   }
 
 
-  private onScenarioStart(event: BehaveEvent): void {
+  private onScenarioStart(event: BehaveEvent, streamId: string): void {
+    // A new scenario cannot inherit the previous one's failure.
+    this.failingStep.delete(streamId);
     const item = this.find(event);
     if (!item)
       return;
@@ -100,7 +127,23 @@ export class StreamResultReporter {
   }
 
 
-  private onScenarioEnd(event: BehaveEvent): void {
+  private onStepEnd(event: BehaveEvent, streamId: string): void {
+    if (event.phase !== "end")
+      return;
+    const status = event.status ?? "";
+    if (BENIGN_STEP_STATUSES.has(status))
+      return;
+    // Keep the FIRST bad step: behave stops executing the scenario there, so it is
+    // the cause. Later steps are reported skipped or undefined and would bury it.
+    if (!this.failingStep.has(streamId))
+      this.failingStep.set(streamId, event);
+  }
+
+
+  private onScenarioEnd(event: BehaveEvent, streamId: string): void {
+    const step = this.failingStep.get(streamId);
+    this.failingStep.delete(streamId);
+
     const item = this.find(event);
     if (!item)
       return;
@@ -122,10 +165,10 @@ export class StreamResultReporter {
         this.run.skipped(item.test);
         break;
       case "failed":
-        this.run.failed(item.test, this.message(item, event), duration);
+        this.run.failed(item.test, this.message(item, event, step), duration);
         break;
       default: // error, hook_error, cleanup_error
-        this.run.errored(item.test, this.message(item, event), duration);
+        this.run.errored(item.test, this.message(item, event, step), duration);
         break;
     }
 
@@ -142,18 +185,54 @@ export class StreamResultReporter {
   }
 
 
-  private message(item: QueueItem, event: BehaveEvent): vscode.TestMessage {
-    const message = new vscode.TestMessage(event.error?.trim() || event.status || "failed");
+  /**
+   * Failure text and location for a scenario.
+   *
+   * The scenario event itself carries no error - only the step events do - so
+   * without the failing step held above, every streamed failure showed the bare
+   * word "failed", which is strictly less than the junit path already reported.
+   */
+  private message(item: QueueItem, event: BehaveEvent, step: BehaveEvent | undefined): vscode.TestMessage {
+
+    const fallback = event.status?.trim() || "failed";
+    const text = failureText(
+      step ? { keyword: step.keyword, name: step.name, status: step.status } : undefined,
+      step?.error ?? event.error ?? undefined,
+      fallback);
+
+    return buildFailureMessage(text, this.failureLocation(item, step));
+  }
+
+
+  /**
+   * Point at the failing STEP where the stream identified one, since that is the
+   * line the user needs, and fall back to the scenario header otherwise.
+   */
+  private failureLocation(item: QueueItem, step: BehaveEvent | undefined): vscode.Location | undefined {
+
+    if (step?.file && step.line != null) {
+      const uri = this.resolve(step.file);
+      // Only trust a step location that is in a feature file we know about; a
+      // malformed path must not produce a link into nowhere.
+      if (this.index.hasFile(uri)) {
+        // A Range, not a bare Position: Location accepts either, but every other
+        // location here is a Range and consumers read .range.start.
+        const at = new vscode.Position(Math.max(0, step.line - 1), 0);
+        return new vscode.Location(uri, new vscode.Range(at, at));
+      }
+    }
+
     if (item.test.uri && item.test.range)
-      message.location = new vscode.Location(item.test.uri, item.test.range);
-    return message;
+      return new vscode.Location(item.test.uri, item.test.range);
+
+    return undefined;
   }
 
 
   private find(event: BehaveEvent): QueueItem | undefined {
     if (!event.file || event.line == null)
       return undefined;
-    return this.byLine.get(this.key(this.resolve(event.file), event.line));
+    return this.index.find(this.resolve(event.file), event.line);
   }
 
 
@@ -161,22 +240,6 @@ export class StreamResultReporter {
   private resolve(behaveFile: string): vscode.Uri {
     const relative = behaveFile.replace(/\\/g, "/");
     return vscode.Uri.joinPath(this.projectUri, relative);
-  }
-
-
-  private itemKey(item: QueueItem): string | undefined {
-    if (!item.test.uri || !item.test.range)
-      return undefined;
-    // vscode ranges are 0-based; behave lines are 1-based.
-    return this.key(item.test.uri, item.test.range.start.line + 1);
-  }
-
-
-  private key(uri: vscode.Uri, line: number): string {
-    // Not uriId(): two different feature files can share a line number, so the
-    // path has to be part of the key, and it must be compared case-insensitively
-    // for the same reason urisMatch() exists (Windows drive-letter casing).
-    return `${uri.path.toLowerCase()}:${line}`;
   }
 
 }

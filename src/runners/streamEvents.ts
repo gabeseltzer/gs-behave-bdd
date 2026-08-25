@@ -45,6 +45,8 @@ export interface BehaveEvent {
   /** 1-based line. For a Scenario Outline example row this is the row's own line. */
   line?: number | null;
   name?: string | null;
+  /** Gherkin keyword of a step event ("Given ", "When ", ...). */
+  keyword?: string | null;
   status?: string | null;
   duration?: number | null;
   error?: string | null;
