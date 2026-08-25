@@ -526,24 +526,26 @@ export class FileParser {
 
 
 
+  /** @returns the feature's test item, so a caller can act on the items it rebuilt. */
   private async _updateTestItemFromFeatureFileContent(wkspSettings: WorkspaceSettings, content: string, testData: TestData,
-    controller: vscode.TestController, uri: vscode.Uri, caller: string, firstRun: boolean) {
+    controller: vscode.TestController, uri: vscode.Uri, caller: string, firstRun: boolean): Promise<vscode.TestItem | undefined> {
 
     if (!isFeatureFile(uri))
       throw new Error(`${caller}: ${uri.path} is not a feature file`);
 
     if (!content)
-      return;
+      return undefined;
 
     const item = await this._getOrCreateFeatureTestItemAndParentFolderTestItemsForFeature(wkspSettings, content, testData,
       controller, uri, caller, firstRun);
     if (item) {
       diagLog(`${caller}: parsing ${uri.path}`);
       await item.testFile.createScenarioTestItemsFromFeatureFileContent(wkspSettings, content, testData, controller, item.testItem, caller);
+      return item.testItem;
     }
-    else {
-      diagLog(`${caller}: no scenarios found in ${uri.path}`);
-    }
+
+    diagLog(`${caller}: no scenarios found in ${uri.path}`);
+    return undefined;
   }
 
 
@@ -928,7 +930,18 @@ export class FileParser {
     if (isFeature) {
       try {
         this._reparsingFile = true;
-        await this._updateTestItemFromFeatureFileContent(wkspSettings, content, testData, ctrl, fileUri, "reparseFile", false);
+        const testItem = await this._updateTestItemFromFeatureFileContent(wkspSettings, content, testData, ctrl, fileUri,
+          "reparseFile", false);
+        // The file's text changed, so the last run's results describe scenarios that may
+        // no longer say what they said - or no longer exist. Left alone, those ticks and
+        // crosses sit there asserting something we no longer know. Marking them outdated
+        // greys them out instead, which is the honest state.
+        //
+        // Only on reparse, never on first parse: there is nothing to invalidate then, and
+        // the run-time resolve path (queueSelectedTestItems) must not wipe results for
+        // scenarios the user did not re-run.
+        if (testItem)
+          ctrl.invalidateTestResults(testItem);
         const root = getFeaturesRootForFile(wkspSettings, fileUri) ?? wkspSettings.featuresUri;
         rebuildStepMappings(root, wkspSettings.featuresUri);
         // Notify subscribers (e.g. CodeLens, diagnostics) that mappings changed.
