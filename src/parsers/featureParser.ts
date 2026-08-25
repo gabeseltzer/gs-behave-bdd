@@ -126,10 +126,12 @@ export const getFeatureNameFromContent = async (content: string, uri: vscode.Uri
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode.Uri, content: string, caller: string,
-  onScenarioLine: (range: vscode.Range, scenarioName: string, isOutline: boolean) => void,
-  onFeatureLine: (range: vscode.Range) => void,
-  onExampleRow?: (range: vscode.Range, outlineName: string, tableIndex: number, rowIndex: number, examplesName: string, values: string[]) => void,
-  onExamplesGroup?: (range: vscode.Range, outlineName: string, tableIndex: number, examplesName: string) => void) => {
+  onScenarioLine: (range: vscode.Range, scenarioName: string, isOutline: boolean, tags: string[]) => void,
+  onFeatureLine: (range: vscode.Range, tags: string[]) => void,
+  onExampleRow?: (range: vscode.Range, outlineName: string, tableIndex: number, rowIndex: number, examplesName: string,
+    values: string[], tags: string[]) => void,
+  onExamplesGroup?: (range: vscode.Range, outlineName: string, tableIndex: number, examplesName: string,
+    tags: string[]) => void) => {
 
   const fileName = basename(uri);
   const lines = getLines(content);
@@ -150,6 +152,23 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
   let inBackground = false;
   let inRule = false;
   let insideStepTextBlock = false;
+
+  // Tag inheritance. In Gherkin a tag line applies to the NEXT block, and a block's tags
+  // are inherited by everything inside it: a Feature's tags belong to every scenario, a
+  // Rule's to every scenario in it, and a Scenario Outline's to every example row.
+  // pendingTags holds the tags read since the last block consumed them.
+  let pendingTags: string[] = [];
+  let featureOwnTags: string[] = [];
+  let ruleOwnTags: string[] = [];
+  let currentOutlineTags: string[] = [];
+  let currentExamplesTags: string[] = [];
+
+  /** Take the pending tags, clearing them - they belong to exactly one block. */
+  const takePendingTags = () => {
+    const taken = pendingTags;
+    pendingTags = [];
+    return taken;
+  };
 
   // Scenario Outline / Examples tracking
   let currentOutlineName: string | undefined;
@@ -216,7 +235,8 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
           examplesRowIndex++;
           const values = line.split('|').slice(1, -1).map(v => v.trim());
           const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + line.length));
-          onExampleRow(range, currentOutlineName, examplesTableIndex, examplesRowIndex, examplesName, values);
+          onExampleRow(range, currentOutlineName, examplesTableIndex, examplesRowIndex, examplesName, values,
+            currentExamplesTags);
         }
       }
       continue;
@@ -237,8 +257,12 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
         );
         return new FeatureTag(key, uri, fileName, range, span.tag);
       });
-      if (tagsOnLine.length > 0)
+      if (tagsOnLine.length > 0) {
         featureTags.set(key, tagsOnLine);
+        // Held until the next block claims them. Several tag LINES can stack up before
+        // one scenario, so this accumulates rather than replaces.
+        pendingTags.push(...tagsOnLine.map(t => t.tag));
+      }
       continue;
     }
 
@@ -250,9 +274,12 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
       examplesRowIndex = 0;
       examplesIsHeaderRow = true;
       examplesName = examplesMatch[2].trim();
+      // An Examples block can carry its own tags, on top of the outline's. Its rows
+      // inherit the result - a row cannot be tagged individually in Gherkin.
+      currentExamplesTags = [...currentOutlineTags, ...takePendingTags()];
       if (onExamplesGroup && currentOutlineName !== undefined) {
         const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + line.length));
-        onExamplesGroup(range, currentOutlineName, examplesTableIndex, examplesName);
+        onExamplesGroup(range, currentOutlineName, examplesTableIndex, examplesName, currentExamplesTags);
       }
       continue;
     }
@@ -342,6 +369,9 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
       inBackground = false;
       ruleBackgroundLastStepType = undefined;
       lastStepType = undefined;
+      // A Rule's tags belong to the scenarios inside it, and do NOT carry to a later
+      // Rule - so this replaces rather than accumulates.
+      ruleOwnTags = takePendingTags();
       continue;
     }
 
@@ -356,15 +386,22 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
       const scenarioName = scenario[2].trim();
       const isOutline = scenarioOutlineRe.exec(line) !== null;
       const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + scenario[0].length));
-      onScenarioLine(range, scenarioName, isOutline);
+      // Feature and Rule tags are inherited; the scenario's own come last so the order
+      // reads outermost-first.
+      const scenarioTags = [...featureOwnTags, ...ruleOwnTags, ...takePendingTags()];
+      onScenarioLine(range, scenarioName, isOutline, scenarioTags);
       fileScenarios++;
       // Reset outline tracking
       if (isOutline) {
         currentOutlineName = scenarioName;
+        currentOutlineTags = scenarioTags;
+        currentExamplesTags = scenarioTags;
         examplesTableIndex = 0;
         inExamplesSection = false;
       } else {
         currentOutlineName = undefined;
+        currentOutlineTags = [];
+        currentExamplesTags = [];
         inExamplesSection = false;
       }
       continue;
@@ -373,8 +410,14 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
     const feature = featureRe.exec(line);
     if (feature) {
       const range = new vscode.Range(new vscode.Position(lineNo, 0), new vscode.Position(lineNo, line.length));
-      onFeatureLine(range);
+      // Tags above "Feature:" belong to the feature, and every scenario in it inherits
+      // them. Claimed here so they are not also handed to the first scenario twice.
+      featureOwnTags = takePendingTags();
+      ruleOwnTags = [];
+      onFeatureLine(range, featureOwnTags);
       currentOutlineName = undefined;
+      currentOutlineTags = [];
+      currentExamplesTags = [];
       inExamplesSection = false;
     }
 

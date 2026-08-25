@@ -99,7 +99,12 @@ export class TestFile {
       }
     };
 
-    const onScenarioLine = (range: vscode.Range, scenarioName: string, isOutline: boolean) => {
+    // Gherkin tags become VS Code test tags, which is what powers tag filtering in the
+    // Test Explorer and tag-scoped run profiles. Kept in the parsed form (no leading
+    // "@"), matching FeatureTag.tag and behave's own tag expressions.
+    const toTestTags = (tags: string[]) => tags.map(t => new vscode.TestTag(t));
+
+    const onScenarioLine = (range: vscode.Range, scenarioName: string, isOutline: boolean, tags: string[]) => {
       flushOutlineChildren();
       const parent = ancestors[ancestors.length - 1];
 
@@ -113,6 +118,7 @@ export class TestFile {
       const tcase = controller.createTestItem(id, data.getLabel(), featureUri);
       testData.set(tcase, data);
       tcase.range = range;
+      tcase.tags = toTestTags(tags);
       parent.item.label = featureName;
       parent.children.push(tcase);
       diagLog(`created child test item scenario ${tcase.id} from ${featureUri.path}`);
@@ -122,12 +128,16 @@ export class TestFile {
       }
     }
 
-    const onFeatureLine = (range: vscode.Range) => {
+    const onFeatureLine = (range: vscode.Range, tags: string[]) => {
       item.range = range;
+      // The feature node carries its own tags too, so filtering by a feature-level tag
+      // matches the feature as well as the scenarios that inherit it.
+      item.tags = toTestTags(tags);
       ancestors.push({ item: item, children: [] });
     }
 
-    const onExamplesGroup = (range: vscode.Range, outlineName: string, tableIndex: number, examplesNameStr: string) => {
+    const onExamplesGroup = (range: vscode.Range, outlineName: string, tableIndex: number, examplesNameStr: string,
+      tags: string[]) => {
       if (!currentOutlineItem)
         return;
       flushGroupChildren();
@@ -137,12 +147,14 @@ export class TestFile {
       const tcase = controller.createTestItem(id, label, featureUri);
       testData.set(tcase, groupData);
       tcase.range = range;
+      tcase.tags = toTestTags(tags);
       currentOutlineItem.children.push(tcase);
       currentGroupItem = { item: tcase, children: [] };
       diagLog(`created examples group test item ${tcase.id} from ${featureUri.path}`);
     }
 
-    const onExampleRow = (range: vscode.Range, outlineName: string, tableIndex: number, rowIndex: number, examplesNameStr: string, values: string[]) => {
+    const onExampleRow = (range: vscode.Range, outlineName: string, tableIndex: number, rowIndex: number,
+      examplesNameStr: string, values: string[], tags: string[]) => {
       const parent = currentGroupItem ?? currentOutlineItem;
       if (!parent)
         return;
@@ -154,6 +166,7 @@ export class TestFile {
       const tcase = controller.createTestItem(id, label, featureUri);
       testData.set(tcase, data);
       tcase.range = range;
+      tcase.tags = toTestTags(tags);
       parent.children.push(tcase);
       diagLog(`created example row test item ${tcase.id} from ${featureUri.path}`);
     }

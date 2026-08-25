@@ -538,6 +538,11 @@ export class Location {
   ) { }
 }
 
+/** Mirrors vscode.TestTag: an id and nothing else. */
+export class TestTag {
+  constructor(public readonly id: string) { }
+}
+
 export class TestMessage {
   public location?: Location;
   public expectedOutput?: string;
