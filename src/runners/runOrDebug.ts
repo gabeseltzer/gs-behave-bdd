@@ -23,6 +23,13 @@ const OVERRIDE_ARGS = [
   // valueless --color followed by positional paths (configuration.py:946-957),
   // and the "=" form avoids that path entirely.
   "--color=on",
+  // Pinned, not merely relied on. It is behave's default, but a user can turn it
+  // off in behave.ini, and it is what appends " # <file>:<line>" to every feature
+  // and scenario header (formatter/pretty.py:123-126,349-351). That comment is how
+  // output lines are attributed to a scenario - it travels in the output itself,
+  // so unlike the event stream it cannot arrive out of order with the lines it
+  // describes. Without it, output falls back to feature-level attribution.
+  "--show-source",
   "--show-skipped", // show-skipped is required for skipped tests to produce junit output
   "--junit",
   "--junit-directory"

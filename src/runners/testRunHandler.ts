@@ -14,6 +14,7 @@ import { FileParser } from '../parsers/fileParser';
 import { diagLog, DiagLogType } from '../logger';
 import { getJunitWkspRunDirUri, JunitWatcher } from '../watchers/junitWatcher';
 import { getWkspQueueJunitFileMap, QueueItemMapEntry } from '../parsers/junitParser';
+import { FeatureLineIndex } from './itemIndex';
 import { getStreamDirUri } from './streamEvents';
 import { clearSettled, StreamResultReporter } from './streamResults';
 import { StreamSession } from './streamSession';
@@ -31,6 +32,12 @@ export class WkspRun {
     public readonly allTestsForThisWkspIncluded: boolean,
     public readonly includedFeatures: vscode.TestItem[],
     public readonly junitRunDirUri: vscode.Uri,
+    /**
+     * Feature-file line index for this run's queue. Used to attribute each line of
+     * behave's output to a scenario, which is independent of result streaming -
+     * attribution reads behave's own source comments, not the event stream.
+     */
+    public readonly outputIndex: FeatureLineIndex,
     /** Live per-scenario results are being read from the behave event stream. */
     public readonly streaming: boolean = false,
     /** Owns one NDJSON stream per behave process spawned for this workspace. */
@@ -286,7 +293,7 @@ async function runWorkspaceQueue(wkspSettings: WorkspaceSettings, ctrl: vscode.T
     wr = new WkspRun(
       wkspSettings, run, request, debug, ctrl, testData, sortedQueue, pythonExec,
       allTestsForThisWkspIncluded, wkspIncludedFeatures, junitWkspRunDirUri,
-      streaming, streamSession
+      new FeatureLineIndex(sortedQueue), streaming, streamSession
     )
 
     const start = performance.now();

@@ -3,6 +3,7 @@ import { ChildProcess, spawn, SpawnOptions } from 'child_process';
 import { diagLog } from '../logger';
 import { getBehaveEnv } from './behaveEnv';
 import { BehaveOutputFilter } from './behaveOutput';
+import { AttributedLine, OutputAttributor } from './outputAttribution';
 import { WkspRun } from './testRunHandler';
 
 // TestRun output is rendered by a terminal, which needs CRLF.
@@ -52,10 +53,41 @@ export async function runBehaveInstance(wr: WkspRun, args: string[], friendlyCmd
         wr.run.appendOutput(text);
     };
 
-    const writeLines = (lines: string[]) => {
-      if (lines.length > 0)
-        write(lines.join("\r\n") + "\r\n");
+    // Attributes each line to the scenario it belongs to, so the Test Explorer can
+    // show one scenario's output on its own. Independent of result streaming: this
+    // reads behave's own source comments, so it works on the junit-only path too.
+    const attributor = new OutputAttributor(wr.outputIndex, wr.wkspSettings.projectUri,
+      outputTest, outputPrefix);
+
+    // Consecutive lines sharing an attribution are appended as one block. Only a
+    // scenario header carries a location, so in practice this is about two calls
+    // per scenario rather than one per line.
+    const flushBlock = (block: AttributedLine[]) => {
+      if (block.length === 0)
+        return;
+      const text = block.map(l => l.text).join("\r\n") + "\r\n";
+      wr.run.appendOutput(text, block[0].location, block[0].test);
     };
+
+    const writeLines = (lines: string[]) => {
+      let block: AttributedLine[] = [];
+      for (const line of lines) {
+        const attributed = attributor.attribute(line);
+        // A located line starts its own block, so its location is not carried onto
+        // the lines that follow it.
+        const sameBlock = block.length > 0
+          && block[0].test === attributed.test
+          && !attributed.location
+          && !block[0].location;
+        if (!sameBlock) {
+          flushBlock(block);
+          block = [];
+        }
+        block.push(attributed);
+      }
+      flushBlock(block);
+    };
+
 
     // stdout and stderr are filtered separately: each is its own byte stream, so
     // a sequence split across chunks must be reassembled per stream.
