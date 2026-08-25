@@ -367,4 +367,118 @@ suite('streamResults', () => {
 
     assert.strictEqual(item.scenario.result, 'failed');
   });
+
+
+  // Pass 5. Every step event is kept, not just the one that broke the scenario, so
+  // the failure message can show what ran before it and what never ran after it.
+  suite('step trail', () => {
+
+    const step = (over: Partial<BehaveEvent>): BehaveEvent => ({
+      event: 'step', phase: 'end', file: 'features/simple.feature', ...over,
+    });
+
+    const PASSED = step({ keyword: 'Given ', name: 'we have a blender', line: 4, status: 'passed' });
+    const FAILED = step({ keyword: 'When ', name: 'we blend', line: 5, status: 'failed', error: 'ASSERT FAILED' });
+    const SKIPPED = step({ keyword: 'Then ', name: 'it is smooth', line: 6, status: 'skipped' });
+
+    test('the whole trail is shown, not just the failing step', () => {
+      const item = makeItem('s1', 'features/simple.feature', 2);
+      const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+
+      r.handle([step({ ...PASSED }), step({ ...FAILED }), step({ ...SKIPPED }),
+        ev({ status: 'failed' })]);
+
+      const message = calls.find(c => c.kind === 'failed')?.message ?? '';
+      assert.match(message, /we have a blender/, 'the step that passed is context');
+      assert.match(message, /we blend/, 'the step that failed');
+      assert.match(message, /it is smooth/, 'the step that never ran');
+    });
+
+    test('the failing step is still the FIRST bad one', () => {
+      // behave stops at the first failure; later steps report skipped or undefined,
+      // and naming one of those would bury the cause.
+      const item = makeItem('s1', 'features/simple.feature', 2);
+      const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+
+      r.handle([step({ ...PASSED }), step({ ...FAILED }),
+        step({ keyword: 'Then ', name: 'later', line: 6, status: 'undefined' }),
+        ev({ status: 'failed' })]);
+
+      const message = calls.find(c => c.kind === 'failed')?.message ?? '';
+      assert.match(message, /Failing step: When we blend/, `summary should name the first bad step: ${message}`);
+      assert.strictEqual(calls.find(c => c.kind === 'failed')?.locLine, 4,
+        'and anchor on its line (behave line 5 -> 0-based 4)');
+    });
+
+    test('a scenario does not inherit the previous scenario trail', () => {
+      const one = makeItem('s1', 'features/simple.feature', 2);  // behave line 3
+      const two = makeItem('s2', 'features/simple.feature', 9);  // behave line 10
+      const r = new StreamResultReporter(makeRun(), projectUri, [one, two]);
+
+      r.handle([
+        ev({ phase: 'start', line: 3 }), step({ ...PASSED }), step({ ...FAILED }), ev({ status: 'failed', line: 3 }),
+        ev({ phase: 'start', line: 10 }),
+        step({ keyword: 'Given ', name: 'a fresh start', line: 11, status: 'passed' }),
+        step({ keyword: 'When ', name: 'it breaks', line: 12, status: 'failed' }),
+        ev({ status: 'failed', line: 10 }),
+      ]);
+
+      const second = calls.filter(c => c.kind === 'failed').find(c => c.id === 's2')?.message ?? '';
+      assert.match(second, /a fresh start/);
+      assert.doesNotMatch(second, /we have a blender/, 'the first scenario steps must not leak in');
+    });
+
+    // The hazard handle(events, spawnId) exists for: in parallel mode several behave
+    // processes feed one reporter, and a single shared trail would interleave them.
+    test('two streams do not blend their trails', () => {
+      const one = makeItem('s1', 'features/one.feature', 2);
+      const two = makeItem('s2', 'features/two.feature', 2);
+      const r = new StreamResultReporter(makeRun(), projectUri, [one, two]);
+
+      const aStep = (over: Partial<BehaveEvent>) => step({ file: 'features/one.feature', ...over });
+      const bStep = (over: Partial<BehaveEvent>) => step({ file: 'features/two.feature', ...over });
+
+      // Interleaved, as two processes writing concurrently would be.
+      r.handle([aStep({ keyword: 'Given ', name: 'alpha one', line: 4, status: 'passed' })], 'A');
+      r.handle([bStep({ keyword: 'Given ', name: 'bravo one', line: 4, status: 'passed' })], 'B');
+      r.handle([aStep({ keyword: 'When ', name: 'alpha breaks', line: 5, status: 'failed' })], 'A');
+      r.handle([bStep({ keyword: 'When ', name: 'bravo breaks', line: 5, status: 'failed' })], 'B');
+      r.handle([ev({ file: 'features/one.feature', status: 'failed' })], 'A');
+      r.handle([ev({ file: 'features/two.feature', status: 'failed' })], 'B');
+
+      const a = calls.filter(c => c.kind === 'failed').find(c => c.id === 's1')?.message ?? '';
+      const b = calls.filter(c => c.kind === 'failed').find(c => c.id === 's2')?.message ?? '';
+
+      assert.match(a, /alpha one/);
+      assert.doesNotMatch(a, /bravo/, 'stream B steps must not appear in stream A failure');
+      assert.match(b, /bravo one/);
+      assert.doesNotMatch(b, /alpha/, 'stream A steps must not appear in stream B failure');
+    });
+
+    test('a hook error having run no steps still produces a message', () => {
+      // Otherwise the peek view is blank, which is the regression pass 3 fixed.
+      const item = makeItem('s1', 'features/simple.feature', 2);
+      const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+
+      r.handle([ev({ status: 'hook_error', error: 'before_scenario blew up' })]);
+
+      const message = calls.find(c => c.kind === 'errored')?.message ?? '';
+      // Escaped underscore: with no step, the error IS the summary line, and the
+      // summary is markdown-escaped - otherwise before_scenario ... after_scenario
+      // would render as italics.
+      assert.match(message, /before\\_scenario blew up/);
+      assert.doesNotMatch(message, /\.\.\. /, 'no trail to draw, so no step lines');
+    });
+
+    test('a passing scenario reports no message at all', () => {
+      // TestRun.passed() takes no message - there is nowhere to put a trail, which is
+      // why the output view remains the only surface a green scenario has.
+      const item = makeItem('s1', 'features/simple.feature', 2);
+      const r = new StreamResultReporter(makeRun(), projectUri, [item]);
+
+      r.handle([step({ ...PASSED }), ev({ status: 'passed' })]);
+
+      assert.deepStrictEqual(calls, [{ kind: 'passed', id: 's1', duration: undefined }]);
+    });
+  });
 });

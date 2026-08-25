@@ -63,11 +63,14 @@ export class StreamResultReporter {
   /** Feature-file line index, built once per run. */
   private readonly index: FeatureLineIndex;
 
-  // The step that broke the scenario currently running on each stream.
+  // Every step the scenario currently running on each stream has finished, in
+  // order - not just the one that broke it. The failing step is derived from this
+  // (the first non-benign entry), and the whole trail is shown with the failure,
+  // because "what ran before it" is the context a bare failing-step line lacks.
   //
   // Per stream, not one field: in parallel mode every behave process feeds this
-  // one reporter, so a single "current failure" would be overwritten by whichever
-  // process happened to emit next and failures would land on the wrong scenario.
+  // one reporter, so a single "current" trail would be interleaved by whichever
+  // process happened to emit next and steps would land on the wrong scenario.
   // Within ONE stream the events are strictly ordered and only one scenario runs
   // at a time, so the association is exact.
   //
@@ -75,7 +78,7 @@ export class StreamResultReporter {
   // line (e.g. 20), not its scenario's (18) - there is no parent key on the event
   // to join on, and a scenario item's range covers only its header line, so the
   // step's line is not inside it either.
-  private readonly failingStep = new Map<string, BehaveEvent>();
+  private readonly stepTrail = new Map<string, BehaveEvent[]>();
 
   constructor(
     private readonly run: vscode.TestRun,
@@ -115,8 +118,10 @@ export class StreamResultReporter {
 
 
   private onScenarioStart(event: BehaveEvent, streamId: string): void {
-    // A new scenario cannot inherit the previous one's failure.
-    this.failingStep.delete(streamId);
+    // A new scenario cannot inherit the previous one's steps. Cleared before the
+    // find() below, so an unmatched scenario still resets the trail rather than
+    // letting its steps accumulate into the next one.
+    this.stepTrail.delete(streamId);
     const item = this.find(event);
     if (!item)
       return;
@@ -130,19 +135,32 @@ export class StreamResultReporter {
   private onStepEnd(event: BehaveEvent, streamId: string): void {
     if (event.phase !== "end")
       return;
-    const status = event.status ?? "";
-    if (BENIGN_STEP_STATUSES.has(status))
-      return;
-    // Keep the FIRST bad step: behave stops executing the scenario there, so it is
-    // the cause. Later steps are reported skipped or undefined and would bury it.
-    if (!this.failingStep.has(streamId))
-      this.failingStep.set(streamId, event);
+    // Every step is kept, benign ones included - they are the trail. Which one
+    // FAILED is derived at scenario end rather than latched here, so there is one
+    // definition of "the failing step" instead of two that can disagree.
+    const trail = this.stepTrail.get(streamId);
+    if (trail)
+      trail.push(event);
+    else
+      this.stepTrail.set(streamId, [event]);
+  }
+
+
+  /**
+   * The step that broke the scenario: the FIRST non-benign one.
+   *
+   * behave stops executing at that step, so it is the cause; the steps after it
+   * are reported skipped or undefined and taking a later one would bury it.
+   */
+  private failingStepIn(trail: readonly BehaveEvent[]): BehaveEvent | undefined {
+    return trail.find(step => !BENIGN_STEP_STATUSES.has(step.status ?? ""));
   }
 
 
   private onScenarioEnd(event: BehaveEvent, streamId: string): void {
-    const step = this.failingStep.get(streamId);
-    this.failingStep.delete(streamId);
+    const trail = this.stepTrail.get(streamId) ?? [];
+    const step = this.failingStepIn(trail);
+    this.stepTrail.delete(streamId);
 
     const item = this.find(event);
     if (!item)
@@ -165,10 +183,10 @@ export class StreamResultReporter {
         this.run.skipped(item.test);
         break;
       case "failed":
-        this.run.failed(item.test, this.message(item, event, step), duration);
+        this.run.failed(item.test, this.message(item, event, step, trail), duration);
         break;
       default: // error, hook_error, cleanup_error
-        this.run.errored(item.test, this.message(item, event, step), duration);
+        this.run.errored(item.test, this.message(item, event, step, trail), duration);
         break;
     }
 
@@ -192,7 +210,8 @@ export class StreamResultReporter {
    * without the failing step held above, every streamed failure showed the bare
    * word "failed", which is strictly less than the junit path already reported.
    */
-  private message(item: QueueItem, event: BehaveEvent, step: BehaveEvent | undefined): vscode.TestMessage {
+  private message(item: QueueItem, event: BehaveEvent, step: BehaveEvent | undefined,
+    trail: readonly BehaveEvent[]): vscode.TestMessage {
 
     const fallback = event.status?.trim() || "failed";
     const text = failureText(
@@ -200,7 +219,9 @@ export class StreamResultReporter {
       step?.error ?? event.error ?? undefined,
       fallback);
 
-    return buildFailureMessage(text, this.failureLocation(item, step));
+    // A hook error can settle a scenario with no step events at all, in which case
+    // the trail renders to nothing and the message is what it was before.
+    return buildFailureMessage(text, this.failureLocation(item, step), trail);
   }
 
 

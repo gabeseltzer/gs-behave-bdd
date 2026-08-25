@@ -9,7 +9,7 @@
 
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { buildFailureMessage, failureText, findComparison } from '../../../src/runners/failureMessage';
+import { buildFailureMessage, failureText, findComparison, formatStepTrail } from '../../../src/runners/failureMessage';
 
 suite('failureMessage', () => {
 
@@ -144,6 +144,105 @@ suite('failureMessage', () => {
 
       assert.strictEqual(m.expectedOutput, undefined);
       assert.strictEqual(m.actualOutput, undefined);
+    });
+  });
+
+
+  // Pass 5. A scenario is a sequence of steps, so the message surface can show what
+  // ran, what broke, and what never got the chance - which a bare "Failing step:"
+  // line cannot.
+  suite('formatStepTrail', () => {
+
+    const TRAIL = [
+      { keyword: 'Given ', name: 'we have a blender', status: 'passed' },
+      { keyword: 'When ', name: 'we implement a failing test', status: 'failed' },
+      { keyword: 'Then ', name: 'it should be smooth', status: 'skipped' },
+    ];
+
+    test('lists every step with its status', () => {
+      const trail = formatStepTrail(TRAIL);
+      assert.ok(trail);
+
+      const lines = trail.split('\n');
+      assert.strictEqual(lines.length, 3);
+      assert.match(lines[0], /^Given we have a blender\s+\.\.\. passed$/);
+      assert.match(lines[1], /^When {2}we implement a failing test\s+\.\.\. failed$/);
+      assert.match(lines[2], /^Then {2}it should be smooth\s+\.\.\. skipped$/);
+    });
+
+    test('aligns the status column, the way behave own pretty output does', () => {
+      const trail = formatStepTrail(TRAIL);
+      assert.ok(trail);
+
+      const columns = trail.split('\n').map(l => l.indexOf(' ... '));
+      assert.strictEqual(new Set(columns).size, 1,
+        `statuses should line up, got columns ${JSON.stringify(columns)}`);
+    });
+
+    test('is undefined when there is nothing to draw', () => {
+      // A hook error can settle a scenario having run no steps at all.
+      assert.strictEqual(formatStepTrail([]), undefined);
+      assert.strictEqual(formatStepTrail([{ keyword: null, name: null, status: 'failed' }]), undefined);
+    });
+
+    test('a step with no status is still listed', () => {
+      const trail = formatStepTrail([{ keyword: 'Given ', name: 'x', status: null }]);
+      assert.strictEqual(trail, 'Given x');
+    });
+  });
+
+
+  suite('buildFailureMessage with a trail', () => {
+
+    const TRAIL = [
+      { keyword: 'Given ', name: 'we have a blender', status: 'passed' },
+      { keyword: 'When ', name: 'we implement a failing test', status: 'failed' },
+    ];
+
+    test('the trail appears between the summary and the exception text', () => {
+      const m = buildFailureMessage(
+        'Failing step: When we implement a failing test ... failed\nASSERT FAILED: boom',
+        undefined, TRAIL);
+      const v = value(m);
+
+      const summaryAt = v.indexOf('Failing step:');
+      const trailAt = v.indexOf('Given we have a blender');
+      const errorAt = v.indexOf('ASSERT FAILED: boom');
+
+      assert.ok(summaryAt >= 0 && trailAt >= 0 && errorAt >= 0, `all three parts should appear: ${v}`);
+      assert.ok(summaryAt < trailAt, 'summary first');
+      assert.ok(trailAt < errorAt, 'the trail is context FOR the error, so it reads before it');
+    });
+
+    test('the trail is fenced, so it stays monospaced and its alignment survives', () => {
+      const m = buildFailureMessage('Failing step: When x ... failed', undefined, TRAIL);
+      const v = value(m);
+
+      // Markdown would otherwise collapse the run of spaces that aligns the column.
+      assert.match(v, /```[\s\S]*Given we have a blender[\s\S]*```/);
+    });
+
+    // The junit path has no per-step record to pass, so this is the contract that
+    // keeps it rendering exactly what it rendered before pass 5.
+    test('omitting the trail is byte-identical to not having the feature', () => {
+      const text = 'Failing step: When x ... failed\nASSERT FAILED: boom';
+
+      const withoutArg = buildFailureMessage(text);
+      const withUndefined = buildFailureMessage(text, undefined, undefined);
+      const withEmpty = buildFailureMessage(text, undefined, []);
+
+      assert.strictEqual(value(withUndefined), value(withoutArg));
+      assert.strictEqual(value(withEmpty), value(withoutArg),
+        'an empty trail must not add an empty fence');
+    });
+
+    test('a trail does not disturb the expected/actual diff', () => {
+      const m = buildFailureMessage(
+        'Failing step: Then it blends ... failed\nexpected mush but got toxic waste',
+        undefined, TRAIL);
+
+      assert.strictEqual(m.expectedOutput, 'mush');
+      assert.strictEqual(m.actualOutput, 'toxic waste');
     });
   });
 
