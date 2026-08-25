@@ -1,8 +1,12 @@
-// Unit tests for NdjsonTail - reading behave's event stream while it is being written.
+// Unit tests for NdjsonTail - turning behave's event stream into events.
 //
-// Deliberately exercised against a real file rather than a mock: the whole point of
-// this class is that it reads a file another process is appending to, including
-// partial lines and reads that land mid-character.
+// NdjsonTail is only the parse layer; getting lines off a file that is still being
+// written belongs to LineTail and is tested in lineTail.test.ts (partial lines,
+// offsets, split multi-byte characters). What is tested here is what those lines
+// mean: valid events, malformed lines, blank lines, and the protocol handshake.
+//
+// Still exercised against a real file rather than a mock, so the two layers are
+// covered as they actually compose.
 
 import * as assert from 'assert';
 import * as fs from 'fs';
@@ -64,58 +68,6 @@ suite('streamEvents', () => {
     assert.ok(!fs.existsSync(file));
     assert.doesNotThrow(() => tail.stop());
     assert.strictEqual(received.length, 0);
-  });
-
-  test('holds a partial line until its newline arrives', () => {
-    const received: BehaveEvent[] = [];
-    const tail = new NdjsonTail(file, e => received.push(...e), 1_000_000);
-    tails.push(tail);
-    tail.start();
-
-    append('{"event":"scenario","phase":"end","line":1,');
-    tail['read']();  // eslint-disable-line dot-notation
-    // NOTE: length rather than deepStrictEqual(received, []) - comparing against an
-    // empty literal narrows `received` to never[] for the rest of the test.
-    assert.strictEqual(received.length, 0, 'an incomplete line must not be parsed');
-
-    append('"status":"passed"}\n');
-    tail.stop();
-    assert.strictEqual(received.length, 1);
-    assert.strictEqual(received[0].status, 'passed');
-  });
-
-  test('resumes from its offset rather than re-reading', () => {
-    const received: BehaveEvent[] = [];
-    const tail = new NdjsonTail(file, e => received.push(...e), 1_000_000);
-    tails.push(tail);
-    tail.start();
-
-    append('{"event":"scenario","phase":"end","line":1,"status":"passed"}\n');
-    tail['read']();  // eslint-disable-line dot-notation
-    append('{"event":"scenario","phase":"end","line":2,"status":"failed"}\n');
-    tail.stop();
-
-    assert.deepStrictEqual(received.map(e => e.line), [1, 2],
-      'each event should be delivered exactly once');
-  });
-
-  test('a multi-byte character split across reads is not corrupted', () => {
-    const received: BehaveEvent[] = [];
-    const tail = new NdjsonTail(file, e => received.push(...e), 1_000_000);
-    tails.push(tail);
-    tail.start();
-
-    // Write the JSON, then read after only part of the multi-byte sequence exists.
-    const json = '{"event":"scenario","phase":"end","line":1,"name":"café ✓","status":"passed"}\n';
-    const bytes = Buffer.from(json, 'utf8');
-    const cut = bytes.indexOf(Buffer.from('é', 'utf8')[0]) + 1; // mid-character
-    fs.appendFileSync(file, bytes.subarray(0, cut));
-    tail['read']();  // eslint-disable-line dot-notation
-    fs.appendFileSync(file, bytes.subarray(cut));
-    tail.stop();
-
-    assert.strictEqual(received.length, 1);
-    assert.strictEqual(received[0].name, 'café ✓');
   });
 
   test('a malformed line is skipped without losing the rest', () => {
