@@ -9,7 +9,6 @@ import {
   reloadSettingsAndSurfaceError, getConfiguredButExcludedWorkspaceFolders
 } from './common';
 import { setConfigParseErrorDiagnostic, clearConfigParseErrorDiagnostic } from './handlers/configDiagnostics';
-import { collectItemsWithTag, collectTags } from './handlers/runByTag';
 import { StepFileStep, getStepFileSteps } from './parsers/stepsParser';
 import type { FailedFileInfo } from './parsers/behaveLoader';
 import { gotoStepHandler } from './handlers/gotoStepHandler';
@@ -878,39 +877,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       () => vscode.commands.executeCommand('gs-behave-bdd.selectProject'));
 
     context.subscriptions.push(selectProjectCommand, legacySelectProjectCommand);
-
-    // Run by tag. behave suites are organised by tag, and until this there was no way to
-    // run one from the extension: --tags is not passed through, and the Test Explorer's
-    // filter box does not accept tags either.
-    const runWithTagCommand = vscode.commands.registerCommand('gs-behave-bdd.runTestsWithTag',
-      async (debug = false) => {
-        try {
-          const tags = collectTags(ctrl.items);
-          if (tags.length === 0) {
-            vscode.window.showInformationMessage("Behave BDD: no tags found in your feature files.");
-            return;
-          }
-
-          const tag = await vscode.window.showQuickPick(tags.map(t => `@${t}`),
-            { title: debug ? "Debug tests with tag" : "Run tests with tag", placeHolder: "Select a tag" });
-          if (!tag)
-            return; // dismissed
-
-          const items = collectItemsWithTag(ctrl.items, tag.slice(1));
-          if (items.length === 0) {
-            vscode.window.showInformationMessage(`Behave BDD: no tests found with tag ${tag}.`);
-            return;
-          }
-
-          await runHandler(debug, new vscode.TestRunRequest(items));
-        }
-        catch (e: unknown) {
-          // Registered command - must surface its own errors.
-          config.logger.showError(e);
-        }
-      });
-
-    context.subscriptions.push(runWithTagCommand);
 
     ctrl.createRunProfile("Run Tests", vscode.TestRunProfileKind.Run,
       async (request: vscode.TestRunRequest) => {
