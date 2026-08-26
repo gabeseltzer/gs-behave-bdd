@@ -66,6 +66,19 @@ export const getFeatureParseErrors = (featuresUri: vscode.Uri) => {
   return [...featureParseErrors.values()].filter(e => e.key.startsWith(featuresUriMatchString));
 }
 
+/**
+ * Parse errors for ONE feature file.
+ *
+ * The separator is part of the prefix deliberately: keys are "<uriId><sepr><line>", so a
+ * bare startsWith on the file's uriId would also match a sibling whose name extends it
+ * ("test.feature" against "test.feature2"). The folder-level getter above cannot use the
+ * same guard - it matches a directory prefix on purpose.
+ */
+export const getFeatureParseErrorsForFile = (fileUri: vscode.Uri) => {
+  const prefix = `${uriId(fileUri)}${sepr}`;
+  return [...featureParseErrors.values()].filter(e => e.key.startsWith(prefix));
+}
+
 const recordParseError = (uri: vscode.Uri, fileName: string, range: vscode.Range, message: string) => {
   const key = `${uriId(uri)}${sepr}${range.start.line}`;
   featureParseErrors.set(key, new FeatureParseError(key, uri, fileName, range, message));

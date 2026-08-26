@@ -906,8 +906,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         wkspSettings = getWorkspaceSettingsForFile(item.uri);
         if (!wkspSettings)
           return;
-        const content = await getContentFromFilesystem(item.uri);
-        await data.createScenarioTestItemsFromFeatureFileContent(wkspSettings, content, testData, ctrl, item, "resolveHandler");
+
+        // Reading the file and parsing it is usually quick, so this rarely renders - but
+        // "usually" is doing work there: a large feature, or one on a network or remote
+        // filesystem, is not. Leaving it unset means the node sits silently as though
+        // nothing is happening.
+        item.busy = true;
+        try {
+          const content = await getContentFromFilesystem(item.uri);
+          await data.createScenarioTestItemsFromFeatureFileContent(wkspSettings, content, testData, ctrl, item, "resolveHandler");
+        }
+        finally {
+          item.busy = false;
+        }
       }
       catch (e: unknown) {
         // entry point function (handler) - show error

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { parseFeatureContent } from './featureParser';
+import { getFeatureParseErrorsForFile, parseFeatureContent } from './featureParser';
 import { uriId, isFeatureFile } from '../common';
 import { config } from "../configuration";
 import { WorkspaceSettings } from "../settings";
@@ -175,6 +175,16 @@ export class TestFile {
 
     flushOutlineChildren(); // ensure last outline/group children are set
     ascend(0); // assign children for all remaining items
+
+    // A Gherkin structural error means behave will REJECT this file, so none of the
+    // scenarios above will run. TestItem.error is for exactly this - "errors in test
+    // discovery, such as syntax errors" - and puts it on the node itself, where someone
+    // looking at the tree wondering why a feature does nothing will actually see it.
+    // Until now it only reached the Problems pane, which you have to already be looking at.
+    const parseErrors = getFeatureParseErrorsForFile(featureUri);
+    item.error = parseErrors.length === 0
+      ? undefined
+      : parseErrors.map(e => `Line ${e.range.start.line + 1}: ${e.message}`).join("\n");
   }
 
 }
