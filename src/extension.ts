@@ -43,6 +43,7 @@ import { StepReferenceProvider } from './handlers/stepReferenceProvider';
 import { StepCodeLensProvider } from './handlers/codeLensProvider';
 import { validateFixtureTags } from './handlers/fixtureDiagnostics';
 import { validateStepDefinitions } from './handlers/stepDiagnostics';
+import { onPythonStepChecks } from './parsers/stepArgumentPythonCheck';
 import { validateExecuteSteps } from './handlers/executeStepsDiagnostics';
 import { validateGherkinStructure } from './handlers/gherkinStructureDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
@@ -529,6 +530,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       // reference count even though the .py document itself didn't change.
       codeLensProvider.refresh();
     };
+
+    // behave's verdicts on step arguments arrive asynchronously (a Python process per batch) -
+    // re-validate the open feature files they belong to
+    onPythonStepChecks((featuresUri: vscode.Uri) => {
+      for (const document of vscode.workspace.textDocuments) {
+        const wkspSettings = getWorkspaceSettingsForFile(document.uri);
+        if (wkspSettings && isFeatureFile(document.uri) && urisMatch(wkspSettings.featuresUri, featuresUri))
+          validateStepDefinitions(document);
+      }
+    });
 
     // any function contained in a context.subscriptions.push() will execute immediately, 
     // as well as registering the returned disposable object for a dispose() call on extension deactivation
@@ -1113,6 +1124,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     // b. the semantic highlighting while typing requires the stepmappings to be up to date as the user types,
     // c. instant test tree updates is a nice bonus for user experience
     // d. to keep stepmappings in sync in case user clicks go to step def/ref before file save
+    // the Python step argument check only runs for saved feature files (it spawns a process),
+    // so a save is what releases a file's pending checks
+    context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
+      try {
+        if (initialParsingComplete && isFeatureFile(document.uri))
+          validateStepDefinitions(document);
+      }
+      catch (e: unknown) {
+        // entry point function (handler) - show error
+        config.logger.showError(e, getWorkspaceSettingsForFile(document.uri)?.uri);
+      }
+    }));
+
     context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(async (event) => {
       try {
         const uri = event.document.uri;

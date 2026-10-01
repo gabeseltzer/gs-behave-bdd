@@ -10,6 +10,7 @@ import * as path from 'path';
 import { performance } from 'perf_hooks';
 import { getBundledBehavePath } from '../bundledBehave';
 import { diagLog } from '../logger';
+import type { ParamCheckInfo, ParamSegment } from './stepArguments';
 
 /**
  * Step definition returned from behave's step registry
@@ -20,6 +21,48 @@ export interface BehaveStepDefinition {
   filePath: string;        // Absolute path to the step definition file
   lineNumber: number;      // Line number where step is defined
   regex: string;           // Actual regex pattern used by behave
+  /** How behave matches this definition's parameters - absent when discover.py couldn't tell */
+  paramCheck?: ParamCheckInfo;
+}
+
+/** One argument behave located (and converted) in a checked step text. */
+export interface StepCheckArgument {
+  /** index into the definition's paramCheck.segments */
+  segment: number;
+  /** offsets within the checked text */
+  start: number;
+  end: number;
+  original: string;
+  /** python repr() of the converted value */
+  value?: string;
+  valueType?: string;
+  /** the converter's exception, e.g. "ValueError: 3 is odd" */
+  error?: string;
+}
+
+/** behave's verdict on one step text (discover.py --check-steps). */
+export interface StepCheckResult {
+  stepType: string;
+  text: string;
+  /** matched: a definition matched and its converters succeeded; error: the converter raised
+   * (behave errors the step); undefined: no definition matched */
+  status: "matched" | "error" | "undefined";
+  error?: string;
+  /** the definition behave picked */
+  filePath?: string;
+  lineNumber?: number;
+  arguments?: StepCheckArgument[];
+}
+
+export interface StepCheckRequest {
+  stepType: string;
+  text: string;
+}
+
+export interface BehaveStepCheckResults {
+  checks: StepCheckResult[];
+  /** some step file failed to load, so "undefined" verdicts can't be trusted */
+  incomplete: boolean;
 }
 
 /**
@@ -150,6 +193,7 @@ export async function loadFromBehave(
       file: string;
       line: number;
       regex_pattern: string;
+      param_check?: RawParamCheck;
     }
 
     interface RawFixtureInfo {
@@ -200,7 +244,8 @@ export async function loadFromBehave(
       pattern: step.pattern,
       filePath: step.file,
       lineNumber: step.line,
-      regex: step.regex_pattern
+      regex: step.regex_pattern,
+      paramCheck: toParamCheckInfo(step.param_check)
     }));
 
     const fixtures: BehaveFixtureDefinition[] = parsed.fixtures.map(f => ({
@@ -280,6 +325,118 @@ export async function loadFromBehave(
   }
 }
 
+interface RawParamSegment {
+  text?: string;
+  name?: string;
+  spec?: string;
+  type?: string;
+  regex?: string;
+  custom?: boolean;
+  has_pattern?: boolean;
+  needs_python?: boolean;
+  type_pattern?: string;
+  repeat_of?: number;
+}
+
+interface RawParamCheck {
+  kind: string;
+  flags?: string[];
+  segments?: RawParamSegment[];
+  regex?: string;
+  needs_python?: boolean;
+}
+
+function toParamCheckInfo(raw: RawParamCheck | undefined): ParamCheckInfo | undefined {
+  if (!raw)
+    return undefined;
+  return {
+    kind: raw.kind,
+    flags: raw.flags ?? [],
+    regex: raw.regex,
+    needsPython: raw.needs_python ?? true,
+    segments: raw.segments?.map((seg): ParamSegment => ({
+      text: seg.text,
+      name: seg.name,
+      spec: seg.spec,
+      type: seg.type,
+      regex: seg.regex,
+      custom: seg.custom,
+      hasPattern: seg.has_pattern,
+      needsPython: seg.needs_python,
+      typePattern: seg.type_pattern,
+      repeatOf: seg.repeat_of,
+    })),
+  };
+}
+
+
+/**
+ * Asks behave to match each step text exactly as it would at run time - type converters
+ * included - by running discover.py with --check-steps. Same interpreter, paths and
+ * environment as discovery, so the verdicts are behave's own.
+ */
+export async function checkStepsWithBehave(
+  pythonExec: string,
+  projectPath: string,
+  stepsPaths: string[],
+  requests: StepCheckRequest[],
+  bundledLibsPath?: string,
+  timeoutMs = 10000,
+  env?: NodeJS.ProcessEnv
+): Promise<BehaveStepCheckResults> {
+  const startTime = performance.now();
+  const args = [projectPath, JSON.stringify(stepsPaths)];
+  if (bundledLibsPath)
+    args.push('--bundled-libs', bundledLibsPath);
+  args.push('--check-steps');
+  const stdin = JSON.stringify(requests.map(r => ({ step_type: r.stepType, text: r.text })));
+
+  let output: string;
+  try {
+    ({ stdout: output } = await spawnPython(pythonExec, getDiscoveryScriptPath(), args, projectPath, timeoutMs, env, stdin));
+  }
+  catch (e) {
+    if (!bundledLibsPath && e instanceof PythonSpawnError && e.behaveNotInstalled)
+      return checkStepsWithBehave(pythonExec, projectPath, stepsPaths, requests, getBundledBehavePath(), timeoutMs, env);
+    throw e;
+  }
+
+  interface RawStepCheck {
+    step_type: string;
+    text: string;
+    status: string;
+    error?: string;
+    file?: string;
+    line?: number;
+    arguments?: { segment: number; start: number; end: number; original: string; value?: string; value_type?: string; error?: string }[];
+  }
+  let parsed: { step_checks?: RawStepCheck[]; failed_files?: unknown[]; error?: string };
+  try {
+    parsed = JSON.parse(output);
+  }
+  catch {
+    throw new Error(`Failed to parse JSON from Python script: ${output.substring(0, 200)}`);
+  }
+  if (parsed.error)
+    throw new Error(`step argument check failed: ${parsed.error}`);
+
+  const checks = (parsed.step_checks ?? []).map((c): StepCheckResult => ({
+    stepType: c.step_type,
+    text: c.text,
+    status: c.status === "matched" || c.status === "error" ? c.status : "undefined",
+    error: c.error,
+    filePath: c.file,
+    lineNumber: c.line,
+    arguments: c.arguments?.map(a => ({
+      segment: a.segment, start: a.start, end: a.end, original: a.original,
+      value: a.value, valueType: a.value_type, error: a.error
+    })),
+  }));
+  diagLog(`checkStepsWithBehave: checked ${checks.length} step text(s) in ${Math.round(performance.now() - startTime)}ms`);
+  return { checks, incomplete: (parsed.failed_files?.length ?? 0) > 0 };
+}
+
+
 /**
  * Returns the path to the discover.py helper script.
  * In production (webpack bundle), __dirname points to dist/.
@@ -335,7 +492,8 @@ function spawnPython(
   args: string[],
   cwd: string,
   timeoutMs = 10000,
-  env?: NodeJS.ProcessEnv
+  env?: NodeJS.ProcessEnv,
+  stdin?: string
 ): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     let stdout = '';
@@ -355,6 +513,11 @@ function spawnPython(
     // process.env; discovery callers pass getBehaveEnv so imports resolve exactly
     // as they do for a real behave run (PYTHONPATH, virtualenv, env presets).
     const cp = spawn(pythonExec, allArgs, env ? { cwd, env } : { cwd });
+    if (stdin !== undefined) {
+      // an early exit closes the pipe - the 'close' handler reports the real failure
+      cp.stdin?.on('error', () => undefined);
+      cp.stdin?.end(stdin, 'utf8');
+    }
 
     const timeoutSecs = Math.round(timeoutMs / 1000);
     const timeoutId = setTimeout(() => {

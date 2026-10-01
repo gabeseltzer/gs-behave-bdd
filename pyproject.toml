@@ -14,13 +14,15 @@ dev = [
 python_version = "3.10"
 strict = true
 explicit_package_bases = true
+# discover.py runs as a script, so its sibling modules import as top-level names
+mypy_path = "src/python"
 exclude = [
     "example-projects/",  # Behave test fixtures - not real packages, have duplicate module names
 ]
 
 
 [[tool.mypy.overrides]]
-module = "behave.*"
+module = ["behave.*", "parse", "parse_type.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

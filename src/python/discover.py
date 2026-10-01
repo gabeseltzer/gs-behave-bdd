@@ -34,6 +34,8 @@ import types
 from pathlib import Path
 from typing import Any
 
+from step_params import check_steps, describe_matcher
+
 # behave imports are deferred to function bodies after sys.path setup
 
 
@@ -549,6 +551,10 @@ def collect_steps_from_registry(
         ),
         "regex_pattern": _get_regex_pattern(matcher),
       }
+      param_check = describe_matcher(matcher)
+      # a definition built from a stubbed import can't be described faithfully
+      if param_check is not None and _STUB_REPR_MARKER not in json.dumps(param_check):
+        step_info["param_check"] = param_check
       steps.append(step_info)
 
   return steps, corrupt_files
@@ -915,12 +921,26 @@ def _build_success_result(
   return result
 
 
+def _read_step_check_requests() -> list[dict[str, str]] | None:
+  """
+  With --check-steps, the step texts to check arrive on stdin as a JSON list of
+  {"step_type", "text"} (stdin rather than argv: a whole workspace's steps can
+  exceed the Windows command-line limit).
+  """
+  if "--check-steps" not in sys.argv:
+    return None
+  # bytes + explicit utf-8: the console code page would mangle non-ASCII step text
+  requests = json.loads(sys.stdin.buffer.read().decode("utf-8") or "[]")
+  return requests if isinstance(requests, list) else []
+
+
 def main() -> None:
   """Main entry point for step and fixture discovery."""
   try:
     project_path = sys.argv[1] if len(sys.argv) > 1 else "."
     steps_paths_json = sys.argv[2] if len(sys.argv) > 2 else "[]"
     steps_paths = json.loads(steps_paths_json)
+    check_requests = _read_step_check_requests()
 
     _setup_sys_path(project_path, steps_paths, _parse_bundled_libs())
 
@@ -940,6 +960,9 @@ def main() -> None:
       )
     except StepLoadError as e:
       result = _build_wholesale_error_result(str(e), steps_paths)
+
+    if check_requests is not None and not result.get("error"):
+      result["step_checks"] = check_steps(step_registry.registry, check_requests)
 
     if MOCKED_MODULES:
       result["mocked_modules"] = sorted(MOCKED_MODULES)

@@ -35,6 +35,7 @@ Includes two-way step navigation, Gherkin syntax highlighting, autoformatting, a
 15. **`execute_steps` IDE support.** Steps embedded in [`context.execute_steps("...")`](https://behave.readthedocs.io/en/latest/api/#behave.runner.Context.execute_steps) string literals in your Python files get the same IDE features as feature-file steps.
 16. **Live test results.** The Test Explorer updates as each scenario finishes, rather than waiting for the whole feature to finish.
 17. **Colored test results** in the vscode Test Results view.
+18. **Step argument diagnostics.** A step whose argument doesn't fit its step definition's parameter type is flagged as an error in the feature file - `Given I have many cukes` against `@given("I have {count:d} cukes")`, or `purple` against a custom `Color` type registered with `register_type`. Matching uses behave's own regexes, in behave's order, so the squiggle means behave would really report the step undefined. In a Scenario Outline the error lands on the Examples cell that supplied the value. Custom types whose converter can still reject a value (e.g. one registered without a pattern) are checked by behave itself when you save the file. Hover over an argument to see its parameter, what that parameter accepts, and (once behave has checked it) the value behave converts it to.
 
 #### Migrating from `behave-vsc`
 
@@ -199,6 +200,7 @@ The status bar indicator is hidden when only one project exists or when `project
 - By default, the extension uses its own bundled copy of behave. If you want to use behave from your Python environment instead (e.g. for a newer version), set `importStrategy` to `"fromEnvironment"` in your `settings.json`.
 - You can also disable/enable `justMyCode` for debug (via `settings.json` not `launch.json`).
 - Test results appear as each scenario finishes. If you would rather have them arrive per-feature from behave's JUnit output, set `resultStreaming` to `false`.
+- Step arguments for custom parameter types are checked by running your type converters in a Python process when a feature file is saved. To turn that off, set `checkStepArgumentsWithPython` to `false` (built-in types like `{n:d}` are still checked, without Python).
 - If you are using a multi-root workspace with multiple projects that contain feature files, you can set up default settings in your `*.code-workspace` file, then optionally override these as required in the `settings.json` in each workspace folder.
 - For more information on available options, go to the extension settings in vscode.
 

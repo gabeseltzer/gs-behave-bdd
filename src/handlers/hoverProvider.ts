@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
-import { getContentFromFilesystem, isStepsFile, getWorkspaceUriForFile } from "../common";
+import { getContentFromFilesystem, isStepsFile, getWorkspaceUriForFile, getWorkspaceSettingsForFile } from "../common";
 import { validateAndGetStepInfo, handleProviderError } from "./providerHelpers";
 import { StepFileStep, stepFileDecoratorPattern } from "../parsers/stepsParser";
+import { getStepArgumentHover } from "./stepArgumentHover";
 
 
 // Builds the markdown hover content for a step definition: the decorator pattern as a
@@ -60,6 +61,16 @@ export class HoverProvider implements vscode.HoverProvider {
       const hoverContent = await buildStepHoverContent(stepFileStep, document.uri);
       if (!hoverContent) {
         return undefined;
+      }
+
+      // over an argument: lead with what its parameter accepts (and its converted value)
+      const wkspSettings = getWorkspaceSettingsForFile(document.uri);
+      const argumentHover = wkspSettings && getStepArgumentHover(document, position, wkspSettings);
+      if (argumentHover) {
+        const combined = new vscode.MarkdownString(argumentHover.content.value);
+        combined.appendMarkdown('\n\n---\n\n');
+        combined.appendMarkdown(hoverContent.value);
+        return new vscode.Hover(combined, argumentHover.range);
       }
 
       return new vscode.Hover(hoverContent, stepRange);

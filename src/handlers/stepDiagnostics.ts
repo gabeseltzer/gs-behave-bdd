@@ -5,6 +5,7 @@ import { getStepFileStepForFeatureFileStep } from "../parsers/stepMappings";
 import { getStepFileSteps } from "../parsers/stepsParser";
 import { config } from "../configuration";
 import { parser } from "../extension";
+import { isStepArgumentDiagnostic, validateStepArguments } from "./stepArgumentDiagnostics";
 
 export function validateStepDefinitions(document: vscode.TextDocument): void {
   try {
@@ -57,6 +58,8 @@ export function validateStepDefinitions(document: vscode.TextDocument): void {
     const existingDiagnostics = config.diagnostics.get(document.uri) || [];
     const nonStepDiagnostics = [...existingDiagnostics].filter(d => d.code !== 'step-not-found');
     config.diagnostics.set(document.uri, [...nonStepDiagnostics, ...stepDiagnostics]);
+
+    validateStepArguments(document, wkspSettings);
   }
   catch (e: unknown) {
     try {
@@ -71,6 +74,6 @@ export function validateStepDefinitions(document: vscode.TextDocument): void {
 
 export function clearStepDiagnostics(uri: vscode.Uri): void {
   const existingDiagnostics = config.diagnostics.get(uri) || [];
-  const nonStepDiagnostics = [...existingDiagnostics].filter(d => d.code !== 'step-not-found');
+  const nonStepDiagnostics = [...existingDiagnostics].filter(d => d.code !== 'step-not-found' && !isStepArgumentDiagnostic(d));
   config.diagnostics.set(uri, nonStepDiagnostics);
 }

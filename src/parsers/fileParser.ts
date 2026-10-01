@@ -12,6 +12,7 @@ import { getStepFileSteps, deleteStepFileSteps, storeStepFileStep } from './step
 import { deleteFixtures, storePythonFixtureDefinitions, getFixtures, restoreFixtures } from './fixtureParser';
 import { loadFromBehave, BehaveDiscoveryResult, FailedFileInfo } from './behaveLoader';
 import { storeBehaveStepDefinitions } from './stepsParserBehaveAdapter';
+import { rememberStepsPaths, setArgumentCheckDefinitions } from './stepArgumentStore';
 import { TestData, TestFile } from './testFile';
 import { diagLog } from '../logger';
 import * as path from 'path';
@@ -292,6 +293,7 @@ export class FileParser {
         `  step dirs passed to behave: ${stepsPaths.join(", ")}`,
         wkspSettings.uri);
       config.logger.logInfo(`Searching for step definitions...`, wkspSettings.uri);
+      rememberStepsPaths(wkspSettings.featuresUri, stepsPaths);
       const result = await loadFromBehave(
         pythonExec,
         wkspSettings.projectUri.fsPath,
@@ -508,6 +510,7 @@ export class FileParser {
 
     const storeBehaveStart = performance.now();
     const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, result.steps);
+    setArgumentCheckDefinitions(wkspSettings.featuresUri, result.steps);
     storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
     diagLog(`${caller}: _applyBehaveResult storeBehaveStepDefinitions took ${Math.round(performance.now() - storeBehaveStart)}ms`);
 
@@ -1026,6 +1029,7 @@ export class FileParser {
           }
 
           config.logger.logInfo(`Searching for step definitions...`, wkspSettings.uri);
+          rememberStepsPaths(wkspSettings.featuresUri, [stepsPath]);
           const result = await loadFromBehave(
             pythonExec,
             wkspSettings.projectUri.fsPath,
