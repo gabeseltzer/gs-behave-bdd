@@ -41,6 +41,7 @@ export class FileParser {
   private _finishedFeaturesParseForWorkspace: { [key: string]: boolean } = {};
   private _finishedStepsParseForWorkspace: { [key: string]: boolean } = {};
   private _cancelTokenSources: { [wkspUriPath: string]: vscode.CancellationTokenSource } = {};
+  private _latestParseFilesCall: { [wkspUriPath: string]: number } = {};
   private _errored = false;
   private _reparsingFile = false;
   private _pythonReparseTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -739,9 +740,14 @@ export class FileParser {
     });
 
 
+    // set once this call claims the workspace's slot, so finally releases only its own token
+    let ownTokenSource: vscode.CancellationTokenSource | undefined;
+
     try {
 
       this._parseFilesCallCounts++;
+      const callNo = this._parseFilesCallCounts;
+      this._latestParseFilesCall[wkspPath] = callNo;
       const wkspName = getWorkspaceFolder(wkspUri).name;
       const wkspId = uriId(wkspUri);
       const callName = `parseFiles #${this._parseFilesCallCounts} ${wkspName} (${intiator})`;
@@ -756,9 +762,17 @@ export class FileParser {
         this._cancelTokenSources[wkspPath].cancel();
         while (this._cancelTokenSources[wkspPath]) {
           await new Promise(t => setTimeout(t, 20));
+          // Only the call HOLDING the slot gets cancelled above, not one still waiting for it.
+          // So if a newer call arrived while we waited, it may claim the slot first and finish -
+          // and running after it would clear the items it just built. Step aside instead.
+          if (this._latestParseFilesCall[wkspPath] !== callNo) {
+            diagLog(`${callName}: superseded by a newer parseFiles call, skipping`);
+            return undefined;
+          }
         }
       }
-      this._cancelTokenSources[wkspPath] = new vscode.CancellationTokenSource();
+      ownTokenSource = new vscode.CancellationTokenSource();
+      this._cancelTokenSources[wkspPath] = ownTokenSource;
       const wkspSettings: WorkspaceSettings = config.workspaceSettings[wkspUri.path];
 
       // Guard: if WorkspaceSettings construction threw a FATAL error, the configuration getter has already
@@ -908,8 +922,10 @@ export class FileParser {
     }
     finally {
 
-      this._cancelTokenSources[wkspPath]?.dispose();
-      delete this._cancelTokenSources[wkspPath];
+      if (ownTokenSource && this._cancelTokenSources[wkspPath] === ownTokenSource) {
+        ownTokenSource.dispose();
+        delete this._cancelTokenSources[wkspPath];
+      }
       cancellationHandler?.dispose();
     }
   }
