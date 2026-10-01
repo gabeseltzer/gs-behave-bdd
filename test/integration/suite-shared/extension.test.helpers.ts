@@ -52,7 +52,8 @@ function assertTestResultMatchesExpectedResult(expectedResults: TestResult[], ac
 				`testConfig:${JSON.stringify(testConfig)}\n`;
 			}
 			throw `result is undefined, was the test run cancelled?\n` +
-			`actualResult:${JSON.stringify(expectedResult)}\n` +
+			`expectedResult:${JSON.stringify(expectedResult)}\n` +
+			`actualResult:${JSON.stringify(actualResult)}\n` +
 			`testConfig:${JSON.stringify(testConfig)}\n`;
 		}
 
