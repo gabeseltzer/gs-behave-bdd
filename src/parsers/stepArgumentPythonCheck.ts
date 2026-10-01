@@ -122,6 +122,11 @@ async function runChecks(wkspSettings: WorkspaceSettings, wksp: WorkspaceChecks)
     );
     for (const check of checks)
       wksp.results.set(requestKey(check.stepType, check.text), check);
+    // a text behave gave no verdict for would otherwise be re-requested on every refresh
+    for (const key of batch.keys()) {
+      if (!wksp.results.has(key))
+        wksp.failed.add(key);
+    }
     wksp.incomplete = incomplete;
     config.logger.logVerbose(`step argument check: behave checked ${checks.length} step(s)`, wkspSettings.uri);
   }

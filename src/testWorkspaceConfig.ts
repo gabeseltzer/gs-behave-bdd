@@ -121,6 +121,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.runParallel === undefined ? false : this.runParallel);
       case "resultStreaming":
         return <T><unknown>(this.resultStreaming === undefined ? true : this.resultStreaming);
+      case "checkStepArgumentsWithPython":
+        return <T><unknown>true;
       case "xRay":
         return <T><unknown>(this.xRay === undefined ? false : this.xRay);
       case "verboseLogging":
@@ -181,6 +183,9 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         break;
       case "resultStreaming":
         response = <T><unknown>this.resultStreaming;
+        break;
+      case "checkStepArgumentsWithPython":
+        response = undefined;
         break;
       case "xRay":
         response = <T><unknown>this.xRay;
@@ -291,6 +296,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.get("runParallel"));
       case "resultStreaming":
         return <T><unknown>(this.get("resultStreaming"));
+      case "checkStepArgumentsWithPython":
+        return <T><unknown>(this.get("checkStepArgumentsWithPython"));
       case "xRay":
         return <T><unknown>(this.get("xRay"));
       case "importStrategy":
