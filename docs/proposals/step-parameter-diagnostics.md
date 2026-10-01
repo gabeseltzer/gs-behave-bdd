@@ -1,6 +1,6 @@
 # Proposal: step parameter diagnostics
 
-Status: **phases 1–2 implemented** on `gabes/step-param-diagnostics` (off `gabe-dev`); phase 3 not started.
+Status: **implemented** (phases 1–3, plus argument and Examples-cell hovers) on `gabes/step-param-diagnostics` (off `gabe-dev`).
 
 Terminology follows behave and `CONTEXT.md`: a **parameter** is the `{name:type}` field in a step definition,
 an **argument** is the feature file text that fills it (`behave.model_type.Argument`).
@@ -177,6 +177,11 @@ to copy.
   `stepArgumentHover.ts` adds the argument hover.
 - `test/unit/parsers/stepArgumentsBehaveParity.test.ts` runs real behave over a corpus and
   asserts the TypeScript verdict never contradicts it.
+- Phase 3: `_getStepFileStepMatch` asks the argument check first and uses the definition behave
+  matches (or, on a mismatch, the one the step was written for), falling back to wildcard
+  matching for Scenario Outline steps and anything undetermined. Each behave definition is linked
+  to its `StepFileStep` (`getStepFileStepForBehaveDefinition`). Duplicate detection needed no
+  change: it already compares behave's exact decorator text, not wildcard keys.
 - Deviation from the plan: definitions that share a wildcard pattern (e.g. `order {a:d} x` and
   `order {b} x`) collide in the step mapping's key, so the argument check keeps its own ordered
   list of every definition instead of reading the step mapping.
