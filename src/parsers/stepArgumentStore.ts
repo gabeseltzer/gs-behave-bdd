@@ -9,7 +9,7 @@ import { uriId, sepr } from '../common';
 import type { BehaveStepDefinition } from './behaveLoader';
 import { checkStepText, CompiledDefinition, StepArgumentCheck } from './stepArguments';
 import { getStepFileSteps } from './stepsParser';
-import { convertPatternToTextAsRe } from './stepsParserBehaveAdapter';
+import { convertPatternToTextAsRe, getStepFileStepForBehaveDefinition } from './stepsParserBehaveAdapter';
 
 
 interface WorkspaceDefinitions {
@@ -27,7 +27,7 @@ const changeListeners: ((featuresUri: vscode.Uri) => void)[] = [];
 /** Replaces a workspace's definitions with a fresh discovery result (in behave's registry order). */
 export function setArgumentCheckDefinitions(featuresUri: vscode.Uri, definitions: BehaveStepDefinition[]) {
   store.set(uriId(featuresUri), {
-    definitions: definitions.map(d => new CompiledDefinition(d)),
+    definitions: definitions.map(d => new CompiledDefinition(d, getStepFileStepForBehaveDefinition(d))),
     memo: new Map(),
   });
   for (const listener of changeListeners)

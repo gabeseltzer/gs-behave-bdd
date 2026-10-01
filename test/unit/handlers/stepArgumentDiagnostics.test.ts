@@ -11,7 +11,7 @@ import type { BehaveStepDefinition, StepCheckResult } from '../../../src/parsers
 import {
   STEP_ARGUMENT_CONVERSION_ERROR, STEP_ARGUMENT_MISMATCH, validateStepArguments
 } from '../../../src/handlers/stepArgumentDiagnostics';
-import { getStepArgumentHover } from '../../../src/handlers/stepArgumentHover';
+import { getExamplesCellHover, getStepArgumentHover } from '../../../src/handlers/stepArgumentHover';
 import { WorkspaceSettings } from '../../../src/settings';
 
 const INT_RE = "(?P<f1>[-+ ]?[-+ ]?[0-9]+|[-+ ]?0[xX][0-9a-fA-F]+|[-+ ]?0[bB][01]+|[-+ ]?0[oO][0-7]+)";
@@ -199,5 +199,30 @@ suite('stepArgumentDiagnostics', () => {
     ]);
     const hover = getStepArgumentHover(doc, new vscode.Position(1, 19), settings());
     assert.match(hover?.content.value ?? "", /Filled from the Examples column `<count>`$/);
+  });
+
+  test('hover over an Examples cell names the parameter its value fills', () => {
+    const doc = useFeature([
+      "  Scenario Outline: o",
+      "    Given I have <count> cukes",
+      "    And an even <count> number",
+      "    Examples:",
+      "      | count |",
+      "      | 4     |",
+    ]);
+    pythonResults.set("given\nan even 4 number", {
+      stepType: "given", text: "an even 4 number", status: "matched",
+      arguments: [{ segment: 1, start: 8, end: 9, original: "4", value: "4", valueType: "int" }],
+    });
+    const hover = getExamplesCellHover(doc, new vscode.Position(5, 8), settings());
+    assert.ok(hover);
+    assert.deepStrictEqual([hover.range.start.line, hover.range.start.character, hover.range.end.character], [5, 8, 9]);
+    assert.strictEqual(hover.content.value, [
+      "**Examples column** `<count>`",
+      "",
+      "- Fills `{count:d}` in *I have \\<count\\> cukes* — an integer",
+      "- Fills `{n:Even}` in *an even \\<count\\> number* — an Even. behave converts `4` to `4` (`int`)",
+    ].join("\n"));
+    assert.strictEqual(getExamplesCellHover(doc, new vscode.Position(4, 9), settings()), undefined, "not on the heading row");
   });
 });

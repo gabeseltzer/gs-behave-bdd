@@ -16,6 +16,7 @@
  * definition is "undetermined" - never flagged here (the Python check may still decide it).
  */
 
+import type { StepFileStep } from './stepsParser';
 import { convertPatternToTextAsRe } from './stepsParserBehaveAdapter';
 
 
@@ -81,7 +82,11 @@ export class CompiledDefinition {
   public readonly looseSegmented?: RegExp;
   public readonly segments: CompiledSegment[] = [];
 
-  constructor(public readonly definition: ArgumentCheckDefinition) {
+  /**
+   * @param stepFileStep the extension's own record of this definition, for navigation -
+   *   undefined when it wasn't stored (the step mapping then falls back to wildcard matching)
+   */
+  constructor(public readonly definition: ArgumentCheckDefinition, public readonly stepFileStep?: StepFileStep) {
     this.loose = new RegExp(`^${convertPatternToTextAsRe(definition.pattern)}$`);
     const info = definition.paramCheck;
     if (!info)
@@ -151,9 +156,7 @@ export type StepArgumentCheck =
 export function checkStepText(definitions: readonly CompiledDefinition[], stepType: string, text: string,
   otherLoose: readonly RegExp[] = []): StepArgumentCheck {
 
-  const candidates = definitions.filter(d => d.definition.stepType === stepType);
-  if (stepType !== "step")
-    candidates.push(...definitions.filter(d => d.definition.stepType === "step"));
+  const candidates = getCandidates(definitions, stepType);
 
   for (const candidate of candidates) {
     if (!candidate.verifiable) {
@@ -182,6 +185,27 @@ export function checkStepText(definitions: readonly CompiledDefinition[], stepTy
   const located = locateLooseArguments(blamed, text);
   const badArguments = located.filter(a => !argumentFits(blamed, a, located));
   return { status: "mismatch", definition: blamed, badArguments, arguments: located };
+}
+
+
+// behave's candidate order per step type, built once per definitions list: this runs for
+// every feature file step whenever step mappings are rebuilt
+const candidatesCache = new WeakMap<readonly CompiledDefinition[], Map<string, CompiledDefinition[]>>();
+
+function getCandidates(definitions: readonly CompiledDefinition[], stepType: string) {
+  let byType = candidatesCache.get(definitions);
+  if (!byType) {
+    byType = new Map();
+    candidatesCache.set(definitions, byType);
+  }
+  let candidates = byType.get(stepType);
+  if (!candidates) {
+    candidates = definitions.filter(d => d.definition.stepType === stepType);
+    if (stepType !== "step")
+      candidates.push(...definitions.filter(d => d.definition.stepType === "step"));
+    byType.set(stepType, candidates);
+  }
+  return candidates;
 }
 
 
@@ -521,9 +545,10 @@ export function parameterLabel(segment: ParamSegment, definition?: CompiledDefin
 export function describeParameterType(segment: ParamSegment): string {
   const type = segment.type ?? "";
   if (segment.custom) {
+    const article = /^[aeiou]/i.test(type) ? "an" : "a";
     if (segment.typePattern !== undefined)
-      return `a ${type} (pattern: ${segment.typePattern})`;
-    return `a ${type}`;
+      return `${article} ${type} (pattern: ${segment.typePattern})`;
+    return `${article} ${type}`;
   }
   return BUILTIN_TYPE_DESCRIPTIONS[type] ?? `a "${type}" value`;
 }

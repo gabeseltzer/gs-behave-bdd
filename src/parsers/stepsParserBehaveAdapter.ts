@@ -11,6 +11,16 @@ import { StepFileStep, parseRepWildcard, storeStepFileStep } from './stepsParser
 import * as fs from 'fs';
 import { diagLog } from '../logger';
 
+// The StepFileStep created for each behave definition. The step file step store is keyed by
+// wildcard pattern, so definitions that differ only in parameter type (`order {a:d} x` and
+// `order {b} x`) keep only one entry there - the step argument check maps a step to the
+// definition behave really matches through this instead.
+const stepFileStepsByDefinition = new WeakMap<BehaveStepDefinition, StepFileStep>();
+
+export function getStepFileStepForBehaveDefinition(definition: BehaveStepDefinition): StepFileStep | undefined {
+  return stepFileStepsByDefinition.get(definition);
+}
+
 /**
  * Stores behave step definitions in the stepsParser storage
  * Converts all definitions and stores them so they can be used like AST-parsed steps
@@ -65,6 +75,7 @@ export async function storeBehaveStepDefinitions(
       );
 
       storeStepFileStep(featuresUri, stepFileStep);
+      stepFileStepsByDefinition.set(behavioral, stepFileStep);
       stored++;
     } catch (e) {
       diagLog(`Error storing behave step definition: ${e instanceof Error ? e.message : String(e)}`);

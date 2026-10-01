@@ -14,7 +14,13 @@ import * as os from 'os';
 // configuration first: loading behaveLoader on its own trips the logger <-> configuration import cycle
 import '../../../src/configuration';
 import { checkStepsWithBehave, loadFromBehave, StepCheckResult } from '../../../src/parsers/behaveLoader';
+import * as vscode from 'vscode';
 import { checkStepText, CompiledDefinition } from '../../../src/parsers/stepArguments';
+import { clearArgumentCheckDefinitions, setArgumentCheckDefinitions } from '../../../src/parsers/stepArgumentStore';
+import { storeBehaveStepDefinitions } from '../../../src/parsers/stepsParserBehaveAdapter';
+import { deleteStepFileSteps } from '../../../src/parsers/stepsParser';
+import { _getStepFileStepMatch } from '../../../src/parsers/stepMappings';
+import { FeatureFileStep } from '../../../src/parsers/featureParser';
 
 function findProjectRoot(): string {
   let dir = __dirname;
@@ -213,6 +219,8 @@ suite('step arguments - parity with behave', function () {
   let tmpDir: string;
   let definitions: CompiledDefinition[];
   let behaveVerdicts: Map<string, StepCheckResult>;
+  let featuresUri: vscode.Uri | undefined;
+  let discoveredSteps: Awaited<ReturnType<typeof loadFromBehave>>["steps"];
 
   suiteSetup(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'behave-vsc-args-'));
@@ -228,6 +236,7 @@ suite('step arguments - parity with behave', function () {
     assert.strictEqual(discovery.error, undefined, `discovery failed: ${discovery.error}`);
     assert.strictEqual(discovery.failedFiles, undefined, `step files failed: ${JSON.stringify(discovery.failedFiles)}`);
     definitions = discovery.steps.map(d => new CompiledDefinition(d));
+    discoveredSteps = discovery.steps;
 
     const { checks } = await checkStepsWithBehave('python', tmpDir, [stepsDir],
       CORPUS.map(([stepType, text]) => ({ stepType, text })), bundledLibs, 30000);
@@ -235,6 +244,10 @@ suite('step arguments - parity with behave', function () {
   });
 
   suiteTeardown(() => {
+    if (featuresUri) {
+      clearArgumentCheckDefinitions(featuresUri);
+      deleteStepFileSteps(featuresUri);
+    }
     if (tmpDir)
       fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -339,6 +352,36 @@ suite('step arguments - parity with behave', function () {
       "when I have 5 cukes => unmatched / undefined",
       "given something nobody defined => unmatched / undefined",
     ]);
+  });
+
+  test('step mapping navigates to the definition behave runs', async () => {
+    featuresUri = vscode.Uri.file(path.join(tmpDir, 'features'));
+    await storeBehaveStepDefinitions(featuresUri, discoveredSteps);
+    setArgumentCheckDefinitions(featuresUri, discoveredSteps);
+    const uri = featuresUri;
+
+    const mapsTo = (stepType: string, text: string) => {
+      const step = new FeatureFileStep("k", vscode.Uri.file(path.join(tmpDir, 'features', 'a.feature')), "a.feature",
+        new vscode.Range(0, 0, 0, 0), `Given ${text}`, text, stepType);
+      return _getStepFileStepMatch(step, new Map(), new Map(), new Map(), new Map(), uri);
+    };
+
+    for (const [stepType, text] of CORPUS) {
+      const behave = behaveVerdicts.get(`${stepType}
+${text}`);
+      if (behave?.status !== "matched")
+        continue;
+      const mapped = mapsTo(stepType, text);
+      assert.ok(mapped, `"${text}" maps to a definition`);
+      const definition = discoveredSteps.find(d => path.resolve(d.filePath) === path.resolve(behave.filePath ?? "") && d.lineNumber === behave.lineNumber);
+      assert.strictEqual(mapped.uri.fsPath, vscode.Uri.file(definition?.filePath ?? "").fsPath, text);
+      // the mapping records the def line, behave the decorator line just above it
+      assert.strictEqual(mapped.functionDefinitionRange.start.line, (definition?.lineNumber ?? 0), `"${text}" maps to behave's pick`);
+    }
+
+    assert.strictEqual(mapsTo("given", "regex 42 things")?.uri.fsPath.endsWith("c_re_steps.py"), true, "re-matcher steps navigate");
+    assert.notStrictEqual(mapsTo("given", "order 5 x"), mapsTo("given", "order z x"), "type-only twins are told apart");
+    assert.ok(mapsTo("given", "I have many cukes"), "a mismatched step still navigates to the definition it was meant for");
   });
 
   test('converter errors are behave-only: matched by regex, error by behave', () => {
