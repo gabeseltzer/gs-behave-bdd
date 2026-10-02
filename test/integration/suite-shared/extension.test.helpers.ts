@@ -402,6 +402,43 @@ async function getTestSupportFromExtension(): Promise<TestSupport> {
 // so, when workspace-multiroot suite/index.ts is run (in order to test staggered workspace runs) this
 // function will run in parallel with itself (but as per the promises in that file, only one instance at a time for a given workspace, 
 // so for example project workspaces A/B/Simple can run in parallel, but not e.g. A/A)
+// how many more times a debug run is tried when its debug session never started (see below)
+const DEBUG_START_RETRIES = 2;
+
+// Kicks off one test run (the caller holds the lock; it is released once the run has begun)
+// and reports whether a debug session of ours started during it.
+async function runTestsOnce(consoleName: string, debug: boolean, include: vscode.TestItem[], instances: TestSupport) {
+	let debugSessionStarted = false;
+	const sessionListener = vscode.debug.onDidStartDebugSession(session => {
+		if (session.name === "gs-behave-bdd-debug")
+			debugSessionStarted = true;
+	});
+
+	try {
+		// we kick the runHandler off inside the lock to ensure that featureParseComplete() check
+		// will inside the runHandler, i.e. so no other parsing gets kicked off until it has begun.
+		// we do NOT want to await the runHandler as we want to release the lock for parallel run execution for multi-root
+		const runRequest = new vscode.TestRunRequest(include);
+		const resultsPromise = instances.runHandler(debug, runRequest);
+
+		// give run handler a chance to pass the featureParseComplete() check, then release the lock
+		await (new Promise(t => setTimeout(t, 50)));
+		await setLock(consoleName, "release");
+
+		if (debug) {
+			// timeout hack to show test ui during debug testing so we can see progress
+			await new Promise(t => setTimeout(t, 1000));
+			await vscode.commands.executeCommand("workbench.view.testing.focus");
+		}
+		const results = await resultsPromise;
+		return { results, debugSessionStarted };
+	}
+	finally {
+		sessionListener.dispose();
+	}
+}
+
+
 export async function runAllTestsAndAssertTheResults(debug: boolean, wskpFileSystemFolderName: string, testConfig: TestWorkspaceConfig,
 	getExpectedCounts: (wkspUri: vscode.Uri, config: Configuration) => WkspParseCounts,
 	getExpectedResults: (wkspUri: vscode.Uri, config: Configuration) => TestResult[]) {
@@ -447,25 +484,24 @@ export async function runAllTestsAndAssertTheResults(debug: boolean, wskpFileSys
 	console.log(`${consoleName}: initialised`);
 
 
-	// run behave tests - we kick the runHandler off inside the lock to ensure that featureParseComplete() check
-	// will inside the runHandler, i.e. so no other parsing gets kicked off until it has begun.
-	// we do NOT want to await the runHandler as we want to release the lock for parallel run execution for multi-root
+	// run behave tests
 	console.log(`${consoleName}: calling runHandler to run tests...`);
-	const runRequest = new vscode.TestRunRequest(include);
-	const resultsPromise = instances.runHandler(debug, runRequest);
+	let outcome = await runTestsOnce(consoleName, debug, include, instances);
 
-	// give run handler a chance to pass the featureParseComplete() check, then release the lock
-	await (new Promise(t => setTimeout(t, 50)));
-	await setLock(consoleName, "release");
-
-
-	if (debug) {
-		// timeout hack to show test ui during debug testing so we can see progress		
-		await new Promise(t => setTimeout(t, 1000));
-		await vscode.commands.executeCommand("workbench.view.testing.focus");
+	// A debug run depends on the Python debugger starting behave, and on a loaded machine its
+	// launcher process occasionally fails to connect back within debugpy's 60s
+	// (DEBUGPY_PROCESS_SPAWN_TIMEOUT) - "Timed out waiting for launcher to connect". Then no
+	// debug session ever starts, behave never runs and every result is missing. That is the
+	// environment, not the extension, so retry those runs; any other missing result still fails.
+	for (let retry = 1; debug && !outcome.debugSessionStarted && retry <= DEBUG_START_RETRIES; retry++) {
+		console.log(`${consoleName}: the debug session never started (debugger launcher failed), retry ${retry} of ${DEBUG_START_RETRIES}`);
+		await setLock(consoleName, "acquire");
+		outcome = await runTestsOnce(consoleName, debug, include, instances);
 	}
-	const results = await resultsPromise;
+	if (debug && !outcome.debugSessionStarted)
+		throw new Error(`${consoleName}: the debug session never started, ${DEBUG_START_RETRIES + 1} times - the Python debugger could not launch behave (see "Timed out waiting for launcher to connect" above)`);
 	console.log(`${consoleName}: runHandler completed`);
+	const results = outcome.results;
 
 	// validate results
 
