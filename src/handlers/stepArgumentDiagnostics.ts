@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { config } from "../configuration";
 import { getFeatureFileSteps, FeatureFileStep } from "../parsers/featureParser";
 import { getLines } from "../common";
-import { featureFileStepRe } from "../parsers/gherkinPatterns";
+import { featureFileStepRe, getStepTextColumn } from "../parsers/gherkinPatterns";
 import { getOutlineExampleRows, substitutePlaceholders, SubstitutedStep } from "../parsers/outlineExamples";
 import type { StepCheckRequest, StepCheckResult } from "../parsers/behaveLoader";
 import { checkStepArguments, hasArgumentCheckDefinitions } from "../parsers/stepArgumentStore";
@@ -22,9 +22,16 @@ export const STEP_ARGUMENT_CONVERSION_ERROR = "step-argument-conversion-error";
 const STEP_ARGUMENT_CODES = new Set<unknown>([STEP_ARGUMENT_MISMATCH, STEP_ARGUMENT_CONVERSION_ERROR]);
 
 
+/** A step as written in a document: a feature file step, or a step in an execute_steps() call. */
+export interface ArgumentStep {
+  range: vscode.Range;
+  textWithoutType: string;
+  stepType: string;
+}
+
 /** A concrete step text behave will match, and how to map offsets in it back to the document. */
-interface StepInstance {
-  step: FeatureFileStep;
+export interface StepInstance {
+  step: ArgumentStep;
   text: string;
   /** document column where the step's text (after the keyword) starts */
   textColumn: number;
@@ -49,37 +56,44 @@ export function validateStepArguments(document: vscode.TextDocument, wkspSetting
     return;
   }
 
+  const lines = getLines(document.getText());
+  const outlineRows = getOutlineExampleRows(lines);
+  const instances = wkspSettings.featuresUris.flatMap(u => getFeatureFileSteps(u))
+    .filter(([, s]) => s.uri.toString() === document.uri.toString())
+    .flatMap(([, step]) => getStepInstances(step, lines, outlineRows));
+
+  config.diagnostics.set(document.uri, [...others, ...diagnoseStepArguments(document, wkspSettings, instances)]);
+}
+
+/**
+ * Argument diagnostics for concrete step instances in one document - shared by feature files
+ * and execute_steps() call sites. Queues the steps only behave can decide for its Python check
+ * (released once the document is saved).
+ */
+export function diagnoseStepArguments(document: vscode.TextDocument, wkspSettings: WorkspaceSettings,
+  instances: StepInstance[]): vscode.Diagnostic[] {
+
   const diagnostics: vscode.Diagnostic[] = [];
   const pythonRequests: StepCheckRequest[] = [];
   const seen = new Set<string>();
 
-  const lines = getLines(document.getText());
-  const outlineRows = getOutlineExampleRows(lines);
-  const featureSteps = wkspSettings.featuresUris.flatMap(u => getFeatureFileSteps(u))
-    .filter(([, s]) => s.uri.toString() === document.uri.toString());
-
-  const add = (diagnostic: vscode.Diagnostic) => {
-    const key = `${diagnostic.range.start.line}:${diagnostic.range.start.character}:${diagnostic.message}`;
-    if (seen.has(key))
-      return;
-    seen.add(key);
-    diagnostics.push(diagnostic);
-  };
-
-  for (const [, step] of featureSteps) {
-    for (const instance of getStepInstances(step, lines, outlineRows)) {
-      const check = checkStepArguments(wkspSettings.featuresUri, step.stepType, instance.text);
-      if (!check)
+  for (const instance of instances) {
+    const check = checkStepArguments(wkspSettings.featuresUri, instance.step.stepType, instance.text);
+    if (!check)
+      continue;
+    for (const diagnostic of diagnoseInstance(wkspSettings, instance, check, pythonRequests)) {
+      // an outline cell feeding several rows/steps would otherwise repeat the same diagnostic
+      const key = `${diagnostic.range.start.line}:${diagnostic.range.start.character}:${diagnostic.message}`;
+      if (seen.has(key))
         continue;
-      for (const diagnostic of diagnoseInstance(wkspSettings, instance, check, pythonRequests))
-        add(diagnostic);
+      seen.add(key);
+      diagnostics.push(diagnostic);
     }
   }
 
-  config.diagnostics.set(document.uri, [...others, ...diagnostics]);
-
   if (wkspSettings.checkStepArgumentsWithPython && pythonRequests.length > 0)
     requestPythonStepChecks(wkspSettings, pythonRequests, !document.isDirty);
+  return diagnostics;
 }
 
 export function isStepArgumentDiagnostic(diagnostic: vscode.Diagnostic) {
@@ -91,7 +105,7 @@ export function getStepInstances(step: FeatureFileStep, lines: string[],
   outlineRows: ReturnType<typeof getOutlineExampleRows>): StepInstance[] {
 
   const lineNo = step.range.start.line;
-  const textColumn = getStepTextColumn(lines[lineNo] ?? "", step.textWithoutType);
+  const textColumn = getStepTextColumn(lines[lineNo] ?? "", step.textWithoutType, featureFileStepRe);
   if (textColumn === undefined)
     return [];
 
@@ -108,16 +122,6 @@ export function getStepInstances(step: FeatureFileStep, lines: string[],
   }
   return instances;
 }
-
-function getStepTextColumn(line: string, textWithoutType: string): number | undefined {
-  const match = featureFileStepRe.exec(line);
-  if (!match)
-    return undefined;
-  const keywordEnd = match[0].length - match[2].length;
-  const column = line.indexOf(textWithoutType, keywordEnd);
-  return column === -1 ? undefined : column;
-}
-
 
 function diagnoseInstance(wkspSettings: WorkspaceSettings, instance: StepInstance, check: StepArgumentCheck,
   pythonRequests: StepCheckRequest[]): vscode.Diagnostic[] {

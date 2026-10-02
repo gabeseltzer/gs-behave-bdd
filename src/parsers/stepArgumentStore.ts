@@ -7,7 +7,7 @@
 import * as vscode from 'vscode';
 import { uriId, sepr } from '../common';
 import type { BehaveStepDefinition } from './behaveLoader';
-import { checkStepText, CompiledDefinition, StepArgumentCheck } from './stepArguments';
+import { checkStepText, CompiledDefinition, locateRegexGroups, StepArgumentCheck } from './stepArguments';
 import { getStepFileSteps } from './stepsParser';
 import { convertPatternToTextAsRe, getStepFileStepForBehaveDefinition } from './stepsParserBehaveAdapter';
 
@@ -75,6 +75,23 @@ export function checkStepArguments(featuresUri: vscode.Uri, stepType: string, te
   const result = checkStepText(wksp.definitions, stepType, text, wksp.otherLoose);
   wksp.memo.set(memoKey, result);
   return result;
+}
+
+
+/**
+ * Where the arguments behave would pass sit in a step's text (after the keyword): a parse
+ * definition's parameters, or a regex definition's capture groups. For a step whose argument
+ * doesn't fit, the arguments as the definition it was written for would split them.
+ * undefined when behave's matching can't decide - callers fall back to wildcard matching.
+ */
+export function getStepArgumentSpans(featuresUri: vscode.Uri, stepType: string, text: string): { start: number; end: number }[] | undefined {
+  const check = checkStepArguments(featuresUri, stepType, text);
+  if (check?.status !== "matched" && check?.status !== "mismatch")
+    return undefined;
+  const kind = check.definition.definition.paramCheck?.kind;
+  if (check.status === "matched" && (kind === "re" || kind === "re0") && check.definition.strict)
+    return locateRegexGroups(check.definition.strict, text);
+  return check.arguments.filter(a => a.end > a.start).map(a => ({ start: a.start, end: a.end }));
 }
 
 

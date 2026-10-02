@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
-import { getWorkspaceUriForFile, getLines } from '../common';
+import { getWorkspaceUriForFile, getWorkspaceSettingsForFile, getLines } from '../common';
 import { config } from '../configuration';
 import { parser } from '../extension';
-import { featureFileStepRe, getStepParamSpans } from '../parsers/gherkinPatterns';
+import { FeatureFileStep, getFeatureFileSteps } from '../parsers/featureParser';
+import { featureFileStepRe, getStepParamSpans, getStepTextColumn } from '../parsers/gherkinPatterns';
+import { getStepArgumentSpans } from '../parsers/stepArgumentStore';
 import { getStepFileStepForFeatureFileStep } from '../parsers/stepMappings';
 import { parseRepWildcard } from '../parsers/stepsParser';
 
@@ -80,12 +82,31 @@ export class SemHighlightProvider implements vscode.DocumentSemanticTokensProvid
 		const r: ParsedToken[] = [];
 		const lines = getLines(document.getText());
 
+		const wkspSettings = getWorkspaceSettingsForFile(document.uri);
+		const stepsByLine = new Map<number, FeatureFileStep>();
+		for (const [, step] of wkspSettings?.featuresUris.flatMap(u => getFeatureFileSteps(u)) ?? []) {
+			if (step.uri.toString() === document.uri.toString())
+				stepsByLine.set(step.range.start.line, step);
+		}
+
 		for (let i = 0; i < lines.length; i++) {
 
 			if (cancelToken.isCancellationRequested)
 				break;
 
 			const line = lines[i];
+
+			// the arguments behave would really pass (typed parameters, regex capture groups)
+			const step = stepsByLine.get(i);
+			const spans = step && wkspSettings && getStepArgumentSpans(wkspSettings.featuresUri, step.stepType, step.textWithoutType);
+			const textColumn = step && getStepTextColumn(line, step.textWithoutType, featureFileStepRe);
+			if (spans && textColumn !== undefined) {
+				for (const span of spans)
+					r.push({ line: i, startCharacter: textColumn + span.start, length: span.end - span.start, tokenType: 'function' });
+				continue;
+			}
+
+			// otherwise: the step definition's wildcards
 			const stepFileStep = getStepFileStepForFeatureFileStep(document.uri, i);
 
 			if (stepFileStep && stepFileStep.textAsRe.includes(parseRepWildcard)) {

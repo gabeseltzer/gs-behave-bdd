@@ -240,6 +240,33 @@ function locateStrictArguments(definition: CompiledDefinition, text: string) {
   return definition.segments.length > 0 ? locateWith(definition, definition.strict, text) : [];
 }
 
+/**
+ * The capture groups of a regex-matcher ("re"/"re0") definition - behave passes every group as
+ * an argument. Without the `d` regex flag (rejected by some extension hosts, see
+ * getStepParamSpans) group offsets aren't reported, so each value is searched for after the
+ * previous one, or within it for a nested group.
+ */
+export function locateRegexGroups(re: RegExp, text: string): { start: number; end: number }[] {
+  const match = re.exec(text);
+  if (!match)
+    return [];
+  const spans: { start: number; end: number }[] = [];
+  let previous = { start: match.index, end: match.index };
+  for (let group = 1; group < match.length; group++) {
+    const value = match[group];
+    if (!value)
+      continue;
+    let found = text.indexOf(value, previous.end);
+    if (found === -1)
+      found = text.indexOf(value, previous.start);
+    if (found === -1)
+      continue;
+    previous = { start: found, end: found + value.length };
+    spans.push(previous);
+  }
+  return spans;
+}
+
 /** Locates arguments by literal text alone, so a bad argument can still be pointed at. */
 export function locateLooseArguments(definition: CompiledDefinition, text: string) {
   return locateWith(definition, definition.looseSegmented, text);

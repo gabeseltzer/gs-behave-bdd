@@ -123,6 +123,20 @@ export function getStepParamSpans(text: string, groupedRe: string, keywordRe: Re
 }
 
 /**
+ * The column where a step's text (after the keyword) starts within `line`, or undefined.
+ * `keywordRe` exposes the text after the keyword as group 2, like `featureFileStepRe` (feature
+ * file lines) and `executeStepsKeywordRe` (execute_steps call sites).
+ */
+export function getStepTextColumn(line: string, textWithoutType: string, keywordRe: RegExp): number | undefined {
+    const match = keywordRe.exec(line);
+    if (!match)
+        return undefined;
+    const keywordEnd = match[0].length - match[2].length;
+    const column = line.indexOf(textWithoutType, keywordEnd);
+    return column === -1 ? undefined : column;
+}
+
+/**
  * Scans backwards from a line to find where a symbol's range should start,
  * including any preceding tags (@) or comments (#) that belong to it.
  * Stops at empty lines or other content.

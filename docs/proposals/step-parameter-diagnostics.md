@@ -182,6 +182,9 @@ to copy.
   matching for Scenario Outline steps and anything undetermined. Each behave definition is linked
   to its `StepFileStep` (`getStepFileStepForBehaveDefinition`). Duplicate detection needed no
   change: it already compares behave's exact decorator text, not wildcard keys.
+- Follow-ups: parameter highlighting (feature files and `execute_steps`) uses the argument
+  spans behave would pass (`getStepArgumentSpans` - parse parameters, regex capture groups), and
+  `execute_steps()` call sites get the same argument diagnostics via `diagnoseStepArguments`.
 - Deviation from the plan: definitions that share a wildcard pattern (e.g. `order {a:d} x` and
   `order {b} x`) collide in the step mapping's key, so the argument check keeps its own ordered
   list of every definition instead of reading the step mapping.

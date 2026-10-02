@@ -536,8 +536,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     onPythonStepChecks((featuresUri: vscode.Uri) => {
       for (const document of vscode.workspace.textDocuments) {
         const wkspSettings = getWorkspaceSettingsForFile(document.uri);
-        if (wkspSettings && isFeatureFile(document.uri) && urisMatch(wkspSettings.featuresUri, featuresUri))
+        if (!wkspSettings || !urisMatch(wkspSettings.featuresUri, featuresUri))
+          continue;
+        if (isFeatureFile(document.uri))
           validateStepDefinitions(document);
+        else if (couldBePythonStepsFile(document.uri))
+          validateExecuteSteps(document);
       }
     });
 
@@ -1124,12 +1128,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     // b. the semantic highlighting while typing requires the stepmappings to be up to date as the user types,
     // c. instant test tree updates is a nice bonus for user experience
     // d. to keep stepmappings in sync in case user clicks go to step def/ref before file save
-    // the Python step argument check only runs for saved feature files (it spawns a process),
-    // so a save is what releases a file's pending checks
+    // the Python step argument check only runs for saved files (it spawns a process), so a save
+    // is what releases a feature file's - or an execute_steps() caller's - pending checks
     context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
       try {
-        if (initialParsingComplete && isFeatureFile(document.uri))
+        if (!initialParsingComplete)
+          return;
+        if (isFeatureFile(document.uri))
           validateStepDefinitions(document);
+        else if (couldBePythonStepsFile(document.uri))
+          validateExecuteSteps(document);
       }
       catch (e: unknown) {
         // entry point function (handler) - show error
