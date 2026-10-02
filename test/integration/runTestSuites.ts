@@ -13,6 +13,62 @@ import { snapshotFixtures, restoreFixtures } from './fixtureSnapshot';
 // (to debug the tests themselves, just launch from the usual debug link in vscode and select the suite to run)
 
 
+// Suite folder (under test/integration) and the workspace it opens. A workspace path
+// containing spaces is pre-quoted, as the launcher passes it through a shell.
+// Order matters only in that the run stops at the first failing suite.
+const SUITES: { dir: string, workspace: string }[] = [
+  { dir: 'simple suite', workspace: 'example-projects/simple' },
+  { dir: 'nested project suite', workspace: '"example-projects/nested project"' },
+  { dir: 'sibling steps folder 1 suite', workspace: '"example-projects/sibling steps folder 1"' },
+  { dir: 'sibling steps folder 2 suite', workspace: '"example-projects/sibling steps folder 2"' },
+  { dir: 'sibling steps folder 3 suite', workspace: '"example-projects/sibling steps folder 3"' },
+  { dir: 'project A suite', workspace: '"example-projects/project A"' },
+  { dir: 'project B suite', workspace: '"example-projects/project B"' },
+  { dir: 'multiroot suite', workspace: 'example-projects/multiroot.code-workspace' },
+  { dir: 'debug suite', workspace: 'example-projects/simple' },
+  { dir: 'stepLibraryDiagnostics', workspace: '"example-projects/step library"' },
+  { dir: 'execute-steps suite', workspace: 'example-projects/execute-steps' },
+  { dir: 'config-only suite', workspace: 'example-projects/config-only' },
+  { dir: 'pyproject-config suite', workspace: 'example-projects/pyproject-config' },
+  { dir: 'malformed-config suite', workspace: 'example-projects/malformed-config' },
+  { dir: 'watcher-integration suite', workspace: 'example-projects/watcher-integration' },
+  { dir: 'multi-path suite', workspace: 'example-projects/multi-path' },
+  { dir: 'multi-path-settings suite', workspace: 'example-projects/multi-path-settings' },
+  { dir: 'monorepo-scan suite', workspace: 'example-projects/monorepo-scan' },
+  { dir: 'project-switch suite', workspace: 'example-projects/project-switch' },
+  { dir: 'migrations suite', workspace: 'example-projects/migration-stale' },
+  { dir: 'migration-consent suite', workspace: 'example-projects/migration-consent' },
+];
+
+
+// `--suite <text>` (repeatable) runs only the suites whose folder name contains <text>,
+// ignoring case, spaces and punctuation, e.g. `npm run test:integration -- --suite debug --suite "sibling steps folder 2"`.
+// No --suite runs them all. An unmatched --suite is an error rather than a silent empty run.
+function selectSuites(args: string[]) {
+  const filters: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--suite' && args[i + 1] !== undefined)
+      filters.push(args[++i]);
+    else if (arg.startsWith('--suite='))
+      filters.push(arg.slice('--suite='.length));
+    else
+      throw new Error(`unrecognised argument: ${arg}`);
+  }
+  if (filters.length === 0)
+    return SUITES;
+
+  // Compare letters and digits only: npm on Windows hands arguments through cmd, which turns
+  // the spaces in a quoted "sibling steps folder 2" into ^-escapes before they reach us.
+  const norm = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const matches = (dir: string, f: string) => norm(dir).includes(norm(f));
+  const unmatched = filters.filter(f => !SUITES.some(s => matches(s.dir, f)));
+  if (unmatched.length > 0)
+    throw new Error(`no suite matches: ${unmatched.join(', ')}\navailable: ${SUITES.map(s => s.dir).join(', ')}`);
+  return SUITES.filter(s => filters.some(f => matches(s.dir, f)));
+}
+
+
 async function runTestSuites() {
   const extensionDevelopmentPath = path.resolve(__dirname, '../../../..');
   const exampleProjectsDir = path.resolve(extensionDevelopmentPath, 'example-projects');
@@ -21,6 +77,8 @@ async function runTestSuites() {
   const snapshots = snapshotFixtures(exampleProjectsDir);
   try {
     const version = process.argv[2].slice(2);
+    // before the download, so a mistyped --suite fails straight away
+    const selected = selectSuites(process.argv.slice(3));
 
     // console.log("running pip...");
     // const result = cp.spawnSync("pip", ["install", "-r", path.resolve(extensionDevelopmentPath + "/requirements.txt")], {
@@ -42,220 +100,16 @@ async function runTestSuites() {
     // strip the host extension host's env vars so the spawned VSCode does not start as plain node
     const extensionTestsEnv = getCleanTestEnv();
 
-    let launchArgs = [""];
-    let extensionTestsPath = "";
-
-
-    launchArgs = ["example-projects/simple"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './simple suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = [`"example-projects/nested project"`];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './nested project suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = [`"example-projects/sibling steps folder 1"`];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './sibling steps folder 1 suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = [`"example-projects/sibling steps folder 2"`];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './sibling steps folder 2 suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = [`"example-projects/sibling steps folder 3"`];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './sibling steps folder 3 suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = [`"example-projects/project A"`];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './project A suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = [`"example-projects/project B"`];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './project B suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = ["example-projects/multiroot.code-workspace"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './multiroot suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = ["example-projects/simple"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './debug suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = [`"example-projects/step library"`];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './stepLibraryDiagnostics'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = ["example-projects/execute-steps"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './execute-steps suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = ["example-projects/config-only"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './config-only suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = ["example-projects/pyproject-config"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './pyproject-config suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = ["example-projects/malformed-config"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './malformed-config suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = ["example-projects/watcher-integration"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './watcher-integration suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = ["example-projects/multi-path"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './multi-path suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = ["example-projects/multi-path-settings"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './multi-path-settings suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = ["example-projects/monorepo-scan"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './monorepo-scan suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-
-    launchArgs = ["example-projects/project-switch"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './project-switch suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = ["example-projects/migration-stale"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './migrations suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
-
-    launchArgs = ["example-projects/migration-consent"];
-    extensionTestsPath = getShortPathOnWindows(path.resolve(__dirname, './migration-consent suite'));
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs,
-      extensionTestsEnv
-    });
+    for (const suite of selected) {
+      console.log(`running suite: ${suite.dir}`);
+      await runTests({
+        vscodeExecutablePath,
+        extensionDevelopmentPath,
+        extensionTestsPath: getShortPathOnWindows(path.resolve(__dirname, `./${suite.dir}`)),
+        launchArgs: [suite.workspace],
+        extensionTestsEnv
+      });
+    }
 
     console.log("test run complete");
 

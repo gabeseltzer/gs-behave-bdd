@@ -8,6 +8,7 @@ import { ExecuteStepsCallStep, ExecuteStepsInvalidLine, getExecuteStepsCallSteps
 import { refreshStepReferencesView } from '../handlers/findStepReferencesHandler';
 import { performance } from 'perf_hooks';
 import { retriggerSemanticHighlighting } from '../handlers/semHighlightProvider';
+import { checkStepArguments } from './stepArgumentStore';
 
 
 let stepMappings: StepMapping[] = [];
@@ -86,7 +87,7 @@ export function rebuildStepMappings(featuresUri: vscode.Uri, stepDefsUri?: vscod
   let paramsMatchCount = 0;
   const matchLoopStart = performance.now();
   for (const [, featureFileStep] of featureFileSteps) {
-    const stepFileStep = _getStepFileStepMatch(featureFileStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
+    const stepFileStep = _getStepFileStepMatch(featureFileStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes, stepDefsUri ?? featuresUri);
     if (stepFileStep) {
       stepMappings.push(new StepMapping(featuresUri, stepFileStep, featureFileStep));
       // Check if this was an exact vs params match by checking if the key contains parseRepWildcard
@@ -153,7 +154,7 @@ export function rebuildExecuteStepsMappings(featuresUri: vscode.Uri): number {
     // scanExecuteSteps resolves every call step to a concrete given/when/then type (matching
     // behave's own parse_steps() semantics), so the standard matcher applies directly - it
     // already falls back to the "step" bucket internally.
-    const stepFileStep = _getStepFileStepMatch(callStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes);
+    const stepFileStep = _getStepFileStepMatch(callStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes, featuresUri);
     if (stepFileStep)
       executeStepsMappings.push(new StepMapping(featuresUri, stepFileStep, callStep));
     processed++;
@@ -188,17 +189,25 @@ export function matchExecuteStepsContent(featuresUri: vscode.Uri, fileUri: vscod
 
   const matches = callSteps.map(callStep => ({
     callStep,
-    stepFileStep: _getStepFileStepMatch(callStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes),
+    stepFileStep: _getStepFileStepMatch(callStep, exactSteps, paramsSteps, compiledExactRegexes, compiledParamsRegexes, featuresUri),
   }));
   return { matches, invalidLines };
 }
 
 
 // any feature file step MUST map to a single python step function (or none)
-// so this function should return the SINGLE best match
+// so this function should return the SINGLE best match.
+// stepDefsUri: the workspace whose step definitions behave described - when given, the step is
+// matched the way behave matches it (real parameter types, registration order), falling back to
+// wildcard matching only where that can't decide.
 export function _getStepFileStepMatch(featureFileStep: FeatureFileStep,
   exactSteps: Map<string, StepFileStep>, paramsSteps: Map<string, StepFileStep>,
-  compiledExactRegexes: Map<string, RegExp>, compiledParamsRegexes: Map<string, RegExp>): StepFileStep | null {
+  compiledExactRegexes: Map<string, RegExp>, compiledParamsRegexes: Map<string, RegExp>,
+  stepDefsUri?: vscode.Uri): StepFileStep | null {
+
+  const behaveMatch = stepDefsUri && _getBehaveStepFileStepMatch(stepDefsUri, featureFileStep);
+  if (behaveMatch)
+    return behaveMatch;
 
   const findExactMatch = (textWithoutType: string, stepType: string) => {
     const matchText = stepType + sepr + textWithoutType;
@@ -267,4 +276,19 @@ export function _getStepFileStepMatch(featureFileStep: FeatureFileStep,
 
   // no matching step
   return null;
+}
+
+
+// The definition behave would run for this step - or, when an argument doesn't fit, the one it
+// was evidently written for, so go-to-definition still leads to the parameter it got wrong.
+// undefined = can't tell (or not described by behave): use wildcard matching.
+function _getBehaveStepFileStepMatch(stepDefsUri: vscode.Uri, featureFileStep: FeatureFileStep): StepFileStep | undefined {
+  // a Scenario Outline step's placeholders are filled per Examples row, and rows can match
+  // different definitions - the wildcard match is the honest answer for the step line itself
+  if (/<[^<>]+>/.test(featureFileStep.textWithoutType))
+    return undefined;
+  const check = checkStepArguments(stepDefsUri, featureFileStep.stepType, featureFileStep.textWithoutType);
+  if (check?.status === "matched" || check?.status === "mismatch")
+    return check.definition.stepFileStep;
+  return undefined;
 }

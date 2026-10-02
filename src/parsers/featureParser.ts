@@ -3,12 +3,14 @@ import { WorkspaceSettings } from "../settings";
 import { uriId, sepr, basename, getLines, getWorkspaceUriForFile } from '../common';
 import { diagLog } from '../logger';
 import { config } from '../configuration';
-import { featureRe, featureMultiLineRe, backgroundRe, scenarioRe, scenarioOutlineRe, examplesRe, featureFileStepRe, ruleRe, tagRe, textBlockDelimiterRe, tableRowRe } from './gherkinPatterns';
+import { featureRe, featureMultiLineRe, backgroundRe, scenarioRe, scenarioOutlineRe, examplesRe, featureFileStepRe, ruleRe, tagRe, getTagSpans, textBlockDelimiterRe, tableRowRe } from './gherkinPatterns';
 
 const commentedFeatureMultilineReStr = /^\s*#.*Feature:(.*)$/im;
 
 const featureFileSteps = new Map<string, FeatureFileStep>();
-const featureTags = new Map<string, FeatureTag>();
+// Keyed by "<uriId><sepr><line>", so the value is every tag ON that line: a line can
+// carry several ("@smoke @slow") and they cannot share one map slot.
+const featureTags = new Map<string, FeatureTag[]>();
 const featureParseErrors = new Map<string, FeatureParseError>();
 
 export class FeatureTag {
@@ -54,12 +56,27 @@ export const getFeatureFileSteps = (featuresUri: vscode.Uri) => {
 
 export const getFeatureTags = (featuresUri: vscode.Uri) => {
   const featuresUriMatchString = uriId(featuresUri);
-  return [...featureTags.values()].filter(t => t.key.startsWith(featuresUriMatchString));
+  // Flattened, so callers still see a flat list of tags regardless of how many share
+  // a line.
+  return [...featureTags.values()].flat().filter(t => t.key.startsWith(featuresUriMatchString));
 }
 
 export const getFeatureParseErrors = (featuresUri: vscode.Uri) => {
   const featuresUriMatchString = uriId(featuresUri);
   return [...featureParseErrors.values()].filter(e => e.key.startsWith(featuresUriMatchString));
+}
+
+/**
+ * Parse errors for ONE feature file.
+ *
+ * The separator is part of the prefix deliberately: keys are "<uriId><sepr><line>", so a
+ * bare startsWith on the file's uriId would also match a sibling whose name extends it
+ * ("test.feature" against "test.feature2"). The folder-level getter above cannot use the
+ * same guard - it matches a directory prefix on purpose.
+ */
+export const getFeatureParseErrorsForFile = (fileUri: vscode.Uri) => {
+  const prefix = `${uriId(fileUri)}${sepr}`;
+  return [...featureParseErrors.values()].filter(e => e.key.startsWith(prefix));
 }
 
 const recordParseError = (uri: vscode.Uri, fileName: string, range: vscode.Range, message: string) => {
@@ -69,14 +86,10 @@ const recordParseError = (uri: vscode.Uri, fileName: string, range: vscode.Range
 
 export const getFeatureTagByPosition = (uri: vscode.Uri, position: vscode.Position): FeatureTag | undefined => {
   const key = `${uriId(uri)}${sepr}${position.line}`;
-  const tag = featureTags.get(key);
-
-  // Check if the position is within the tag's range
-  if (tag && tag.range.contains(position)) {
-    return tag;
-  }
-
-  return undefined;
+  // The line may hold several tags, so the position is what picks one out. Previously
+  // only the first tag on a line was ever recorded, so there was nothing to choose
+  // between - and hovering "@slow" in "@smoke @slow" found nothing at all.
+  return featureTags.get(key)?.find(t => t.range.contains(position));
 }
 
 export const deleteFeatureFileSteps = (featuresUri: vscode.Uri) => {
@@ -126,10 +139,12 @@ export const getFeatureNameFromContent = async (content: string, uri: vscode.Uri
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode.Uri, content: string, caller: string,
-  onScenarioLine: (range: vscode.Range, scenarioName: string, isOutline: boolean) => void,
-  onFeatureLine: (range: vscode.Range) => void,
-  onExampleRow?: (range: vscode.Range, outlineName: string, tableIndex: number, rowIndex: number, examplesName: string, values: string[]) => void,
-  onExamplesGroup?: (range: vscode.Range, outlineName: string, tableIndex: number, examplesName: string) => void) => {
+  onScenarioLine: (range: vscode.Range, scenarioName: string, isOutline: boolean, tags: string[]) => void,
+  onFeatureLine: (range: vscode.Range, tags: string[]) => void,
+  onExampleRow?: (range: vscode.Range, outlineName: string, tableIndex: number, rowIndex: number, examplesName: string,
+    values: string[], tags: string[]) => void,
+  onExamplesGroup?: (range: vscode.Range, outlineName: string, tableIndex: number, examplesName: string,
+    tags: string[]) => void) => {
 
   const fileName = basename(uri);
   const lines = getLines(content);
@@ -150,6 +165,23 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
   let inBackground = false;
   let inRule = false;
   let insideStepTextBlock = false;
+
+  // Tag inheritance. In Gherkin a tag line applies to the NEXT block, and a block's tags
+  // are inherited by everything inside it: a Feature's tags belong to every scenario, a
+  // Rule's to every scenario in it, and a Scenario Outline's to every example row.
+  // pendingTags holds the tags read since the last block consumed them.
+  let pendingTags: string[] = [];
+  let featureOwnTags: string[] = [];
+  let ruleOwnTags: string[] = [];
+  let currentOutlineTags: string[] = [];
+  let currentExamplesTags: string[] = [];
+
+  /** Take the pending tags, clearing them - they belong to exactly one block. */
+  const takePendingTags = () => {
+    const taken = pendingTags;
+    pendingTags = [];
+    return taken;
+  };
 
   // Scenario Outline / Examples tracking
   let currentOutlineName: string | undefined;
@@ -174,8 +206,9 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
   }
 
   // clear all existing tags for this feature file
-  for (const [key, featureTag] of featureTags) {
-    if (uriId(featureTag.uri) === fileUriMatchString)
+  // (every tag on a line comes from the same file, so the first one speaks for them all)
+  for (const [key, tagsOnLine] of featureTags) {
+    if (tagsOnLine.length > 0 && uriId(tagsOnLine[0].uri) === fileUriMatchString)
       featureTags.delete(key);
   }
 
@@ -215,24 +248,34 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
           examplesRowIndex++;
           const values = line.split('|').slice(1, -1).map(v => v.trim());
           const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + line.length));
-          onExampleRow(range, currentOutlineName, examplesTableIndex, examplesRowIndex, examplesName, values);
+          onExampleRow(range, currentOutlineName, examplesTableIndex, examplesRowIndex, examplesName, values,
+            currentExamplesTags);
         }
       }
       continue;
     }
 
     // Check for tags (e.g., @fixture.disable_sensors)
+    // tagRe identifies the LINE (anchored, so a step mentioning "@bob" is not a tag),
+    // and getTagSpans then reads every tag on it. "@smoke @slow" is ordinary Gherkin
+    // and only the first used to be recorded.
     const tagMatch = tagRe.exec(line);
     if (tagMatch) {
-      const tag = tagMatch[1];
-      const tagStartCol = indentSize + line.indexOf('@');
-      const tagEndCol = tagStartCol + 1 + tag.length; // +1 for the @ symbol
-      const range = new vscode.Range(
-        new vscode.Position(lineNo, tagStartCol),
-        new vscode.Position(lineNo, tagEndCol)
-      );
       const key = `${uriId(uri)}${sepr}${lineNo}`;
-      featureTags.set(key, new FeatureTag(key, uri, fileName, range, tag));
+      const tagsOnLine = getTagSpans(line).map(span => {
+        const startCol = indentSize + span.start;
+        const range = new vscode.Range(
+          new vscode.Position(lineNo, startCol),
+          new vscode.Position(lineNo, startCol + span.length)
+        );
+        return new FeatureTag(key, uri, fileName, range, span.tag);
+      });
+      if (tagsOnLine.length > 0) {
+        featureTags.set(key, tagsOnLine);
+        // Held until the next block claims them. Several tag LINES can stack up before
+        // one scenario, so this accumulates rather than replaces.
+        pendingTags.push(...tagsOnLine.map(t => t.tag));
+      }
       continue;
     }
 
@@ -244,9 +287,12 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
       examplesRowIndex = 0;
       examplesIsHeaderRow = true;
       examplesName = examplesMatch[2].trim();
+      // An Examples block can carry its own tags, on top of the outline's. Its rows
+      // inherit the result - a row cannot be tagged individually in Gherkin.
+      currentExamplesTags = [...currentOutlineTags, ...takePendingTags()];
       if (onExamplesGroup && currentOutlineName !== undefined) {
         const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + line.length));
-        onExamplesGroup(range, currentOutlineName, examplesTableIndex, examplesName);
+        onExamplesGroup(range, currentOutlineName, examplesTableIndex, examplesName, currentExamplesTags);
       }
       continue;
     }
@@ -336,6 +382,9 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
       inBackground = false;
       ruleBackgroundLastStepType = undefined;
       lastStepType = undefined;
+      // A Rule's tags belong to the scenarios inside it, and do NOT carry to a later
+      // Rule - so this replaces rather than accumulates.
+      ruleOwnTags = takePendingTags();
       continue;
     }
 
@@ -350,15 +399,22 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
       const scenarioName = scenario[2].trim();
       const isOutline = scenarioOutlineRe.exec(line) !== null;
       const range = new vscode.Range(new vscode.Position(lineNo, indentSize), new vscode.Position(lineNo, indentSize + scenario[0].length));
-      onScenarioLine(range, scenarioName, isOutline);
+      // Feature and Rule tags are inherited; the scenario's own come last so the order
+      // reads outermost-first.
+      const scenarioTags = [...featureOwnTags, ...ruleOwnTags, ...takePendingTags()];
+      onScenarioLine(range, scenarioName, isOutline, scenarioTags);
       fileScenarios++;
       // Reset outline tracking
       if (isOutline) {
         currentOutlineName = scenarioName;
+        currentOutlineTags = scenarioTags;
+        currentExamplesTags = scenarioTags;
         examplesTableIndex = 0;
         inExamplesSection = false;
       } else {
         currentOutlineName = undefined;
+        currentOutlineTags = [];
+        currentExamplesTags = [];
         inExamplesSection = false;
       }
       continue;
@@ -367,8 +423,14 @@ export const parseFeatureContent = (wkspSettings: WorkspaceSettings, uri: vscode
     const feature = featureRe.exec(line);
     if (feature) {
       const range = new vscode.Range(new vscode.Position(lineNo, 0), new vscode.Position(lineNo, line.length));
-      onFeatureLine(range);
+      // Tags above "Feature:" belong to the feature, and every scenario in it inherits
+      // them. Claimed here so they are not also handed to the first scenario twice.
+      featureOwnTags = takePendingTags();
+      ruleOwnTags = [];
+      onFeatureLine(range, featureOwnTags);
       currentOutlineName = undefined;
+      currentOutlineTags = [];
+      currentExamplesTags = [];
       inExamplesSection = false;
     }
 

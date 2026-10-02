@@ -13,6 +13,7 @@ import {
   featureFileStepRe,
   executeStepsKeywordRe,
   tagRe,
+  getTagSpans,
   getSymbolStartLine,
   getStepParamSpans
 } from '../../../src/parsers/gherkinPatterns';
@@ -226,6 +227,8 @@ suite('gherkinPatterns', () => {
     });
   });
 
+  // tagRe identifies a tag LINE and captures only its first tag - "\S+" stops at the
+  // first whitespace. getTagSpans is what reads them all; see that suite below.
   suite('tagRe', () => {
     test('should match tag with @', () => {
       const match = tagRe.exec('@smoke');
@@ -421,6 +424,53 @@ suite('gherkinPatterns', () => {
         highlighted("Then the language setting is 'en'", "the language setting is '.*'",
           executeStepsKeywordRe),
         ["en"]);
+    });
+  });
+
+  // A Gherkin line may carry several tags. tagRe only ever saw the first, so "@slow"
+  // in "@smoke @slow" was silently dropped - it was never recorded, never offered to
+  // fixture diagnostics, and could not be hovered.
+  suite('getTagSpans', () => {
+
+    test('reads every tag on a line, not just the first', () => {
+      const spans = getTagSpans('@smoke @slow @wip');
+      assert.deepStrictEqual(spans.map(s => s.tag), ['smoke', 'slow', 'wip']);
+    });
+
+    test('reports the offset of each tag, so each gets its own range', () => {
+      const spans = getTagSpans('@smoke @slow');
+
+      assert.strictEqual(spans[0].start, 0);
+      assert.strictEqual(spans[0].length, 6, '"@smoke" including the @');
+      assert.strictEqual(spans[1].start, 7);
+      assert.strictEqual(spans[1].length, 5, '"@slow" including the @');
+    });
+
+    test('handles a single tag, the common case', () => {
+      assert.deepStrictEqual(getTagSpans('@fixture.disable_sensors'),
+        [{ tag: 'fixture.disable_sensors', start: 0, length: 24 }]);
+    });
+
+    test('tolerates irregular spacing', () => {
+      const spans = getTagSpans('   @a    @b	@c');
+      assert.deepStrictEqual(spans.map(s => s.tag), ['a', 'b', 'c']);
+    });
+
+    test('keeps a parameterised fixture tag intact', () => {
+      // The parens and quotes contain no whitespace, so \S+ takes the lot.
+      const spans = getTagSpans("@fixture.use('browser') @smoke");
+      assert.deepStrictEqual(spans.map(s => s.tag), ["fixture.use('browser')", 'smoke']);
+    });
+
+    test('returns nothing for a line with no tags', () => {
+      assert.deepStrictEqual(getTagSpans('Scenario: does a thing'), []);
+    });
+
+    // The regex is built per call for this reason: a shared /g regex keeps lastIndex
+    // between calls and would start the next line mid-way through.
+    test('is not affected by the previous call', () => {
+      getTagSpans('@one @two @three');
+      assert.deepStrictEqual(getTagSpans('@four').map(s => s.tag), ['four']);
     });
   });
 });

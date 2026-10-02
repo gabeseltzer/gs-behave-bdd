@@ -42,6 +42,7 @@ npm run package   # Production build (minified)
 ```bash
 npm run test:unit         # Unit tests only (fast, no VSCode needed)
 npm run test:integration  # Integration tests (downloads VSCode Stable)
+npm run test:integration -- --suite debug  # Only suites whose folder name contains "debug" (repeatable)
 npm run test:debug-suite  # Debug tests (requires VSCode Insiders)
 npm test                  # Lint + compile + all tests
 ```

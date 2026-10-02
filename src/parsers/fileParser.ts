@@ -12,6 +12,7 @@ import { getStepFileSteps, deleteStepFileSteps, storeStepFileStep } from './step
 import { deleteFixtures, storePythonFixtureDefinitions, getFixtures, restoreFixtures } from './fixtureParser';
 import { loadFromBehave, BehaveDiscoveryResult, FailedFileInfo } from './behaveLoader';
 import { storeBehaveStepDefinitions } from './stepsParserBehaveAdapter';
+import { rememberStepsPaths, setArgumentCheckDefinitions } from './stepArgumentStore';
 import { TestData, TestFile } from './testFile';
 import { diagLog } from '../logger';
 import * as path from 'path';
@@ -41,6 +42,7 @@ export class FileParser {
   private _finishedFeaturesParseForWorkspace: { [key: string]: boolean } = {};
   private _finishedStepsParseForWorkspace: { [key: string]: boolean } = {};
   private _cancelTokenSources: { [wkspUriPath: string]: vscode.CancellationTokenSource } = {};
+  private _latestParseFilesCall: { [wkspUriPath: string]: number } = {};
   private _errored = false;
   private _reparsingFile = false;
   private _pythonReparseTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -291,6 +293,7 @@ export class FileParser {
         `  step dirs passed to behave: ${stepsPaths.join(", ")}`,
         wkspSettings.uri);
       config.logger.logInfo(`Searching for step definitions...`, wkspSettings.uri);
+      rememberStepsPaths(wkspSettings.featuresUri, stepsPaths);
       const result = await loadFromBehave(
         pythonExec,
         wkspSettings.projectUri.fsPath,
@@ -507,6 +510,7 @@ export class FileParser {
 
     const storeBehaveStart = performance.now();
     const storedCount = await storeBehaveStepDefinitions(wkspSettings.featuresUri, result.steps);
+    setArgumentCheckDefinitions(wkspSettings.featuresUri, result.steps);
     storePythonFixtureDefinitions(wkspSettings.featuresUri, result.fixtures);
     diagLog(`${caller}: _applyBehaveResult storeBehaveStepDefinitions took ${Math.round(performance.now() - storeBehaveStart)}ms`);
 
@@ -526,24 +530,26 @@ export class FileParser {
 
 
 
+  /** @returns the feature's test item, so a caller can act on the items it rebuilt. */
   private async _updateTestItemFromFeatureFileContent(wkspSettings: WorkspaceSettings, content: string, testData: TestData,
-    controller: vscode.TestController, uri: vscode.Uri, caller: string, firstRun: boolean) {
+    controller: vscode.TestController, uri: vscode.Uri, caller: string, firstRun: boolean): Promise<vscode.TestItem | undefined> {
 
     if (!isFeatureFile(uri))
       throw new Error(`${caller}: ${uri.path} is not a feature file`);
 
     if (!content)
-      return;
+      return undefined;
 
     const item = await this._getOrCreateFeatureTestItemAndParentFolderTestItemsForFeature(wkspSettings, content, testData,
       controller, uri, caller, firstRun);
     if (item) {
       diagLog(`${caller}: parsing ${uri.path}`);
       await item.testFile.createScenarioTestItemsFromFeatureFileContent(wkspSettings, content, testData, controller, item.testItem, caller);
+      return item.testItem;
     }
-    else {
-      diagLog(`${caller}: no scenarios found in ${uri.path}`);
-    }
+
+    diagLog(`${caller}: no scenarios found in ${uri.path}`);
+    return undefined;
   }
 
 
@@ -737,9 +743,14 @@ export class FileParser {
     });
 
 
+    // set once this call claims the workspace's slot, so finally releases only its own token
+    let ownTokenSource: vscode.CancellationTokenSource | undefined;
+
     try {
 
       this._parseFilesCallCounts++;
+      const callNo = this._parseFilesCallCounts;
+      this._latestParseFilesCall[wkspPath] = callNo;
       const wkspName = getWorkspaceFolder(wkspUri).name;
       const wkspId = uriId(wkspUri);
       const callName = `parseFiles #${this._parseFilesCallCounts} ${wkspName} (${intiator})`;
@@ -754,9 +765,17 @@ export class FileParser {
         this._cancelTokenSources[wkspPath].cancel();
         while (this._cancelTokenSources[wkspPath]) {
           await new Promise(t => setTimeout(t, 20));
+          // Only the call HOLDING the slot gets cancelled above, not one still waiting for it.
+          // So if a newer call arrived while we waited, it may claim the slot first and finish -
+          // and running after it would clear the items it just built. Step aside instead.
+          if (this._latestParseFilesCall[wkspPath] !== callNo) {
+            diagLog(`${callName}: superseded by a newer parseFiles call, skipping`);
+            return undefined;
+          }
         }
       }
-      this._cancelTokenSources[wkspPath] = new vscode.CancellationTokenSource();
+      ownTokenSource = new vscode.CancellationTokenSource();
+      this._cancelTokenSources[wkspPath] = ownTokenSource;
       const wkspSettings: WorkspaceSettings = config.workspaceSettings[wkspUri.path];
 
       // Guard: if WorkspaceSettings construction threw a FATAL error, the configuration getter has already
@@ -906,8 +925,10 @@ export class FileParser {
     }
     finally {
 
-      this._cancelTokenSources[wkspPath]?.dispose();
-      delete this._cancelTokenSources[wkspPath];
+      if (ownTokenSource && this._cancelTokenSources[wkspPath] === ownTokenSource) {
+        ownTokenSource.dispose();
+        delete this._cancelTokenSources[wkspPath];
+      }
       cancellationHandler?.dispose();
     }
   }
@@ -928,7 +949,18 @@ export class FileParser {
     if (isFeature) {
       try {
         this._reparsingFile = true;
-        await this._updateTestItemFromFeatureFileContent(wkspSettings, content, testData, ctrl, fileUri, "reparseFile", false);
+        const testItem = await this._updateTestItemFromFeatureFileContent(wkspSettings, content, testData, ctrl, fileUri,
+          "reparseFile", false);
+        // The file's text changed, so the last run's results describe scenarios that may
+        // no longer say what they said - or no longer exist. Left alone, those ticks and
+        // crosses sit there asserting something we no longer know. Marking them outdated
+        // greys them out instead, which is the honest state.
+        //
+        // Only on reparse, never on first parse: there is nothing to invalidate then, and
+        // the run-time resolve path (queueSelectedTestItems) must not wipe results for
+        // scenarios the user did not re-run.
+        if (testItem)
+          ctrl.invalidateTestResults(testItem);
         const root = getFeaturesRootForFile(wkspSettings, fileUri) ?? wkspSettings.featuresUri;
         rebuildStepMappings(root, wkspSettings.featuresUri);
         // Notify subscribers (e.g. CodeLens, diagnostics) that mappings changed.
@@ -997,6 +1029,7 @@ export class FileParser {
           }
 
           config.logger.logInfo(`Searching for step definitions...`, wkspSettings.uri);
+          rememberStepsPaths(wkspSettings.featuresUri, [stepsPath]);
           const result = await loadFromBehave(
             pythonExec,
             wkspSettings.projectUri.fsPath,

@@ -104,6 +104,12 @@
 					"markdownDescription": "Controls how behave is resolved. `useBundled` (default) uses the version of behave bundled with the extension. `fromEnvironment` uses behave from your Python environment.",
 					"default": "useBundled"
 				},
+				"gs-behave-bdd.checkStepArgumentsWithPython": {
+					"scope": "resource",
+					"type": "boolean",
+					"markdownDescription": "Check step arguments with behave itself, so a type converter that rejects an argument (e.g. a custom type registered with `register_type`) is flagged in the feature file. Runs your step modules' type converters in a Python process when a feature file is saved; only steps whose parameter types need it are checked. Built-in types like `{n:d}` are always checked without Python.",
+					"default": true
+				},
 				"gs-behave-bdd.showStepReferenceCodeLens": {
 					"scope": "window",
 					"type": "boolean",

@@ -43,6 +43,7 @@ import { StepReferenceProvider } from './handlers/stepReferenceProvider';
 import { StepCodeLensProvider } from './handlers/codeLensProvider';
 import { validateFixtureTags } from './handlers/fixtureDiagnostics';
 import { validateStepDefinitions } from './handlers/stepDiagnostics';
+import { onPythonStepChecks } from './parsers/stepArgumentPythonCheck';
 import { validateExecuteSteps } from './handlers/executeStepsDiagnostics';
 import { validateGherkinStructure } from './handlers/gherkinStructureDiagnostics';
 import { startWatchingWorkspace } from './watchers/workspaceWatcher';
@@ -530,6 +531,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       codeLensProvider.refresh();
     };
 
+    // behave's verdicts on step arguments arrive asynchronously (a Python process per batch) -
+    // re-validate the open feature files they belong to
+    onPythonStepChecks((featuresUri: vscode.Uri) => {
+      for (const document of vscode.workspace.textDocuments) {
+        const wkspSettings = getWorkspaceSettingsForFile(document.uri);
+        if (!wkspSettings || !urisMatch(wkspSettings.featuresUri, featuresUri))
+          continue;
+        if (isFeatureFile(document.uri))
+          validateStepDefinitions(document);
+        else if (couldBePythonStepsFile(document.uri))
+          validateExecuteSteps(document);
+      }
+    });
+
     // any function contained in a context.subscriptions.push() will execute immediately, 
     // as well as registering the returned disposable object for a dispose() call on extension deactivation
     // i.e. startWatchingWorkspace will execute immediately, as will registerCommand, but gotoStepHandler will not (as it is a parameter 
@@ -906,8 +921,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         wkspSettings = getWorkspaceSettingsForFile(item.uri);
         if (!wkspSettings)
           return;
-        const content = await getContentFromFilesystem(item.uri);
-        await data.createScenarioTestItemsFromFeatureFileContent(wkspSettings, content, testData, ctrl, item, "resolveHandler");
+
+        // Reading the file and parsing it is usually quick, so this rarely renders - but
+        // "usually" is doing work there: a large feature, or one on a network or remote
+        // filesystem, is not. Leaving it unset means the node sits silently as though
+        // nothing is happening.
+        item.busy = true;
+        try {
+          const content = await getContentFromFilesystem(item.uri);
+          await data.createScenarioTestItemsFromFeatureFileContent(wkspSettings, content, testData, ctrl, item, "resolveHandler");
+        }
+        finally {
+          item.busy = false;
+        }
       }
       catch (e: unknown) {
         // entry point function (handler) - show error
@@ -1102,6 +1128,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     // b. the semantic highlighting while typing requires the stepmappings to be up to date as the user types,
     // c. instant test tree updates is a nice bonus for user experience
     // d. to keep stepmappings in sync in case user clicks go to step def/ref before file save
+    // the Python step argument check only runs for saved files (it spawns a process), so a save
+    // is what releases a feature file's - or an execute_steps() caller's - pending checks
+    context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
+      try {
+        if (!initialParsingComplete)
+          return;
+        if (isFeatureFile(document.uri))
+          validateStepDefinitions(document);
+        else if (couldBePythonStepsFile(document.uri))
+          validateExecuteSteps(document);
+      }
+      catch (e: unknown) {
+        // entry point function (handler) - show error
+        config.logger.showError(e, getWorkspaceSettingsForFile(document.uri)?.uri);
+      }
+    }));
+
     context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(async (event) => {
       try {
         const uri = event.document.uri;

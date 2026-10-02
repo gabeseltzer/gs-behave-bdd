@@ -4,6 +4,9 @@ import { matchExecuteStepsContent } from "../parsers/stepMappings";
 import { getStepFileSteps } from "../parsers/stepsParser";
 import { config } from "../configuration";
 import { parser } from "../extension";
+import { executeStepsKeywordRe, getStepTextColumn } from "../parsers/gherkinPatterns";
+import { hasArgumentCheckDefinitions } from "../parsers/stepArgumentStore";
+import { diagnoseStepArguments, isStepArgumentDiagnostic, StepInstance } from "./stepArgumentDiagnostics";
 
 export const EXECUTE_STEPS_STEP_NOT_FOUND = 'execute-steps-step-not-found';
 export const EXECUTE_STEPS_INVALID_CONTENT = 'execute-steps-invalid-content';
@@ -19,6 +22,8 @@ const formatPlaceholderRe = /\{[^{}]*\}|%[sdifr%]/;
 //   step definition (Warning not Error because re/cfparse-matcher step defs are not modeled).
 // - Error (EXECUTE_STEPS_INVALID_CONTENT) for lines behave's parser would reject at runtime
 //   with a ParserError (junk lines, @tags, Scenario:, leading And/But).
+// - the same step argument diagnostics as feature files (STEP_ARGUMENT_*) for embedded steps
+//   whose arguments don't fit their step definition's parameter types.
 // Scans the LIVE document text (not the 500ms-debounced cache) so squiggles track typing.
 export function validateExecuteSteps(document: vscode.TextDocument): void {
   try {
@@ -61,6 +66,19 @@ export function validateExecuteSteps(document: vscode.TextDocument): void {
       execDiagnostics.push(diagnostic);
     }
 
+    // argument checks only for steps that matched something, and never on dynamic lines
+    if (hasArgumentCheckDefinitions(wkspSettings.featuresUri)) {
+      const instances: StepInstance[] = [];
+      for (const { callStep, stepFileStep } of matches) {
+        if (!stepFileStep || (callStep.hasFormatPlaceholders && formatPlaceholderRe.test(callStep.text)))
+          continue;
+        const textColumn = getStepTextColumn(callStep.text, callStep.textWithoutType, executeStepsKeywordRe);
+        if (textColumn !== undefined)
+          instances.push({ step: callStep, text: callStep.textWithoutType, textColumn: callStep.range.start.character + textColumn });
+      }
+      execDiagnostics.push(...diagnoseStepArguments(document, wkspSettings, instances));
+    }
+
     for (const invalidLine of invalidLines) {
       if (formatPlaceholderRe.test(invalidLine.text))
         continue;
@@ -74,8 +92,7 @@ export function validateExecuteSteps(document: vscode.TextDocument): void {
 
     // Preserve existing diagnostics owned by other validators (step-not-found, fixtures, etc.)
     const existingDiagnostics = config.diagnostics.get(document.uri) || [];
-    const otherDiagnostics = [...existingDiagnostics].filter(d =>
-      d.code !== EXECUTE_STEPS_STEP_NOT_FOUND && d.code !== EXECUTE_STEPS_INVALID_CONTENT);
+    const otherDiagnostics = [...existingDiagnostics].filter(d => !isExecuteStepsDiagnostic(d));
     config.diagnostics.set(document.uri, [...otherDiagnostics, ...execDiagnostics]);
   }
   catch (e: unknown) {
@@ -91,7 +108,11 @@ export function validateExecuteSteps(document: vscode.TextDocument): void {
 
 export function clearExecuteStepsDiagnostics(uri: vscode.Uri): void {
   const existingDiagnostics = config.diagnostics.get(uri) || [];
-  const otherDiagnostics = [...existingDiagnostics].filter(d =>
-    d.code !== EXECUTE_STEPS_STEP_NOT_FOUND && d.code !== EXECUTE_STEPS_INVALID_CONTENT);
+  const otherDiagnostics = [...existingDiagnostics].filter(d => !isExecuteStepsDiagnostic(d));
   config.diagnostics.set(uri, otherDiagnostics);
+}
+
+// everything validateExecuteSteps owns in a python document - argument diagnostics included
+function isExecuteStepsDiagnostic(d: vscode.Diagnostic) {
+  return d.code === EXECUTE_STEPS_STEP_NOT_FOUND || d.code === EXECUTE_STEPS_INVALID_CONTENT || isStepArgumentDiagnostic(d);
 }

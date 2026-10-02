@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
-import { getContentFromFilesystem, isStepsFile, getWorkspaceUriForFile } from "../common";
+import { getContentFromFilesystem, isStepsFile, getWorkspaceUriForFile, getWorkspaceSettingsForFile } from "../common";
 import { validateAndGetStepInfo, handleProviderError } from "./providerHelpers";
 import { StepFileStep, stepFileDecoratorPattern } from "../parsers/stepsParser";
+import { getExamplesCellHover, getStepArgumentHover } from "./stepArgumentHover";
 
 
 // Builds the markdown hover content for a step definition: the decorator pattern as a
@@ -50,6 +51,12 @@ export class HoverProvider implements vscode.HoverProvider {
     position: vscode.Position
   ): Promise<vscode.Hover | undefined> {
     try {
+      // an Examples cell isn't a step - say which parameters its value fills instead
+      const cellWkspSettings = getWorkspaceSettingsForFile(document.uri);
+      const cellHover = cellWkspSettings && getExamplesCellHover(document, position, cellWkspSettings);
+      if (cellHover)
+        return new vscode.Hover(cellHover.content, cellHover.range);
+
       const stepInfo = await validateAndGetStepInfo(document, position);
       if (!stepInfo) {
         return undefined;
@@ -60,6 +67,16 @@ export class HoverProvider implements vscode.HoverProvider {
       const hoverContent = await buildStepHoverContent(stepFileStep, document.uri);
       if (!hoverContent) {
         return undefined;
+      }
+
+      // over an argument: lead with what its parameter accepts (and its converted value)
+      const wkspSettings = getWorkspaceSettingsForFile(document.uri);
+      const argumentHover = wkspSettings && getStepArgumentHover(document, position, wkspSettings);
+      if (argumentHover) {
+        const combined = new vscode.MarkdownString(argumentHover.content.value);
+        combined.appendMarkdown('\n\n---\n\n');
+        combined.appendMarkdown(hoverContent.value);
+        return new vscode.Hover(combined, argumentHover.range);
       }
 
       return new vscode.Hover(hoverContent, stepRange);

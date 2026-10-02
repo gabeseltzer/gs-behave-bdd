@@ -44,6 +44,10 @@ _Avoid_: variable, outline param, substitution
 A `{name}` token in a step definition's text, which captures a value from the step being matched and passes it to the function.
 _Avoid_: placeholder, capture group, argument
 
+**Argument**:
+The text in a feature file step that fills a parameter — `5` in `Given I have 5 cukes` for `{count:d}`. behave's own term (`behave.model_type.Argument`): its `original` is the matched text, its `value` the type-converted result.
+_Avoid_: parameter value, step value, param
+
 **Step matcher**:
 The syntax a step definition's text is interpreted in — behave's default `parse`, or `cfparse`, or `re`. Selected per file with `use_step_matcher`.
 _Avoid_: parser, matching mode
