@@ -57,8 +57,33 @@
             }
         },
         {
-            "match": "\\|",
-            "name": "support.type"
+            "comment": "a table: the first row is its headings (behave's table.headings), the rest are data rows",
+            "begin": "^\\s*(\\|.*)$",
+            "beginCaptures": {
+                "1": {
+                    "patterns": [
+                        {
+                            "match": "\\|",
+                            "name": "support.type"
+                        },
+                        {
+                            "match": "[^|\\s](?:[^|]*[^|\\s])?",
+                            "name": "markup.heading"
+                        }
+                    ]
+                }
+            },
+            "while": "^(?=\\s*[|#])",
+            "patterns": [
+                {
+                    "match": "^\\s*#.*",
+                    "name": "comment.line"
+                },
+                {
+                    "match": "\\|",
+                    "name": "support.type"
+                }
+            ]
         }
     ]
 }
