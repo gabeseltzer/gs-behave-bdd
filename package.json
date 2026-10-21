@@ -322,7 +322,7 @@
 				{
 					"id": "StepReferences",
 					"title": "Step References",
-					"icon": "images/behave-vsc.png"
+					"icon": "$(references)"
 				}
 			]
 		},
@@ -331,7 +331,7 @@
 				{
 					"id": "StepReferences",
 					"name": "Step References",
-					"icon": "images/behave-vsc.png",
+					"icon": "$(references)",
 					"contextualTitle": "Step References",
 					"when": "gs-behave-bdd.stepReferences.visible"
 				}
