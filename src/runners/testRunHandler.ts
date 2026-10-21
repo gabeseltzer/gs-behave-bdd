@@ -241,8 +241,10 @@ async function runTestQueue(ctrl: vscode.TestController, run: vscode.TestRun, re
     if (wkspQueue.length === 0)
       continue;
 
-    if (!debug)
+    // by default keep the existing output (e.g. the previous run, for comparison), and mark where this run starts
+    if (winSettings.clearOutputOnRun)
       config.logger.clear(wkspSettings.uri);
+    config.logger.logInfo(`\n--- ${debug ? "debug" : "test"} run started ${new Date().toLocaleTimeString()} ---`, wkspSettings.uri);
 
     // run workspaces sequentially
     if (!winSettings.multiRootRunWorkspacesInParallel || debug) {

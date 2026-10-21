@@ -129,6 +129,8 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         return <T><unknown>(this.verboseLogging === undefined ? false : this.verboseLogging);
       case "logEnvVarPresetContents":
         return <T><unknown>(this.logEnvVarPresetContents === undefined ? false : this.logEnvVarPresetContents);
+      case "clearOutputOnRun":
+        return <T><unknown>false;
       case "importStrategy":
         return <T><unknown>(this.importStrategy === undefined ? "useBundled" : this.importStrategy);
       case "stepDefinitionSearchTimeout":
@@ -195,6 +197,9 @@ export class TestWorkspaceConfig implements vscode.WorkspaceConfiguration {
         break;
       case "logEnvVarPresetContents":
         response = <T><unknown>this.logEnvVarPresetContents;
+        break;
+      case "clearOutputOnRun":
+        response = undefined;
         break;
       case "importStrategy":
         response = <T><unknown>this.importStrategy;

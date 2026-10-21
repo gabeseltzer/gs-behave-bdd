@@ -2,11 +2,11 @@ import * as vscode from 'vscode';
 import { config, Configuration } from "./configuration";
 import { BehaveTestData, Scenario, TestData, TestFile } from './parsers/testFile';
 import {
-  getContentFromFilesystem,
+  getContentFromOpenDocumentOrFilesystem,
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, isFeatureFile,
   logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile,
   getDiscoveryEntry, basename, setProjectSwitchInProgress, WkspError,
-  reloadSettingsAndSurfaceError, getConfiguredButExcludedWorkspaceFolders
+  reloadSettingsAndSurfaceError, getConfiguredButExcludedWorkspaceFolders, getSettingsChangeImpact, SettingsChangeImpact
 } from './common';
 import { setConfigParseErrorDiagnostic, clearConfigParseErrorDiagnostic } from './handlers/configDiagnostics';
 import { StepFileStep, getStepFileSteps } from './parsers/stepsParser';
@@ -27,6 +27,9 @@ import { diagnoseStepState } from './handlers/stepStateDiagnosis';
 import { autoCompleteProvider } from './handlers/autoCompleteProvider';
 import { executeStepsAutoCompleteProvider } from './handlers/executeStepsAutoCompleteProvider';
 import { ExecuteStepsCodeActionProvider } from './handlers/executeStepsCodeActionProvider';
+import {
+  CREATE_STEP_DEFINITION_COMMAND, createStepDefinitionHandler, initStepDefinitionTargetMemory, StepDefinitionCodeActionProvider
+} from './handlers/stepDefinitionCodeActionProvider';
 import { formatFeatureProvider, formatFeatureRangeProvider } from './handlers/formatFeatureProvider';
 import { SemHighlightProvider, semLegend } from './handlers/semHighlightProvider';
 import { DocumentSymbolProvider } from './handlers/documentSymbolProvider';
@@ -254,6 +257,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     logExtensionVersion(context);
     const ctrl = vscode.tests.createTestController(`gs-behave-bdd.TestController`, 'Feature Tests');
     initProjectListPersistence(context.workspaceState);
+    initStepDefinitionTargetMemory(context.workspaceState);
 
     // Phase 13: Project status bar item
     const projectStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
@@ -510,7 +514,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     // onDidChangeTextDocument, as well as the case where validateStepDefinitions was called
     // eagerly (before the debounce fired) and produced stale results.
     const codeLensProvider = new StepCodeLensProvider();
-    parser.onStepMappingsRebuilt = (featuresUri: vscode.Uri) => {
+    const revalidateOpenDocuments = (featuresUri: vscode.Uri) => {
       for (const document of vscode.workspace.textDocuments) {
         const wkspSettings = getWorkspaceSettingsForFile(document.uri);
         if (!wkspSettings || !wkspSettings.featuresUris.some(u => urisMatch(u, featuresUri))) continue;
@@ -530,6 +534,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       // reference count even though the .py document itself didn't change.
       codeLensProvider.refresh();
     };
+    parser.onStepMappingsRebuilt = revalidateOpenDocuments;
 
     // behave's verdicts on step arguments arrive asynchronously (a Python process per batch) -
     // re-validate the open feature files they belong to
@@ -618,6 +623,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.languages.registerCodeLensProvider("python", codeLensProvider),
       vscode.languages.registerCodeActionsProvider({ language: "python" }, new ExecuteStepsCodeActionProvider(),
         { providedCodeActionKinds: ExecuteStepsCodeActionProvider.providedCodeActionKinds }),
+      vscode.languages.registerCodeActionsProvider({ language: "gherkin" }, new StepDefinitionCodeActionProvider(),
+        { providedCodeActionKinds: StepDefinitionCodeActionProvider.providedCodeActionKinds }),
+      vscode.commands.registerCommand(CREATE_STEP_DEFINITION_COMMAND, createStepDefinitionHandler),
       // execute_steps {parameter} highlights use decorations (a python semantic tokens
       // provider would displace Pylance's) - refresh when editors become visible
       vscode.window.onDidChangeVisibleTextEditors(editors => {
@@ -928,7 +936,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         // nothing is happening.
         item.busy = true;
         try {
-          const content = await getContentFromFilesystem(item.uri);
+          const content = await getContentFromOpenDocumentOrFilesystem(item.uri);
           await data.createScenarioTestItemsFromFeatureFileContent(wkspSettings, content, testData, ctrl, item, "resolveHandler");
         }
         finally {
@@ -1225,8 +1233,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         if (!affected && !forceFullRefresh && !testCfg)
           return;
 
+        // Most settings (e.g. selecting a different env var preset) can't change which tests exist, so keep the
+        // test tree, watchers and output channels as they are, and do only what the changed settings need
+        // in the workspaces they apply to (see SETTING_CHANGE_IMPACTS).
+        const allSettingKeys = Object.keys(context.extension.packageJSON.contributes.configuration.properties)
+          .map(key => key.replace(/^gs-behave-bdd\./, ""));
+        if (event && !forceFullRefresh && !testCfg &&
+          getSettingsChangeImpact(event, allSettingKeys) < SettingsChangeImpact.fullRefresh) {
+          for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
+            const impact = getSettingsChangeImpact(event, allSettingKeys, wkspUri);
+            if (impact === SettingsChangeImpact.none)
+              continue;
+            reloadSettingsAndSurfaceError(
+              () => config.reloadSettings(wkspUri),
+              (e, uri) => config.logger.showError(e, uri),
+              wkspUri,
+            );
+            const wkspSettings = config.workspaceSettings[wkspUri.path];
+            if (impact === SettingsChangeImpact.rediscoverSteps)
+              parser.parseFilesForWorkspace(wkspUri, testData, ctrl, "configurationChangedHandler (steps only)", false, undefined, true);
+            else if (impact === SettingsChangeImpact.revalidate && wkspSettings)
+              revalidateOpenDocuments(wkspSettings.featuresUri);
+          }
+          return;
+        }
+
+        // keep the existing output (it's the context for whatever prompted the change), just mark where the reload starts
         if (!testCfg)
-          config.logger.clearAllWksps();
+          config.logger.logInfoAllWksps("\n--- settings or workspace folders changed, reloading ---");
 
         // changing featuresPaths in settings.json/*.vscode-workspace to a valid path, or adding/removing/renaming workspaces
         // will not only change the set of workspaces we are watching, but also the output channels

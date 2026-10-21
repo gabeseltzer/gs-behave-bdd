@@ -5,7 +5,7 @@ import { WorkspaceSettings } from "../settings";
 import { deleteFeatureFileSteps, getFeatureFileSteps, getFeatureNameFromContent } from './featureParser';
 import {
   countTestItemsInCollection, getAllTestItems, uriId, getWorkspaceFolder,
-  getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem, couldBePythonStepsFile,
+  getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem, getContentFromOpenDocumentOrFilesystem, couldBePythonStepsFile,
   getFeaturesRootForFile, getDiscoveryEntry, urisMatch
 } from '../common';
 import { getStepFileSteps, deleteStepFileSteps, storeStepFileStep } from './stepsParser';
@@ -57,6 +57,12 @@ export class FileParser {
   // Workspaces whose WorkspaceSettings ctor threw (e.g. bad projectPath). Surfaced
   // to the language-status item so it shows Error severity instead of "Ready".
   private _wkspsWithFatalSettings = new Set<string>();
+  // The step-load warning popup last shown per workspace (keyed by workspace uri path).
+  // An environmental failure (e.g. a missing interpreter) recurs on every debounced Python
+  // reparse, i.e. while the user types, so the same popup is shown only once. A successful
+  // load clears the entry so a later recurrence is surfaced again. The output channel still
+  // logs every failure.
+  private _shownStepLoadWarnings = new Map<string, string>();
 
   // Called after a Python file debounce fires and step mappings have been rebuilt.
   // extension.ts registers this to re-validate diagnostics for all open feature files.
@@ -193,7 +199,7 @@ export class FileParser {
     for (const uri of featureFiles) {
       if (cancelToken.isCancellationRequested)
         break;
-      const content = await getContentFromFilesystem(uri);
+      const content = await getContentFromOpenDocumentOrFilesystem(uri);
       await this._updateTestItemFromFeatureFileContent(wkspSettings, content, testData, controller, uri, caller, firstRun);
       processed++;
     }
@@ -459,6 +465,7 @@ export class FileParser {
 
     const failedFiles = result.failedFiles ?? [];
 
+    this._shownStepLoadWarnings.delete(wkspSettings.uri.path);
     this._notifyStepLoadError(undefined, failedFiles.length ? failedFiles : undefined);
 
     if (result.duplicates?.length)
@@ -725,13 +732,25 @@ export class FileParser {
   // NOTE:
   // - This is normally a BACKGROUND task. It should only be await-ed on user request, i.e. when called by the refreshHandler.
   // - It is a self-cancelling re-entrant function, i.e. any current parse for the same workspace will be cancelled. 
+  // - stepsOnly re-runs step discovery and rebuilds step mappings but leaves the test tree (and feature file steps) alone,
+  //   e.g. when only the env vars passed to behave have changed (they can affect step module imports, but not feature files).
   async parseFilesForWorkspace(wkspUri: vscode.Uri, testData: TestData, ctrl: vscode.TestController, intiator: string, firstRun: boolean,
-    callerCancelToken?: vscode.CancellationToken): Promise<WkspParseCounts | undefined> {
+    callerCancelToken?: vscode.CancellationToken, stepsOnly?: boolean): Promise<WkspParseCounts | undefined> {
 
     const wkspPath = wkspUri.path;
-    this._finishedFeaturesParseForAllWorkspaces = false;
+
+    // a parse already in flight may be part-way through building the test tree, and cancelling it
+    // would leave the tree half-built, so do a full parse instead
+    if (stepsOnly && this._cancelTokenSources[wkspPath]) {
+      diagLog(`parseFilesForWorkspace: ${intiator} requested a steps-only parse, but a parse is in progress - doing a full parse`);
+      stepsOnly = false;
+    }
+
+    if (!stepsOnly) {
+      this._finishedFeaturesParseForAllWorkspaces = false;
+      this._finishedFeaturesParseForWorkspace[wkspPath] = false;
+    }
     this._finishedStepsParseForAllWorkspaces = false;
-    this._finishedFeaturesParseForWorkspace[wkspPath] = false;
     this._finishedStepsParseForWorkspace[wkspPath] = false;
 
     this._notifyStatusChange(true);
@@ -813,23 +832,27 @@ export class FileParser {
       // Clear any prior fatal marker (fix-then-reload cycle).
       this._wkspsWithFatalSettings.delete(wkspPath);
 
-      const start = performance.now();
-      const featureFileCount = await this._parseFeatureFiles(wkspSettings, testData, ctrl, this._cancelTokenSources[wkspPath].token,
-        callName, firstRun);
-      const featTime = performance.now() - start;
-      if (this._cancelTokenSources[wkspPath].token.isCancellationRequested) {
-        diagLog(`${callName}: cancellation complete`);
-        return;
-      }
-      diagLog(`${callName}: features loaded for workspace ${wkspName}`);
-      this._finishedFeaturesParseForWorkspace[wkspPath] = true;
-      const wkspsStillParsingFeatures = (getUrisOfWkspFoldersWithFeatures()).filter(uri => !this._finishedFeaturesParseForWorkspace[uri.path])
-      if (wkspsStillParsingFeatures.length === 0) {
-        this._finishedFeaturesParseForAllWorkspaces = true;
-        diagLog(`${callName}: features loaded for all workspaces`);
-      }
-      else {
-        diagLog(`${callName}: waiting on feature parse for ${wkspsStillParsingFeatures.map(w => w.path)}`)
+      let featureFileCount = 0;
+      let featTime = 0;
+      if (!stepsOnly) {
+        const start = performance.now();
+        featureFileCount = await this._parseFeatureFiles(wkspSettings, testData, ctrl, this._cancelTokenSources[wkspPath].token,
+          callName, firstRun);
+        featTime = performance.now() - start;
+        if (this._cancelTokenSources[wkspPath].token.isCancellationRequested) {
+          diagLog(`${callName}: cancellation complete`);
+          return;
+        }
+        diagLog(`${callName}: features loaded for workspace ${wkspName}`);
+        this._finishedFeaturesParseForWorkspace[wkspPath] = true;
+        const wkspsStillParsingFeatures = (getUrisOfWkspFoldersWithFeatures()).filter(uri => !this._finishedFeaturesParseForWorkspace[uri.path])
+        if (wkspsStillParsingFeatures.length === 0) {
+          this._finishedFeaturesParseForAllWorkspaces = true;
+          diagLog(`${callName}: features loaded for all workspaces`);
+        }
+        else {
+          diagLog(`${callName}: waiting on feature parse for ${wkspsStillParsingFeatures.map(w => w.path)}`)
+        }
       }
 
 
@@ -853,6 +876,9 @@ export class FileParser {
       rebuildExecuteStepsMappings(wkspSettings.featuresUri);
       buildMappingsTime = performance.now() - updateMappingsStart;
       diagLog(`${callName}: stepmappings built`);
+      // the open documents' test items are unchanged, but their diagnostics may now be stale
+      if (stepsOnly)
+        this.onStepMappingsRebuilt?.(wkspSettings.featuresUri);
 
       const wkspsStillParsingSteps = (getUrisOfWkspFoldersWithFeatures()).filter(uri => !this._finishedStepsParseForWorkspace[uri.path])
       if (wkspsStillParsingSteps.length === 0) {
@@ -1106,6 +1132,11 @@ export class FileParser {
     let winText = `Failed to load step definitions: ${firstLine}`;
     if (winText.length > 512)
       winText = winText.substring(0, 512) + "...";
+    // Don't repeat a popup the user has already seen for this workspace - see _shownStepLoadWarnings
+    const wkspKey = wkspUri.path;
+    if (this._shownStepLoadWarnings.get(wkspKey) === winText)
+      return;
+    this._shownStepLoadWarnings.set(wkspKey, winText);
     // Fire-and-forget: don't block the caller or let errors propagate
     vscode.window.showWarningMessage(winText, "Show Output").then(action => {
       if (action === "Show Output")

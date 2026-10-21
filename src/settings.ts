@@ -19,6 +19,7 @@ export class WindowSettings {
   public readonly xRay: boolean;
   public readonly verboseLogging: boolean;
   public readonly logEnvVarPresetContents: boolean;
+  public readonly clearOutputOnRun: boolean;
 
   constructor(winConfig: vscode.WorkspaceConfiguration) {
     const get = <T>(key: string): T | undefined => winConfig.get<T>(key);
@@ -36,11 +37,13 @@ export class WindowSettings {
     const logEnvVarPresetContentsCfg: boolean | undefined = get("logEnvVarPresetContents");
     if (logEnvVarPresetContentsCfg === undefined)
       throw "logEnvVarPresetContents is undefined";
+    const clearOutputOnRunCfg: boolean | undefined = get("clearOutputOnRun");
 
     this.multiRootRunWorkspacesInParallel = multiRootRunWorkspacesInParallelCfg;
     this.xRay = xRayCfg;
     this.verboseLogging = verboseLoggingCfg;
     this.logEnvVarPresetContents = logEnvVarPresetContentsCfg;
+    this.clearOutputOnRun = clearOutputOnRunCfg ?? false;
   }
 }
 

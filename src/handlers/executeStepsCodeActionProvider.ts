@@ -5,11 +5,13 @@ import { scanExecuteSteps } from '../parsers/executeStepsParser';
 import { getStepFileSteps } from '../parsers/stepsParser';
 import { EXECUTE_STEPS_STEP_NOT_FOUND } from './executeStepsDiagnostics';
 import { handleProviderError } from './providerHelpers';
+import { addStepDefinitionEdits } from './stepDefinitionCodeActionProvider';
+import { buildStepDefinitionEdits } from './stepDefinitionSnippet';
 
 
 // Quick-fix (lightbulb / ctrl+.) on an execute-steps-step-not-found diagnostic that
 // scaffolds a step-definition skeleton, following behave's own undefined-step snippet
-// shape (def step_impl + raise NotImplementedError). The skeleton is appended to the
+// shape (def step_impl + raise NotImplementedError, see stepDefinitionSnippet). The skeleton is appended to the
 // current file when it is itself a steps file (behave registers everything under steps/),
 // otherwise to the workspace's largest steps file.
 export class ExecuteStepsCodeActionProvider implements vscode.CodeActionProvider {
@@ -61,17 +63,17 @@ export class ExecuteStepsCodeActionProvider implements vscode.CodeActionProvider
         action.isPreferred = true;
 
         const targetDoc = await vscode.workspace.openTextDocument(targetUri);
-        const insertPos = new vscode.Position(targetDoc.lineCount, 0);
-        const separator = targetDoc.getText().endsWith('\n') ? '\n' : '\n\n';
-        const escapedText = textWithoutType.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-        const snippet =
-          `${separator}\n` +
-          `@${stepType}("${escapedText}")\n` +
-          `def step_impl(context):\n` +
-          `    raise NotImplementedError("STEP: ${stepType} ${escapedText}")\n`;
+        const edits = buildStepDefinitionEdits({
+          stepType,
+          stepText: `${keywordMatch[1]} ${textWithoutType}`,
+          textWithoutType,
+          inOutline: false,
+          hasTable: false,
+          hasDocString: false,
+        }, targetDoc.getText());
 
         const edit = new vscode.WorkspaceEdit();
-        edit.insert(targetUri, insertPos, snippet);
+        addStepDefinitionEdits(edit, targetDoc, edits);
         action.edit = edit;
 
         actions.push(action);

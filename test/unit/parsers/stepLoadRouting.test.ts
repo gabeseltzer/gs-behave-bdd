@@ -126,6 +126,52 @@ suite('step load error routing (popup policy)', () => {
     assert.ok(showWarningMessageStub.calledOnce, 'unrecoverable spawn errors keep the popup');
   });
 
+  test('the same spawn error on repeated reparses (typing) pops up only once', async () => {
+    const errors: (string | undefined)[] = [];
+    fileParser.onStepLoadError((err) => errors.push(err));
+    loadFromBehaveStub.rejects(new Error('Failed to spawn Python process: /venv/bin/python (spawn /venv/bin/python ENOENT).'));
+
+    await reparseAndTick();
+    await reparseAndTick();
+    await reparseAndTick();
+
+    assert.ok(showWarningMessageStub.calledOnce, 'a repeated identical failure must not re-popup on every edit');
+    assert.strictEqual(errors.length, 3, 'the status item is still notified on every failure');
+  });
+
+  test('the same environmental wholesale error on repeated reparses pops up only once', async () => {
+    loadFromBehaveStub.resolves({
+      steps: [], fixtures: [],
+      error: 'behave is broken in this interpreter', errorKind: 'environmental'
+    });
+
+    await reparseAndTick();
+    await reparseAndTick();
+
+    assert.ok(showWarningMessageStub.calledOnce, 'a repeated identical failure must not re-popup');
+  });
+
+  test('a different error after a shown one pops up again', async () => {
+    loadFromBehaveStub.rejects(new Error('Failed to spawn Python process: /venv/bin/python (ENOENT).'));
+    await reparseAndTick();
+    loadFromBehaveStub.rejects(new Error('Python process timeout after 10 seconds'));
+    await reparseAndTick();
+
+    assert.ok(showWarningMessageStub.calledTwice, 'a new failure is news and must be shown');
+  });
+
+  test('the same error recurring after a successful load pops up again', async () => {
+    const spawnError = new Error('Failed to spawn Python process: /venv/bin/python (ENOENT).');
+    loadFromBehaveStub.rejects(spawnError);
+    await reparseAndTick();
+    loadFromBehaveStub.resolves({ steps: [], fixtures: [] });
+    await reparseAndTick();
+    loadFromBehaveStub.rejects(spawnError);
+    await reparseAndTick();
+
+    assert.ok(showWarningMessageStub.calledTwice, 'a recurrence after recovery must be shown again');
+  });
+
   test('per-file failures: NO popup, onStepLoadError receives the failed files', async () => {
     const notifications: { err: string | undefined, failed: FailedFileInfo[] | undefined }[] = [];
     fileParser.onStepLoadError((err, failed) => notifications.push({ err, failed }));

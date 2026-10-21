@@ -140,6 +140,12 @@
 					"markdownDescription": "Log the full contents of `#gs-behave-bdd.envVarPresets#` to the output channel instead of just a count.\n\n⚠️ **Warning:** preset values may include secrets such as tokens or passwords. Only enable this while debugging your own env var configuration, and review the output before sharing it with anyone.",
 					"default": false
 				},
+				"gs-behave-bdd.clearOutputOnRun": {
+					"scope": "window",
+					"type": "boolean",
+					"markdownDescription": "Clear the Behave BDD output channel at the start of each test or debug run. Off by default, so the output of earlier runs and the extension's other log messages stay available (each run starts with a timestamped marker line).",
+					"default": false
+				},
 				"gs-behave-bdd.discoveryDepth": {
 					"scope": "resource",
 					"type": "number",
@@ -316,7 +322,7 @@
 				{
 					"id": "StepReferences",
 					"title": "Step References",
-					"icon": "images/behave-vsc.png"
+					"icon": "$(references)"
 				}
 			]
 		},
@@ -325,7 +331,7 @@
 				{
 					"id": "StepReferences",
 					"name": "Step References",
-					"icon": "images/behave-vsc.png",
+					"icon": "$(references)",
 					"contextualTitle": "Step References",
 					"when": "gs-behave-bdd.stepReferences.visible"
 				}

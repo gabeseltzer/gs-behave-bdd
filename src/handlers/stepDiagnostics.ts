@@ -7,6 +7,8 @@ import { config } from "../configuration";
 import { parser } from "../extension";
 import { isStepArgumentDiagnostic, validateStepArguments } from "./stepArgumentDiagnostics";
 
+export const STEP_NOT_FOUND = 'step-not-found';
+
 export function validateStepDefinitions(document: vscode.TextDocument): void {
   try {
     if (!isFeatureFile(document.uri)) {
@@ -47,7 +49,7 @@ export function validateStepDefinitions(document: vscode.TextDocument): void {
           message,
           vscode.DiagnosticSeverity.Warning
         );
-        diagnostic.code = 'step-not-found';
+        diagnostic.code = STEP_NOT_FOUND;
         diagnostic.source = 'gs-behave-bdd';
 
         stepDiagnostics.push(diagnostic);
@@ -56,7 +58,7 @@ export function validateStepDefinitions(document: vscode.TextDocument): void {
 
     // Preserve existing non-step diagnostics (e.g., fixture diagnostics)
     const existingDiagnostics = config.diagnostics.get(document.uri) || [];
-    const nonStepDiagnostics = [...existingDiagnostics].filter(d => d.code !== 'step-not-found');
+    const nonStepDiagnostics = [...existingDiagnostics].filter(d => d.code !== STEP_NOT_FOUND);
     config.diagnostics.set(document.uri, [...nonStepDiagnostics, ...stepDiagnostics]);
 
     validateStepArguments(document, wkspSettings);
@@ -74,6 +76,6 @@ export function validateStepDefinitions(document: vscode.TextDocument): void {
 
 export function clearStepDiagnostics(uri: vscode.Uri): void {
   const existingDiagnostics = config.diagnostics.get(uri) || [];
-  const nonStepDiagnostics = [...existingDiagnostics].filter(d => d.code !== 'step-not-found' && !isStepArgumentDiagnostic(d));
+  const nonStepDiagnostics = [...existingDiagnostics].filter(d => d.code !== STEP_NOT_FOUND && !isStepArgumentDiagnostic(d));
   config.diagnostics.set(uri, nonStepDiagnostics);
 }

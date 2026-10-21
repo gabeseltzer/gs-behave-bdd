@@ -123,6 +123,55 @@ export function getConfiguredButExcludedWorkspaceFolders(
 }
 
 
+// What a settings change requires, from least to most work. Each level includes the ones below it.
+export enum SettingsChangeImpact {
+  none,             // nothing - the setting is read at the point of use
+  reloadSettings,   // reload WorkspaceSettings/WindowSettings, which are read e.g. when a test run starts
+  revalidate,       // ...and re-validate open documents and refresh CodeLens
+  rediscoverSteps,  // ...and re-run step discovery, which runs behave with these settings
+  fullRefresh,      // ...and rebuild the test tree, watchers and output channels
+}
+
+// The settings that don't need a full refresh. Anything else (projectPath, featuresPaths, the discovery
+// settings, and any setting added later) needs one, because it can change which tests exist.
+// Keys are unprefixed, e.g. "activeEnvVarPreset".
+export const SETTING_CHANGE_IMPACTS: { [key: string]: SettingsChangeImpact } = {
+  formatBlankLines: SettingsChangeImpact.none,
+  formatAlignTables: SettingsChangeImpact.none,
+  migrationMode: SettingsChangeImpact.none,
+  completedMigrations: SettingsChangeImpact.none,
+  suppressedNotifications: SettingsChangeImpact.none,
+  justMyCode: SettingsChangeImpact.reloadSettings,
+  runParallel: SettingsChangeImpact.reloadSettings,
+  resultStreaming: SettingsChangeImpact.reloadSettings,
+  multiRootRunWorkspacesInParallel: SettingsChangeImpact.reloadSettings,
+  verboseLogging: SettingsChangeImpact.reloadSettings,
+  xRay: SettingsChangeImpact.reloadSettings,
+  logEnvVarPresetContents: SettingsChangeImpact.reloadSettings,
+  clearOutputOnRun: SettingsChangeImpact.reloadSettings,
+  checkStepArgumentsWithPython: SettingsChangeImpact.revalidate,
+  showStepReferenceCodeLens: SettingsChangeImpact.revalidate,
+  envVarOverrides: SettingsChangeImpact.rediscoverSteps,
+  envVarPresets: SettingsChangeImpact.rediscoverSteps,
+  activeEnvVarPreset: SettingsChangeImpact.rediscoverSteps,
+  importStrategy: SettingsChangeImpact.rediscoverSteps,
+  // so that raising it after discovery timed out retries discovery
+  stepDefinitionSearchTimeout: SettingsChangeImpact.rediscoverSteps,
+};
+
+// The most work any of the settings changed by the event requires (for the scope, if given).
+// allKeys is every contributed setting (from package.json).
+export function getSettingsChangeImpact(event: vscode.ConfigurationChangeEvent, allKeys: string[],
+  scope?: vscode.Uri): SettingsChangeImpact {
+  let impact = SettingsChangeImpact.none;
+  for (const key of allKeys) {
+    if (event.affectsConfiguration(`gs-behave-bdd.${key}`, scope))
+      impact = Math.max(impact, SETTING_CHANGE_IMPACTS[key] ?? SettingsChangeImpact.fullRefresh);
+  }
+  return impact;
+}
+
+
 // Wraps a reloadSettings call so a thrown WkspError surfaces a user-facing
 // notification with workspace context instead of bubbling up and aborting the
 // caller's loop. Returns true if reload succeeded, false if it failed.
@@ -714,6 +763,17 @@ export const getContentFromFilesystem = async (uri: vscode.Uri | undefined): Pro
     throw new Error("uri is undefined");
   const data = await vwfs.readFile(uri);
   return Buffer.from(data).toString('utf8');
+};
+
+
+// The text the user is looking at: the open document's (possibly unsaved) text, else the
+// file on disk. Use for re-parses that must not discard unsaved edits (tree expansion, a
+// full refresh) - live edits are parsed as they happen, so reading from disk would revert them.
+export const getContentFromOpenDocumentOrFilesystem = async (uri: vscode.Uri): Promise<string> => {
+  const openDocument = vscode.workspace.textDocuments.find(d => urisMatch(d.uri, uri));
+  if (openDocument)
+    return openDocument.getText();
+  return getContentFromFilesystem(uri);
 };
 
 

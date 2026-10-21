@@ -231,6 +231,7 @@ The status bar indicator is hidden when only one project exists or when `project
 ## Q&A
 
 - *How can I see all effective settings for the extension?* On starting vscode, look in the Behave BDD output window.
+- *Can the output be cleared at the start of each test run?* Yes, set `gs-behave-bdd.clearOutputOnRun` to `true`. It's off by default, so the output of earlier runs stays available to compare against (each run starts with a timestamped `--- test run started ---` line).
 - *How can I see the active behave configuration being used for behave execution?* In your behave config file, set `verbose=true`.
 - *How do I clear previous test results?* This isn't that obvious in vscode. Click the ellipsis `...` at the top of the test side bar and then click "Clear all results".
 - *Why does the behave command output contain `--show-skipped`?* This flag must be enabled for junit files (which the extension depends on) to be produced for skipped tests. It is enabled by default, so this override is there *just in case* your `behave.ini`/`.behaverc` file specifies `show_skipped=False`.
