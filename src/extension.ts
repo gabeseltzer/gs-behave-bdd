@@ -6,7 +6,7 @@ import {
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, isFeatureFile,
   logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile,
   getDiscoveryEntry, basename, setProjectSwitchInProgress, WkspError,
-  reloadSettingsAndSurfaceError, getConfiguredButExcludedWorkspaceFolders, affectsOnlySettings, ENV_VAR_SETTINGS
+  reloadSettingsAndSurfaceError, getConfiguredButExcludedWorkspaceFolders, getSettingsChangeImpact, SettingsChangeImpact
 } from './common';
 import { setConfigParseErrorDiagnostic, clearConfigParseErrorDiagnostic } from './handlers/configDiagnostics';
 import { StepFileStep, getStepFileSteps } from './parsers/stepsParser';
@@ -510,7 +510,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     // onDidChangeTextDocument, as well as the case where validateStepDefinitions was called
     // eagerly (before the debounce fired) and produced stale results.
     const codeLensProvider = new StepCodeLensProvider();
-    parser.onStepMappingsRebuilt = (featuresUri: vscode.Uri) => {
+    const revalidateOpenDocuments = (featuresUri: vscode.Uri) => {
       for (const document of vscode.workspace.textDocuments) {
         const wkspSettings = getWorkspaceSettingsForFile(document.uri);
         if (!wkspSettings || !wkspSettings.featuresUris.some(u => urisMatch(u, featuresUri))) continue;
@@ -530,6 +530,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       // reference count even though the .py document itself didn't change.
       codeLensProvider.refresh();
     };
+    parser.onStepMappingsRebuilt = revalidateOpenDocuments;
 
     // behave's verdicts on step arguments arrive asynchronously (a Python process per batch) -
     // re-validate the open feature files they belong to
@@ -1225,21 +1226,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         if (!affected && !forceFullRefresh && !testCfg)
           return;
 
-        // An env var change (e.g. selecting a different preset) doesn't change which tests exist, so keep the
-        // test tree, watchers and output channels as they are. Step discovery imports the step modules in that
-        // environment though, so re-discover the step definitions of the workspaces it applies to.
+        // Most settings (e.g. selecting a different env var preset) can't change which tests exist, so keep the
+        // test tree, watchers and output channels as they are, and do only what the changed settings need
+        // in the workspaces they apply to (see SETTING_CHANGE_IMPACTS).
         const allSettingKeys = Object.keys(context.extension.packageJSON.contributes.configuration.properties)
           .map(key => key.replace(/^gs-behave-bdd\./, ""));
-        if (event && !forceFullRefresh && !testCfg && affectsOnlySettings(event, ENV_VAR_SETTINGS, allSettingKeys)) {
+        if (event && !forceFullRefresh && !testCfg &&
+          getSettingsChangeImpact(event, allSettingKeys) < SettingsChangeImpact.fullRefresh) {
           for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
-            if (!ENV_VAR_SETTINGS.some(key => event.affectsConfiguration(`gs-behave-bdd.${key}`, wkspUri)))
+            const impact = getSettingsChangeImpact(event, allSettingKeys, wkspUri);
+            if (impact === SettingsChangeImpact.none)
               continue;
             reloadSettingsAndSurfaceError(
               () => config.reloadSettings(wkspUri),
               (e, uri) => config.logger.showError(e, uri),
               wkspUri,
             );
-            parser.parseFilesForWorkspace(wkspUri, testData, ctrl, "configurationChangedHandler (env vars)", false, undefined, true);
+            const wkspSettings = config.workspaceSettings[wkspUri.path];
+            if (impact === SettingsChangeImpact.rediscoverSteps)
+              parser.parseFilesForWorkspace(wkspUri, testData, ctrl, "configurationChangedHandler (steps only)", false, undefined, true);
+            else if (impact === SettingsChangeImpact.revalidate && wkspSettings)
+              revalidateOpenDocuments(wkspSettings.featuresUri);
           }
           return;
         }
