@@ -148,6 +148,7 @@ export const SETTING_CHANGE_IMPACTS: { [key: string]: SettingsChangeImpact } = {
   verboseLogging: SettingsChangeImpact.reloadSettings,
   xRay: SettingsChangeImpact.reloadSettings,
   logEnvVarPresetContents: SettingsChangeImpact.reloadSettings,
+  clearOutputOnRun: SettingsChangeImpact.reloadSettings,
   checkStepArgumentsWithPython: SettingsChangeImpact.revalidate,
   showStepReferenceCodeLens: SettingsChangeImpact.revalidate,
   envVarOverrides: SettingsChangeImpact.rediscoverSteps,
