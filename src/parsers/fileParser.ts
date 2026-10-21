@@ -732,13 +732,25 @@ export class FileParser {
   // NOTE:
   // - This is normally a BACKGROUND task. It should only be await-ed on user request, i.e. when called by the refreshHandler.
   // - It is a self-cancelling re-entrant function, i.e. any current parse for the same workspace will be cancelled. 
+  // - stepsOnly re-runs step discovery and rebuilds step mappings but leaves the test tree (and feature file steps) alone,
+  //   e.g. when only the env vars passed to behave have changed (they can affect step module imports, but not feature files).
   async parseFilesForWorkspace(wkspUri: vscode.Uri, testData: TestData, ctrl: vscode.TestController, intiator: string, firstRun: boolean,
-    callerCancelToken?: vscode.CancellationToken): Promise<WkspParseCounts | undefined> {
+    callerCancelToken?: vscode.CancellationToken, stepsOnly?: boolean): Promise<WkspParseCounts | undefined> {
 
     const wkspPath = wkspUri.path;
-    this._finishedFeaturesParseForAllWorkspaces = false;
+
+    // a parse already in flight may be part-way through building the test tree, and cancelling it
+    // would leave the tree half-built, so do a full parse instead
+    if (stepsOnly && this._cancelTokenSources[wkspPath]) {
+      diagLog(`parseFilesForWorkspace: ${intiator} requested a steps-only parse, but a parse is in progress - doing a full parse`);
+      stepsOnly = false;
+    }
+
+    if (!stepsOnly) {
+      this._finishedFeaturesParseForAllWorkspaces = false;
+      this._finishedFeaturesParseForWorkspace[wkspPath] = false;
+    }
     this._finishedStepsParseForAllWorkspaces = false;
-    this._finishedFeaturesParseForWorkspace[wkspPath] = false;
     this._finishedStepsParseForWorkspace[wkspPath] = false;
 
     this._notifyStatusChange(true);
@@ -820,23 +832,27 @@ export class FileParser {
       // Clear any prior fatal marker (fix-then-reload cycle).
       this._wkspsWithFatalSettings.delete(wkspPath);
 
-      const start = performance.now();
-      const featureFileCount = await this._parseFeatureFiles(wkspSettings, testData, ctrl, this._cancelTokenSources[wkspPath].token,
-        callName, firstRun);
-      const featTime = performance.now() - start;
-      if (this._cancelTokenSources[wkspPath].token.isCancellationRequested) {
-        diagLog(`${callName}: cancellation complete`);
-        return;
-      }
-      diagLog(`${callName}: features loaded for workspace ${wkspName}`);
-      this._finishedFeaturesParseForWorkspace[wkspPath] = true;
-      const wkspsStillParsingFeatures = (getUrisOfWkspFoldersWithFeatures()).filter(uri => !this._finishedFeaturesParseForWorkspace[uri.path])
-      if (wkspsStillParsingFeatures.length === 0) {
-        this._finishedFeaturesParseForAllWorkspaces = true;
-        diagLog(`${callName}: features loaded for all workspaces`);
-      }
-      else {
-        diagLog(`${callName}: waiting on feature parse for ${wkspsStillParsingFeatures.map(w => w.path)}`)
+      let featureFileCount = 0;
+      let featTime = 0;
+      if (!stepsOnly) {
+        const start = performance.now();
+        featureFileCount = await this._parseFeatureFiles(wkspSettings, testData, ctrl, this._cancelTokenSources[wkspPath].token,
+          callName, firstRun);
+        featTime = performance.now() - start;
+        if (this._cancelTokenSources[wkspPath].token.isCancellationRequested) {
+          diagLog(`${callName}: cancellation complete`);
+          return;
+        }
+        diagLog(`${callName}: features loaded for workspace ${wkspName}`);
+        this._finishedFeaturesParseForWorkspace[wkspPath] = true;
+        const wkspsStillParsingFeatures = (getUrisOfWkspFoldersWithFeatures()).filter(uri => !this._finishedFeaturesParseForWorkspace[uri.path])
+        if (wkspsStillParsingFeatures.length === 0) {
+          this._finishedFeaturesParseForAllWorkspaces = true;
+          diagLog(`${callName}: features loaded for all workspaces`);
+        }
+        else {
+          diagLog(`${callName}: waiting on feature parse for ${wkspsStillParsingFeatures.map(w => w.path)}`)
+        }
       }
 
 
@@ -860,6 +876,9 @@ export class FileParser {
       rebuildExecuteStepsMappings(wkspSettings.featuresUri);
       buildMappingsTime = performance.now() - updateMappingsStart;
       diagLog(`${callName}: stepmappings built`);
+      // the open documents' test items are unchanged, but their diagnostics may now be stale
+      if (stepsOnly)
+        this.onStepMappingsRebuilt?.(wkspSettings.featuresUri);
 
       const wkspsStillParsingSteps = (getUrisOfWkspFoldersWithFeatures()).filter(uri => !this._finishedStepsParseForWorkspace[uri.path])
       if (wkspsStillParsingSteps.length === 0) {
