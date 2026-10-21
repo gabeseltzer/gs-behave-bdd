@@ -307,6 +307,8 @@ export const workspace = {
     if (typeof pathOrUri === 'string') return pathOrUri;
     return pathOrUri.fsPath || pathOrUri.path || String(pathOrUri);
   },
+  // open documents; tests replace the array per-case
+  textDocuments: [] as { uri: Uri; getText: () => string }[],
   // findFiles / applyEdit: used by the create-step-definition quick-fix. Tests stub per-case.
   findFiles: (_include: unknown, _exclude?: unknown, _maxResults?: number): Promise<Uri[]> => Promise.resolve([]),
   applyEdit: (_edit: WorkspaceEdit): Promise<boolean> => Promise.resolve(true),

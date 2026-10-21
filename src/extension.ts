@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { config, Configuration } from "./configuration";
 import { BehaveTestData, Scenario, TestData, TestFile } from './parsers/testFile';
 import {
-  getContentFromFilesystem,
+  getContentFromOpenDocumentOrFilesystem,
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, isFeatureFile,
   logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile,
   getDiscoveryEntry, basename, setProjectSwitchInProgress, WkspError,
@@ -936,7 +936,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         // nothing is happening.
         item.busy = true;
         try {
-          const content = await getContentFromFilesystem(item.uri);
+          const content = await getContentFromOpenDocumentOrFilesystem(item.uri);
           await data.createScenarioTestItemsFromFeatureFileContent(wkspSettings, content, testData, ctrl, item, "resolveHandler");
         }
         finally {

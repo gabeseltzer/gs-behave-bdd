@@ -5,7 +5,7 @@ import { WorkspaceSettings } from "../settings";
 import { deleteFeatureFileSteps, getFeatureFileSteps, getFeatureNameFromContent } from './featureParser';
 import {
   countTestItemsInCollection, getAllTestItems, uriId, getWorkspaceFolder,
-  getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem, couldBePythonStepsFile,
+  getUrisOfWkspFoldersWithFeatures, isFeatureFile, isStepsFile, TestCounts, findFiles, getContentFromFilesystem, getContentFromOpenDocumentOrFilesystem, couldBePythonStepsFile,
   getFeaturesRootForFile, getDiscoveryEntry, urisMatch
 } from '../common';
 import { getStepFileSteps, deleteStepFileSteps, storeStepFileStep } from './stepsParser';
@@ -199,7 +199,7 @@ export class FileParser {
     for (const uri of featureFiles) {
       if (cancelToken.isCancellationRequested)
         break;
-      const content = await getContentFromFilesystem(uri);
+      const content = await getContentFromOpenDocumentOrFilesystem(uri);
       await this._updateTestItemFromFeatureFileContent(wkspSettings, content, testData, controller, uri, caller, firstRun);
       processed++;
     }

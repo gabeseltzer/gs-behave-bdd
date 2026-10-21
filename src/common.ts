@@ -766,6 +766,17 @@ export const getContentFromFilesystem = async (uri: vscode.Uri | undefined): Pro
 };
 
 
+// The text the user is looking at: the open document's (possibly unsaved) text, else the
+// file on disk. Use for re-parses that must not discard unsaved edits (tree expansion, a
+// full refresh) - live edits are parsed as they happen, so reading from disk would revert them.
+export const getContentFromOpenDocumentOrFilesystem = async (uri: vscode.Uri): Promise<string> => {
+  const openDocument = vscode.workspace.textDocuments.find(d => urisMatch(d.uri, uri));
+  if (openDocument)
+    return openDocument.getText();
+  return getContentFromFilesystem(uri);
+};
+
+
 export const isStepsFile = (uri: vscode.Uri): boolean => {
   const path = uri.path.toLowerCase();
 

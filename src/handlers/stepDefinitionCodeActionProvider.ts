@@ -112,9 +112,8 @@ export async function createStepDefinitionHandler(featureUri: vscode.Uri, line: 
 
 // The step at `line` of the (possibly unsaved) feature document. The parsed-step cache is
 // preferred because it resolves step types exactly like behave (incl. Background
-// inheritance), but it can lag the live text - e.g. the test tree's resolveHandler reparses
-// from disk - so when the cached step no longer matches the line, the step type is resolved
-// from the live text instead.
+// inheritance), but it can briefly lag the live text while a re-parse is pending, so when the
+// cached step no longer matches the line, the step type is resolved from the live text instead.
 export function getLiveFeatureFileStep(wkspSettings: WorkspaceSettings, document: vscode.TextDocument,
   line: number): FeatureFileStep | undefined {
 
