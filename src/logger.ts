@@ -162,10 +162,6 @@ export class Logger {
     this.ensureChannel(wkspUri).show();
   };
 
-  clear = (wkspUri: vscode.Uri) => {
-    this.ensureChannel(wkspUri).clear();
-  };
-
 
   // Phase 9: Lazily create a channel for a workspace that was discovered after
   // syncChannelsToWorkspaceFolders (e.g., by the BFS subdirectory scanner).
