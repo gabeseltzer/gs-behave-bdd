@@ -47,7 +47,8 @@ export class Uri {
     const scheme = schemeMatch ? schemeMatch[1].toLowerCase() : 'file';
 
     // Strip file:// or file:/// prefix and decode to a plain path
-    const stripped = value.replace(/^file:\/\/\/?/i, '');
+    // (keep the leading / so file:///unix/path round-trips to /unix/path)
+    const stripped = value.replace(/^file:\/\//i, '');
     // On Windows the path starts with a drive letter, e.g. /c:/foo -> c:/foo
     const fsPath = stripped.startsWith('/') && /^\/[a-zA-Z]:/.test(stripped)
       ? stripped.slice(1)
@@ -174,6 +175,7 @@ export class CodeActionKind {
 export class CodeAction {
   public diagnostics?: Diagnostic[];
   public edit?: WorkspaceEdit;
+  public command?: { title: string; command: string; arguments?: unknown[] };
   public isPreferred?: boolean;
   constructor(
     public readonly title: string,
@@ -183,9 +185,29 @@ export class CodeAction {
 
 export class WorkspaceEdit {
   public readonly inserts: { uri: Uri; position: Position; newText: string }[] = [];
+  public readonly replaces: { uri: Uri; range: Range; newText: string }[] = [];
+  public readonly createdFiles: { uri: Uri; options?: { ignoreIfExists?: boolean } }[] = [];
   insert(uri: Uri, position: Position, newText: string): void {
     this.inserts.push({ uri, position, newText });
   }
+  replace(uri: Uri, range: Range, newText: string): void {
+    this.replaces.push({ uri, range, newText });
+  }
+  createFile(uri: Uri, options?: { ignoreIfExists?: boolean }): void {
+    this.createdFiles.push({ uri, options });
+  }
+}
+
+export enum QuickPickItemKind {
+  Separator = -1,
+  Default = 0,
+}
+
+export enum TextEditorRevealType {
+  Default = 0,
+  InCenter = 1,
+  InCenterIfOutsideViewport = 2,
+  AtTop = 3,
 }
 
 export class DiagnosticCollection {
@@ -285,6 +307,9 @@ export const workspace = {
     if (typeof pathOrUri === 'string') return pathOrUri;
     return pathOrUri.fsPath || pathOrUri.path || String(pathOrUri);
   },
+  // findFiles / applyEdit: used by the create-step-definition quick-fix. Tests stub per-case.
+  findFiles: (_include: unknown, _exclude?: unknown, _maxResults?: number): Promise<Uri[]> => Promise.resolve([]),
+  applyEdit: (_edit: WorkspaceEdit): Promise<boolean> => Promise.resolve(true),
   // openTextDocument: used by various features (settings.json open paths,
   // language services). Tests stub these per-case.
   openTextDocument: (uri: Uri): Promise<{ uri: Uri }> => Promise.resolve({ uri }),
@@ -386,6 +411,7 @@ export const window = {
   showWarningMessage: () => Promise.resolve(undefined),
   showErrorMessage: () => Promise.resolve(undefined),
   showInformationMessage: () => Promise.resolve(undefined),
+  showInputBox: (_options?: unknown): Promise<string | undefined> => Promise.resolve(undefined),
   createOutputChannel: () => ({
     append: () => { /* mock */ },
     appendLine: () => { /* mock */ },

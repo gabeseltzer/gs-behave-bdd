@@ -51,10 +51,13 @@ suite('executeStepsCodeActionProvider', () => {
     sandbox.stub(common, 'getWorkspaceSettingsForFile').returns(
       { uri: vscode.Uri.file('/test'), featuresUri } as ReturnType<typeof common.getWorkspaceSettingsForFile>);
     sandbox.stub(stepsParser, 'getStepFileSteps').returns([]);
+    const targetContent = opts.targetContent ?? 'from behave import when\n';
+    const targetLines = targetContent.split('\n');
     sandbox.stub(vscode.workspace, 'openTextDocument').resolves({
       uri: stepsFileUri,
-      lineCount: (opts.targetContent ?? 'x = 1\n').split('\n').length,
-      getText: () => opts.targetContent ?? 'x = 1\n',
+      lineCount: targetLines.length,
+      getText: () => targetContent,
+      lineAt: (line: number) => ({ range: new vscode.Range(line, 0, line, targetLines[line].length) }),
     } as unknown as vscode.TextDocument);
   }
 
@@ -82,7 +85,21 @@ suite('executeStepsCodeActionProvider', () => {
     const text = edit.inserts[0].newText;
     assert.ok(text.includes('@when("some new step here")'), `expected @when decorator, got: ${text}`);
     assert.ok(text.includes('def step_impl(context):'));
-    assert.ok(text.includes('raise NotImplementedError("STEP: when some new step here")'));
+    assert.ok(text.includes('raise NotImplementedError("STEP: When some new step here")'));
+  });
+
+  test('adds the behave import when the target file lacks it', async () => {
+    setupStubs({ targetContent: 'x = 1\n' });
+    const document = mockDocument(stepsFileUri);
+    const diag = makeNotFoundDiagnostic();
+
+    const actions = await provider.provideCodeActions(document, diag.range, makeContext([diag]));
+
+    const edit = actions?.[0].edit as unknown as { inserts: { position: vscode.Position; newText: string }[] };
+    assert.strictEqual(edit.inserts.length, 2);
+    assert.strictEqual(edit.inserts[0].position.line, 0);
+    assert.strictEqual(edit.inserts[0].newText, 'from behave import given, when, then\n');
+    assert.ok(edit.inserts[1].newText.includes('@when("some new step here")'));
   });
 
   test('offers nothing when there are no execute_steps diagnostics', async () => {
