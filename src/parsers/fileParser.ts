@@ -57,6 +57,12 @@ export class FileParser {
   // Workspaces whose WorkspaceSettings ctor threw (e.g. bad projectPath). Surfaced
   // to the language-status item so it shows Error severity instead of "Ready".
   private _wkspsWithFatalSettings = new Set<string>();
+  // The step-load warning popup last shown per workspace (keyed by workspace uri path).
+  // An environmental failure (e.g. a missing interpreter) recurs on every debounced Python
+  // reparse, i.e. while the user types, so the same popup is shown only once. A successful
+  // load clears the entry so a later recurrence is surfaced again. The output channel still
+  // logs every failure.
+  private _shownStepLoadWarnings = new Map<string, string>();
 
   // Called after a Python file debounce fires and step mappings have been rebuilt.
   // extension.ts registers this to re-validate diagnostics for all open feature files.
@@ -459,6 +465,7 @@ export class FileParser {
 
     const failedFiles = result.failedFiles ?? [];
 
+    this._shownStepLoadWarnings.delete(wkspSettings.uri.path);
     this._notifyStepLoadError(undefined, failedFiles.length ? failedFiles : undefined);
 
     if (result.duplicates?.length)
@@ -1106,6 +1113,11 @@ export class FileParser {
     let winText = `Failed to load step definitions: ${firstLine}`;
     if (winText.length > 512)
       winText = winText.substring(0, 512) + "...";
+    // Don't repeat a popup the user has already seen for this workspace - see _shownStepLoadWarnings
+    const wkspKey = wkspUri.path;
+    if (this._shownStepLoadWarnings.get(wkspKey) === winText)
+      return;
+    this._shownStepLoadWarnings.set(wkspKey, winText);
     // Fire-and-forget: don't block the caller or let errors propagate
     vscode.window.showWarningMessage(winText, "Show Output").then(action => {
       if (action === "Show Output")
