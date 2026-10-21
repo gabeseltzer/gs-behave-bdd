@@ -27,6 +27,9 @@ import { diagnoseStepState } from './handlers/stepStateDiagnosis';
 import { autoCompleteProvider } from './handlers/autoCompleteProvider';
 import { executeStepsAutoCompleteProvider } from './handlers/executeStepsAutoCompleteProvider';
 import { ExecuteStepsCodeActionProvider } from './handlers/executeStepsCodeActionProvider';
+import {
+  CREATE_STEP_DEFINITION_COMMAND, createStepDefinitionHandler, initStepDefinitionTargetMemory, StepDefinitionCodeActionProvider
+} from './handlers/stepDefinitionCodeActionProvider';
 import { formatFeatureProvider, formatFeatureRangeProvider } from './handlers/formatFeatureProvider';
 import { SemHighlightProvider, semLegend } from './handlers/semHighlightProvider';
 import { DocumentSymbolProvider } from './handlers/documentSymbolProvider';
@@ -254,6 +257,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
     logExtensionVersion(context);
     const ctrl = vscode.tests.createTestController(`gs-behave-bdd.TestController`, 'Feature Tests');
     initProjectListPersistence(context.workspaceState);
+    initStepDefinitionTargetMemory(context.workspaceState);
 
     // Phase 13: Project status bar item
     const projectStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
@@ -619,6 +623,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
       vscode.languages.registerCodeLensProvider("python", codeLensProvider),
       vscode.languages.registerCodeActionsProvider({ language: "python" }, new ExecuteStepsCodeActionProvider(),
         { providedCodeActionKinds: ExecuteStepsCodeActionProvider.providedCodeActionKinds }),
+      vscode.languages.registerCodeActionsProvider({ language: "gherkin" }, new StepDefinitionCodeActionProvider(),
+        { providedCodeActionKinds: StepDefinitionCodeActionProvider.providedCodeActionKinds }),
+      vscode.commands.registerCommand(CREATE_STEP_DEFINITION_COMMAND, createStepDefinitionHandler),
       // execute_steps {parameter} highlights use decorations (a python semantic tokens
       // provider would displace Pylance's) - refresh when editors become visible
       vscode.window.onDidChangeVisibleTextEditors(editors => {
