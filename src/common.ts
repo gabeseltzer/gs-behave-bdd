@@ -123,6 +123,19 @@ export function getConfiguredButExcludedWorkspaceFolders(
 }
 
 
+// Settings that only change the environment behave runs in. They can't change which tests exist,
+// so a change to just these must not rebuild the test tree.
+export const ENV_VAR_SETTINGS = ["envVarPresets", "activeEnvVarPreset", "envVarOverrides"];
+
+// True if the event changes at least one of onlyKeys and none of the other gs-behave-bdd settings.
+// allKeys is every contributed setting (from package.json), so a setting added later counts as
+// "other" rather than slipping through. Keys are unprefixed, e.g. "activeEnvVarPreset".
+export function affectsOnlySettings(event: vscode.ConfigurationChangeEvent, onlyKeys: string[], allKeys: string[]): boolean {
+  const affects = (key: string) => event.affectsConfiguration(`gs-behave-bdd.${key}`);
+  return onlyKeys.some(affects) && !allKeys.filter(key => !onlyKeys.includes(key)).some(affects);
+}
+
+
 // Wraps a reloadSettings call so a thrown WkspError surfaces a user-facing
 // notification with workspace context instead of bubbling up and aborting the
 // caller's loop. Returns true if reload succeeded, false if it failed.

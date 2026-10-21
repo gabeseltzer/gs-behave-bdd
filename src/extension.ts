@@ -6,7 +6,7 @@ import {
   getUrisOfWkspFoldersWithFeatures, getWorkspaceSettingsForFile, isFeatureFile,
   logExtensionVersion, cleanExtensionTempDirectory, urisMatch, couldBePythonStepsFile,
   getDiscoveryEntry, basename, setProjectSwitchInProgress, WkspError,
-  reloadSettingsAndSurfaceError, getConfiguredButExcludedWorkspaceFolders
+  reloadSettingsAndSurfaceError, getConfiguredButExcludedWorkspaceFolders, affectsOnlySettings, ENV_VAR_SETTINGS
 } from './common';
 import { setConfigParseErrorDiagnostic, clearConfigParseErrorDiagnostic } from './handlers/configDiagnostics';
 import { StepFileStep, getStepFileSteps } from './parsers/stepsParser';
@@ -1224,6 +1224,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
         const affected = event && event.affectsConfiguration("gs-behave-bdd");
         if (!affected && !forceFullRefresh && !testCfg)
           return;
+
+        // An env var change (e.g. selecting a different preset) doesn't change which tests exist, so keep the
+        // test tree, watchers and output channels as they are. Step discovery imports the step modules in that
+        // environment though, so re-discover the step definitions of the workspaces it applies to.
+        const allSettingKeys = Object.keys(context.extension.packageJSON.contributes.configuration.properties)
+          .map(key => key.replace(/^gs-behave-bdd\./, ""));
+        if (event && !forceFullRefresh && !testCfg && affectsOnlySettings(event, ENV_VAR_SETTINGS, allSettingKeys)) {
+          for (const wkspUri of getUrisOfWkspFoldersWithFeatures()) {
+            if (!ENV_VAR_SETTINGS.some(key => event.affectsConfiguration(`gs-behave-bdd.${key}`, wkspUri)))
+              continue;
+            reloadSettingsAndSurfaceError(
+              () => config.reloadSettings(wkspUri),
+              (e, uri) => config.logger.showError(e, uri),
+              wkspUri,
+            );
+            parser.parseFilesForWorkspace(wkspUri, testData, ctrl, "configurationChangedHandler (env vars)", false, undefined, true);
+          }
+          return;
+        }
 
         if (!testCfg)
           config.logger.clearAllWksps();
