@@ -1251,8 +1251,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestSu
           return;
         }
 
+        // keep the existing output (it's the context for whatever prompted the change), just mark where the reload starts
         if (!testCfg)
-          config.logger.clearAllWksps();
+          config.logger.logInfoAllWksps("\n--- settings or workspace folders changed, reloading ---");
 
         // changing featuresPaths in settings.json/*.vscode-workspace to a valid path, or adding/removing/renaming workspaces
         // will not only change the set of workspaces we are watching, but also the output channels
